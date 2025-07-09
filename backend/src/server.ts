@@ -1,5 +1,4 @@
 import Fastify from 'fastify';
-import fp       from 'fastify-plugin';
 import jwt      from '@fastify/jwt';
 import { PrismaClient } from '@prisma/client';
 import argon2   from 'argon2';
@@ -58,26 +57,30 @@ app.post('/auth/register', async (req, rep) => {
 });
 
 /* ───── Task routes ───── */
-app.register(fp(async instance => {
-  instance.addHook('preHandler', instance.auth);
+app.register(
+  async (instance) => {
+    // All routes inside here will live under /tasks … thanks to the prefix below
+    instance.addHook('preHandler', instance.auth);   // JWT required only here
 
-  instance.get('/tasks', async (req: any) => {
-    const userId = req.user.sub as number;
-    return prisma.task.findMany({
-      where: { userId },
-      orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }],
+    instance.get('/', async (req: any) => {
+      const userId = req.user.sub as number;
+      return prisma.task.findMany({
+        where:  { userId },
+        orderBy:[{ priority: 'asc' }, { dueAt: 'asc' }],
+      });
     });
-  });
 
-  instance.post('/tasks', async (req: any, rep) => {
-    const userId = req.user.sub as number;
-    const { title, priority, dueAt } = req.body as any;
-    const task = await prisma.task.create({
-      data: { title, priority, dueAt, userId },
+    instance.post('/', async (req: any, rep) => {
+      const userId = req.user.sub as number;
+      const { title, priority, dueAt } = req.body as any;
+      const task = await prisma.task.create({
+        data: { title, priority, dueAt, userId },
+      });
+      rep.code(201).send(task);
     });
-    rep.code(201).send(task);
-  });
-}));
+  },
+  { prefix: '/tasks' }   // ⬅️  keeps final URLs `/tasks` and `/tasks` (POST) exactly as before
+)
 
 /* ───── Start server ───── */
 const PORT = Number(process.env.PORT) || 3000;
