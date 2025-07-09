@@ -5,7 +5,7 @@
 
 # Prisma generated client (stays inside node_modules by default,
 # but this protects you if you ever move it)
-**/.prisma/
+
 
 # Expo / Metro caches (frontend project)
 **/.expo/
