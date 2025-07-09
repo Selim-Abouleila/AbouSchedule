@@ -29,7 +29,10 @@ app.decorate('auth', async (req: any, rep: any) => {
 });
 
 /* ───── Multipart support ───── */
-app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
+app.register(multipart, {
+  limits: { fileSize: 5 * 1024 * 1024 },  // 5 MB per file
+  attachFieldsToBody: true,               // ← puts text parts into req.body
+});
 
 /* ───── Auth routes ───── */
 const RegisterBody = z.object({
@@ -63,6 +66,8 @@ app.post('/auth/login', async (req, rep) => {
   const token = app.jwt.sign({ sub: user.id, role: user.role });
   return { token };
 });
+
+
 
 /* ───── Task routes ───── */
 app.register(
