@@ -1,8 +1,27 @@
-# Global ignores for the whole monorepo
+# ── Global ignores for the whole monorepo ─────────────────────────
 **/node_modules/
 **/.pnpm/
-**/dist/
+**/dist/                 # TypeScript or bundler output
+
+# Prisma generated client (stays inside node_modules by default,
+# but this protects you if you ever move it)
+**/.prisma/
+
+# Expo / Metro caches (frontend project)
+**/.expo/
+**/.expo-shared/
+
+# Environment & secret files
+.env
+.env.*                   # .env.local, .env.production, etc.
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # OS / editor junk
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/

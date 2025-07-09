@@ -7,13 +7,16 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "studio": "prisma studio"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.13.1",
   "dependencies": {
+    "@fastify/jwt": "^9.1.0",
+    "argon2": "^0.43.0",
     "dotenv": "^17.1.0",
     "fastify": "^5.4.0",
     "fastify-jwt": "^4.2.0",
