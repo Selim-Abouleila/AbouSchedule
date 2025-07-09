@@ -4,10 +4,14 @@ const app = Fastify({ logger: true });
 
 app.get('/', async () => ({ ok: true }));
 
-app.listen({ port: 3000 }, err => {
+// ── listen on Railway’s injected PORT and bind to all interfaces ──
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = '0.0.0.0';
+
+app.listen({ port: PORT, host: HOST }, err => {
   if (err) {
     app.log.error(err);
     process.exit(1);
   }
-  app.log.info('🚀  Server running on http://localhost:3000');
+  app.log.info(`🚀  API ready on http://${HOST}:${PORT}`);
 });
