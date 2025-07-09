@@ -8,8 +8,8 @@ generator client {
 }
 
 model User {
-  id       Int      @id @default(autoincrement())
-  email    String   @unique
+  id       Int    @id @default(autoincrement())
+  email    String @unique
   password String
   role     Role
   tasks    Task[]
@@ -24,6 +24,24 @@ model Task {
   user      User?     @relation(fields: [userId], references: [id])
   userId    Int?
   createdAt DateTime  @default(now())
+
+  /// NEW — one Task ↔ many Images
+  images Image[]
+}
+
+model Image {
+  id     Int  @id @default(autoincrement())
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  url  String // use this when you store the file in S3 / R2
+  mime String
+  // --- If you prefer binary-in-DB, swap the two lines above for:
+  // data   Bytes   @db.ByteA
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId]) // speeds up SELECT … WHERE taskId = …
 }
 
 enum Role {
@@ -45,4 +63,3 @@ enum Status {
   ACTIVE
   DONE
 }
-

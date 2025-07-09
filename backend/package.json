@@ -16,7 +16,9 @@
   "license": "ISC",
   "packageManager": "pnpm@10.13.1",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.842.0",
     "@fastify/jwt": "^9.1.0",
+    "@fastify/multipart": "^9.0.3",
     "argon2": "^0.43.0",
     "dotenv": "^17.1.0",
     "fastify": "^5.4.0",

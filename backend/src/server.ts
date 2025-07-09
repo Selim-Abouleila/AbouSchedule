@@ -1,25 +1,59 @@
+/* ───────────────  server.ts  ─────────────── */
 import Fastify from 'fastify';
-import jwt      from '@fastify/jwt';
+import jwt         from '@fastify/jwt';
+import multipart   from '@fastify/multipart';
 import { PrismaClient } from '@prisma/client';
-import argon2   from 'argon2';
+import argon2      from 'argon2';
 import * as dotenv from 'dotenv';
-import { z } from 'zod';
+import { z }       from 'zod';
+import { randomUUID } from 'crypto';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client }  from './s3.js';
+
 dotenv.config();
 
 const prisma = new PrismaClient();
-const app = Fastify({ logger: true });
+const app    = Fastify({ logger: true });
 
-/* ───── Root ping (unchanged) ───── */
+/* ───── Root ping ───── */
 app.get('/', () => ({ ok: true }));
 
-/* ───── JWT plugin ───── */
+/* ───── JWT ───── */
 app.register(jwt, { secret: process.env.JWT_SECRET || 'dev-secret' });
 app.decorate('auth', async (req: any, rep: any) => {
-  try { await req.jwtVerify(); }
-  catch { rep.code(401).send({ error: 'Unauthorized' }); }
+  try {
+    await req.jwtVerify();
+  } catch {
+    return rep.code(401).send({ error: 'Unauthorized' });
+  }
 });
 
-/* ───── Login route ───── */
+/* ───── Multipart support ───── */
+app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
+
+/* ───── Auth routes ───── */
+const RegisterBody = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  role: z.enum(['ADMIN', 'EMPLOYEE']).default('EMPLOYEE'),
+});
+
+app.post('/auth/register', async (req, rep) => {
+  const parsed = RegisterBody.safeParse(req.body);
+  if (!parsed.success) {
+    return rep.code(400).send({ error: parsed.error.flatten() });
+  }
+  const { email, password, role } = parsed.data;
+
+  if (await prisma.user.findUnique({ where: { email } })) {
+    return rep.code(409).send({ error: 'Email already in use' });
+  }
+
+  const hash = await argon2.hash(password);
+  await prisma.user.create({ data: { email, password: hash, role } });
+  return rep.code(201).send({ ok: true });
+});
+
 app.post('/auth/login', async (req, rep) => {
   const { email, password } = req.body as { email: string; password: string };
   const user = await prisma.user.findUnique({ where: { email } });
@@ -30,61 +64,77 @@ app.post('/auth/login', async (req, rep) => {
   return { token };
 });
 
-const RegisterBody = z.object({
-  email:    z.string().email(),
-  password: z.string().min(6),
-  role:     z.enum(['ADMIN', 'EMPLOYEE']).default('EMPLOYEE'),
-});
-
-app.post('/auth/register', async (req, rep) => {
-  // 1  validate
-  const parsed = RegisterBody.safeParse(req.body);
-  if (!parsed.success) {
-    return rep.code(400).send({ error: parsed.error.flatten() });
-  }
-  const { email, password, role } = parsed.data;
-
-  // 2  check uniqueness
-  if (await prisma.user.findUnique({ where: { email } })) {
-    return rep.code(409).send({ error: 'Email already in use' });
-  }
-
-  // 3  hash & save
-  const hash = await argon2.hash(password);
-  await prisma.user.create({ data: { email, password: hash, role } });
-
-  return rep.code(201).send({ ok: true });
-});
-
 /* ───── Task routes ───── */
 app.register(
-  async (instance) => {
-    // All routes inside here will live under /tasks … thanks to the prefix below
-    instance.addHook('preHandler', instance.auth);   // JWT required only here
+  async (f) => {
+    f.addHook('preHandler', f.auth);   // JWT for everything below
 
-    instance.get('/', async (req: any) => {
-      const userId = req.user.sub as number;
+    /* GET /tasks */
+    f.get('/', async (req: any) => {
       return prisma.task.findMany({
-        where:  { userId },
+        where:  { userId: req.user.sub as number },
         orderBy:[{ priority: 'asc' }, { dueAt: 'asc' }],
+        include:{ images: true },
       });
     });
 
-    instance.post('/', async (req: any, rep) => {
+    /* POST /tasks  (JSON or multipart) */
+    f.post('/', async (req: any, rep) => {
       const userId = req.user.sub as number;
-      const { title, priority, dueAt } = req.body as any;
+      const { title, priority, dueAt } = req.body ?? {};
+
+      /* 1  create Task */
       const task = await prisma.task.create({
-        data: { title, priority, dueAt, userId },
+        data: {
+          title,
+          priority,
+          dueAt: dueAt ? new Date(dueAt) : undefined,
+          userId,
+        },
       });
-      rep.code(201).send(task);
+
+      /* 2  upload each file to S3 (if multipart) */
+      const images: { taskId: number; url: string; mime: string }[] = [];
+
+      // @ts-ignore  fastify-multipart .files is async iterator when multipart
+      for await (const file of req.files ?? []) {
+        const key = `tasks/${task.id}/${randomUUID()}_${file.filename}`;
+
+        await s3Client.send(
+          new PutObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key:    key,
+            Body:   file.file,               // stream
+            ContentType: file.mimetype,
+          })
+        );
+
+        images.push({
+          taskId: task.id,
+          url:  `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
+          mime: file.mimetype,
+        });
+      }
+
+      if (images.length) await prisma.image.createMany({ data: images });
+
+      const full = await prisma.task.findUnique({
+        where:   { id: task.id },
+        include: { images: true },
+      });
+
+      return rep.code(201).send(full);
     });
   },
-  { prefix: '/tasks' }   // ⬅️  keeps final URLs `/tasks` and `/tasks` (POST) exactly as before
-)
+  { prefix: '/tasks' }
+);
 
 /* ───── Start server ───── */
 const PORT = Number(process.env.PORT) || 3000;
-app.listen({ port: PORT, host: '0.0.0.0' }, err => {
-  if (err) { app.log.error(err); process.exit(1); }
+app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
+  if (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
   app.log.info(`🚀  API ready on 0.0.0.0:${PORT}`);
 });
