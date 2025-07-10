@@ -20,6 +20,7 @@ model Task {
   title     String
   priority  Priority
   status    Status    @default(PENDING)
+  size      Size      @default(LARGE)
   dueAt     DateTime?
   user      User?     @relation(fields: [userId], references: [id])
   userId    Int?
@@ -62,4 +63,9 @@ enum Status {
   PENDING
   ACTIVE
   DONE
+}
+
+enum Size {
+  SMALL
+  LARGE
 }

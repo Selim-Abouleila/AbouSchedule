@@ -31,7 +31,7 @@ app.decorate('auth', async (req: any, rep: any) => {
 /* ───── Multipart support ───── */
 app.register(multipart, {
   limits: { fileSize: 5 * 1024 * 1024 },  // 5 MB per file
-  attachFieldsToBody: true,               // ← puts text parts into req.body
+  attachFieldsToBody: 'keyValues',               // ← puts text parts into req.body
 });
 
 /* ───── Auth routes ───── */
@@ -69,62 +69,67 @@ app.post('/auth/login', async (req, rep) => {
 
 
 
-/* ───── Task routes ───── */
 app.register(
   async (f) => {
-    f.addHook('preHandler', f.auth);   // JWT for everything below
+    f.addHook('preHandler', f.auth);
 
     /* GET /tasks */
     f.get('/', async (req: any) => {
       return prisma.task.findMany({
-        where:  { userId: req.user.sub as number },
-        orderBy:[{ priority: 'asc' }, { dueAt: 'asc' }],
-        include:{ images: true },
+        where: { userId: req.user.sub as number },
+        orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }],
+        include: { images: true },
       });
     });
 
-    /* POST /tasks  (JSON or multipart) */
+    /* POST /tasks */
     f.post('/', async (req: any, rep) => {
       const userId = req.user.sub as number;
-      const { title, priority, dueAt } = req.body ?? {};
+      const { title, priority, status = 'PENDING', dueAt } = req.body ?? {};
 
       /* 1  create Task */
       const task = await prisma.task.create({
         data: {
           title,
           priority,
+          status,
           dueAt: dueAt ? new Date(dueAt) : undefined,
           userId,
         },
       });
 
-      /* 2  upload each file to S3 (if multipart) */
+      /* 2  upload images (if any) */
       const images: { taskId: number; url: string; mime: string }[] = [];
 
-      // @ts-ignore  fastify-multipart .files is async iterator when multipart
-      for await (const file of req.files ?? []) {
-        const key = `tasks/${task.id}/${randomUUID()}_${file.filename}`;
+      if (req.isMultipart()) {
+        for await (const part of req.parts()) {
+          if (part.type !== 'file') continue;
 
-        await s3Client.send(
-          new PutObjectCommand({
-            Bucket: process.env.AWS_BUCKET!,
-            Key:    key,
-            Body:   file.file,               // stream
-            ContentType: file.mimetype,
-          })
-        );
+          const key = `tasks/${task.id}/${randomUUID()}_${part.filename}`;
 
-        images.push({
-          taskId: task.id,
-          url:  `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
-          mime: file.mimetype,
-        });
+          await s3Client.send(
+            new PutObjectCommand({
+              Bucket: process.env.AWS_BUCKET!,
+              Key: key,
+              Body: part.file,
+              ContentType: part.mimetype,
+            })
+          );
+
+          images.push({
+            taskId: task.id,
+            url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
+            mime: part.mimetype,
+          });
+        }
       }
 
-      if (images.length) await prisma.image.createMany({ data: images });
+      if (images.length) {
+        await prisma.image.createMany({ data: images });
+      }
 
       const full = await prisma.task.findUnique({
-        where:   { id: task.id },
+        where: { id: task.id },
         include: { images: true },
       });
 
