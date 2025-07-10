@@ -84,8 +84,31 @@ app.register(
 
     /* POST /tasks */
     f.post('/', async (req: any, rep) => {
+
+      console.log('→ Content-Type:', req.headers['content-type']);
+      console.log('→ isMultipart? ', req.isMultipart());
       const userId = req.user.sub as number;
       const { title, priority, status = 'PENDING', size, dueAt } = req.body ?? {};
+
+      if (req.isMultipart()) {
+        console.log('→ entering multipart loop');
+        for await (const part of req.parts()) {
+          console.log('   • part:', {
+            field: part.fieldname,
+            filename: part.filename,
+            mimetype: part.mimetype,
+            type: part.type
+          });
+          if (part.type !== 'file') {
+            console.log('     – skipping non-file part');
+            continue;
+          }
+          // … your S3 upload …
+          console.log('     – uploading', part.filename);
+        }
+      } else {
+        console.log('→ not multipart, skipping upload');
+      }
 
       /* 1  create Task */
       const task = await prisma.task.create({
