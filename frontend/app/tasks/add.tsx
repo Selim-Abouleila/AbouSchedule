@@ -17,7 +17,7 @@ export default function AddTask() {
   // ← no more useState<…> generics!
   const [priority, setPrio]    = useState('NONE' as typeof PRIORITIES[number]);
   const [status,   setStat]    = useState('PENDING' as typeof STATUSES[number]);
-  const [size,   setStat]    = useState('LARGE' as typeof SIZES[number]);
+  const [size,   setSize]    = useState('LARGE' as typeof SIZES[number]);
   const [dueAt,    setDueAt]   = useState<Date | null>(null);
   const [showIOS,  setShowIOS] = useState(false);
 
@@ -75,6 +75,7 @@ export default function AddTask() {
     form.append('title',    title);
     form.append('priority', priority);
     form.append('status',   status);
+    form.append('size',   size);
     if (dueAt) form.append('dueAt', dueAt.toISOString());
 
     if (img) {
@@ -129,6 +130,16 @@ export default function AddTask() {
         ))}
       </Picker>
 
+      {/* SIZE header */}
+      <Text style={{ fontWeight: 'bold', color: '#000', marginTop: 8 }}>
+        SIZE
+      </Text>
+      <Picker selectedValue={size} onValueChange={setSize}>
+        {SIZES.map((s) => (
+          <Picker.Item key={s} label={s} value={s} />
+        ))}
+      </Picker>
+
       <Button
         title={dueAt ? dueAt.toLocaleString() : 'Pick due date'}
         onPress={showPicker}
@@ -153,6 +164,15 @@ export default function AddTask() {
         onPress={save}
         disabled={loading}
       />
+
+      <Button 
+    title = "← Back"
+    onPress={() => router.back()}
+    />
     </View>
+
+    
   );
+
+  
 }
