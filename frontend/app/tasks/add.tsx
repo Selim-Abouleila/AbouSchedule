@@ -2,26 +2,27 @@ import { useState } from 'react';
 import { View, Text, TextInput, Button, Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
-import DateTimePicker, {
-  DateTimePickerAndroid,
-} from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 
 import { endpoints } from '../../src/api';
 import { getToken } from '../../src/auth';
 
 const PRIORITIES = ['IMMEDIATE', 'RECURRENT', 'ONE', 'TWO', 'THREE', 'NONE'] as const;
-const STATUSES = ['PENDING', 'ACTIVE', 'DONE'] as const;
+const STATUSES   = ['PENDING', 'ACTIVE', 'DONE'] as const;
+const SIZES = ['SMALL', 'LARGE'] as const;
 
 export default function AddTask() {
-  const [title, setTitle] = useState('');
-  const [priority, setPrio] = useState<typeof PRIORITIES[number]>('NONE');
-  const [status, setStat] = useState<typeof STATUSES[number]>('PENDING');
-  const [dueAt, setDueAt] = useState<Date | null>(null);
-  const [showIOS, setShowIOS] = useState(false);
+  const [title,    setTitle]   = useState('');
+  // ← no more useState<…> generics!
+  const [priority, setPrio]    = useState('NONE' as typeof PRIORITIES[number]);
+  const [status,   setStat]    = useState('PENDING' as typeof STATUSES[number]);
+  const [size,   setStat]    = useState('LARGE' as typeof SIZES[number]);
+  const [dueAt,    setDueAt]   = useState<Date | null>(null);
+  const [showIOS,  setShowIOS] = useState(false);
 
-  const [img, setImg] = useState<ImagePicker.ImagePickerAsset | null>(null);
-  const [loading, setLoad] = useState(false);
+  const [img,     setImg]      = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [loading, setLoad]     = useState(false);
 
   /* pick image */
   const pickImage = async () => {
@@ -71,23 +72,23 @@ export default function AddTask() {
     const jwt = await getToken();
     const form = new FormData();
 
-    form.append('title', title);
+    form.append('title',    title);
     form.append('priority', priority);
-    form.append('status', status);
+    form.append('status',   status);
     if (dueAt) form.append('dueAt', dueAt.toISOString());
 
     if (img) {
       form.append('photo', {
-        uri: img.uri,
+        uri:  img.uri,
         name: img.fileName ?? 'photo.jpg',
         type: img.mimeType ?? 'image/jpeg',
       } as any);
     }
 
     const res = await fetch(endpoints.tasks, {
-      method: 'POST',
+      method:  'POST',
       headers: { Authorization: `Bearer ${jwt}` },
-      body: form,
+      body:    form,
     });
 
     setLoad(false);

@@ -85,7 +85,7 @@ app.register(
     /* POST /tasks */
     f.post('/', async (req: any, rep) => {
       const userId = req.user.sub as number;
-      const { title, priority, status = 'PENDING', dueAt } = req.body ?? {};
+      const { title, priority, status = 'PENDING', size, dueAt } = req.body ?? {};
 
       /* 1  create Task */
       const task = await prisma.task.create({
@@ -93,6 +93,7 @@ app.register(
           title,
           priority,
           status,
+          size,
           dueAt: dueAt ? new Date(dueAt) : undefined,
           userId,
         },
