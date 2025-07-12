@@ -119,12 +119,14 @@
       /* --- ❷  Create the Task -------------------------------------- */
       const {
         title,
+        description,
         priority,
         status = 'PENDING',
         size,
         dueAt
       } = fields as {
         title: string;
+        description?: string;
         priority: string;
         status?: string;
         size?: string;
@@ -134,6 +136,7 @@
       const task = await prisma.task.create({
         data: {
           title,
+          description,
           priority: priority as Priority,
           status: status as Status,
           size: size as Size,
@@ -168,6 +171,7 @@
         skip: (page - 1) * take,
         take,
         orderBy: [
+          { status:   'asc' },
           { priority: 'asc' },
           { size: 'asc' },
           { dueAt: 'asc' },

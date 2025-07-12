@@ -14,6 +14,7 @@ const SIZES = ['SMALL', 'LARGE'] as const;
 
 export default function AddTask() {
   const [title,    setTitle]   = useState('');
+  const [description,    setDescription]   = useState('');
   // ← no more useState<…> generics!
   const [priority, setPrio]    = useState('NONE' as typeof PRIORITIES[number]);
   const [status,   setStat]    = useState('PENDING' as typeof STATUSES[number]);
@@ -73,6 +74,7 @@ export default function AddTask() {
     const form = new FormData();
 
     form.append('title',    title);
+    form.append('descritpion',    description);
     form.append('priority', priority);
     form.append('status',   status);
     form.append('size',   size);
@@ -108,6 +110,13 @@ export default function AddTask() {
         value={title}
         onChangeText={setTitle}
         style={{ borderWidth: 1, padding: 10, borderRadius: 6 }}
+      />
+
+      <TextInput
+        placeholder="Description"
+        value={description}
+        onChangeText={setDescription}
+        style={{ borderWidth: 5, padding: 10, borderRadius: 6 }}
       />
 
       {/* PRIORITY header */}

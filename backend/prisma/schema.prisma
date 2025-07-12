@@ -18,6 +18,7 @@ model User {
 model Task {
   id        Int       @id @default(autoincrement())
   title     String
+  description String?
   priority  Priority
   status    Status    @default(PENDING)
   size      Size      @default(LARGE)
