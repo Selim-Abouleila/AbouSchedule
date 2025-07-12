@@ -7,12 +7,10 @@
   import * as dotenv from 'dotenv';
   import { z }       from 'zod';
   import { randomUUID } from 'crypto';
-  import { PutObjectCommand } from '@aws-sdk/client-s3';
   import { s3Client }  from './s3.js';
   import { Status } from '@prisma/client';
   import { Priority } from '@prisma/client';
   import { Size } from '@prisma/client';
-  import { buffer } from 'stream/consumers';
   import { Upload } from '@aws-sdk/lib-storage';
 
 
@@ -156,6 +154,23 @@
 
       return rep.code(201).send(full);
     });
+
+
+    /* -----------------------  GET /tasks  ----------------------- */
+    f.get('/', async (req: any) => {
+      const userId = req.user.sub as number;
+
+      return prisma.task.findMany({
+        where: { userId },          // only tasks for the logged-in user
+        orderBy: [
+          { priority: 'asc' },      // IMMEDIATE → … → NONE (enum order)
+          { size: 'asc' },      // SMALL → LARGE
+          // optional: { dueAt: 'asc' } for a tertiary sort key
+        ],
+        include: { images: true },  // returns every attribute + images[]
+      });
+    });
+
   }, { prefix: '/tasks' });
 
   /* ───── Start server ───── */
