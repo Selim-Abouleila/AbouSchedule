@@ -12,6 +12,8 @@
   import { Status } from '@prisma/client';
   import { Priority } from '@prisma/client';
   import { Size } from '@prisma/client';
+  import { buffer } from 'stream/consumers';
+  import { Upload } from '@aws-sdk/lib-storage';
 
 
 
@@ -77,7 +79,7 @@
   app.register(async (f) => {
 
     f.addHook('preHandler', f.auth)
-    
+
     f.post('/', async (req: any, rep) => {
       const userId = req.user.sub as number;
 
@@ -85,32 +87,35 @@
       const fields: Record<string, string> = {};
       const images: { taskId: number; url: string; mime: string }[] = [];
 
+
       if (req.isMultipart()) {
         for await (const part of req.parts()) {
           if (part.type === 'file') {
             const key = `tasks/tmp/${randomUUID()}_${part.filename}`;
-            await s3Client.send(
-              new PutObjectCommand({
+
+            await new Upload({
+              client: s3Client,
+              params: {
                 Bucket: process.env.AWS_BUCKET!,
                 Key: key,
-                Body: part.file,           // ← stream still alive
-                ContentType: part.mimetype
-              })
-            );
+                Body: part.file,                               // live stream
+                ContentType: part.mimetype || 'application/octet-stream',
+              },
+            }).done();
+
             images.push({
-              // the task id is not known yet – we’ll patch it after we create it
               taskId: 0,
               url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
-              mime: part.mimetype
+              mime: part.mimetype,
             });
-          } else {
-            // text & JSON fields come through here
-            fields[part.fieldname] = part.value;
+          } else if (part.type === 'field') {
+            fields[part.fieldname] = part.value;               // ← keep titles, etc.
           }
         }
       } else {
-        Object.assign(fields, req.body);     // fallback for JSON / urlencoded
+        Object.assign(fields, req.body);                       // JSON / urlencoded
       }
+
 
       /* --- ❷  Create the Task -------------------------------------- */
       const {
