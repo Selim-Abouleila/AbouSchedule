@@ -160,17 +160,29 @@
     /* -----------------------  GET /tasks  ----------------------- */
     f.get('/', async (req: any) => {
       const userId = req.user.sub as number;
+      const page = Math.max(Number(req.query.page) || 1, 1); // 1-based
+      const take = Math.min(Number(req.query.take) || 50, 100);
 
-      return prisma.task.findMany({
-        where: { userId },          // only tasks for the logged-in user
+      const tasks = await prisma.task.findMany({
+        where: { userId },
+        skip: (page - 1) * take,
+        take,
         orderBy: [
-          { priority: 'asc' },      // IMMEDIATE → … → NONE (enum order)
-          { size: 'asc' },      // SMALL → LARGE
-          { dueAt: 'asc' }
+          { priority: 'asc' },
+          { size: 'asc' },
+          { dueAt: 'asc' },
         ],
-        include: { images: true },  // returns every attribute + images[]
+        include: { images: true },
       });
+
+      return {
+        tasks,
+        nextPage: tasks.length === take ? page + 1 : null,
+      };
     });
+
+
+
 
     /* GET /tasks/:id – single task for the logged-in user */
     f.get('/:id', async (req: any, rep) => {
