@@ -171,6 +171,21 @@
       });
     });
 
+    /* GET /tasks/:id – single task for the logged-in user */
+    f.get('/:id', async (req: any, rep) => {
+      const userId = req.user.sub as number;
+      const id = Number(req.params.id);
+
+      const task = await prisma.task.findFirst({
+        where: { id, userId },
+        include: { images: true },
+      });
+
+      if (!task) return rep.code(404).send({ error: 'Task not found' });
+      return task;
+    });
+
+
   }, { prefix: '/tasks' });
 
   /* ───── Start server ───── */
