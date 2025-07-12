@@ -98,6 +98,7 @@
                 Key: key,
                 Body: part.file,                               // live stream
                 ContentType: part.mimetype || 'application/octet-stream',
+                ACL: 'public-read',
               },
             }).done();
 
@@ -165,7 +166,7 @@
         orderBy: [
           { priority: 'asc' },      // IMMEDIATE → … → NONE (enum order)
           { size: 'asc' },      // SMALL → LARGE
-          // optional: { dueAt: 'asc' } for a tertiary sort key
+          { dueAt: 'asc' }
         ],
         include: { images: true },  // returns every attribute + images[]
       });

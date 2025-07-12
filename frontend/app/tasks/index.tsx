@@ -5,6 +5,9 @@ import { useFocusEffect, router } from 'expo-router';
 import { endpoints } from '../../src/api';
 import { getToken }  from '../../src/auth';
 
+/** Page size we request from the API */
+const PAGE_SIZE = 50;
+
 type Task = {
   id:       number;
   title:    string;
@@ -12,34 +15,52 @@ type Task = {
   images:   { id:number; url:string }[];
 };
 
-/** Maps server status → accent colour */
 const statusColor: Record<Task['status'], string> = {
-  PENDING: '#FFD60A',   // yellow
-  ACTIVE:  '#FF453A',   // red
-  DONE:    '#32D74B',   // green
+  PENDING: '#FFD60A',
+  ACTIVE:  '#FF453A',
+  DONE:    '#32D74B',
 };
 
 export default function TaskList() {
-  const [tasks,   setTasks] = useState<Task[]>([]);
-  const [loading, setLoad]  = useState(false);
+  const [tasks,      setTasks]      = useState<Task[]>([]);
+  const [loading,    setLoading]    = useState(false);   // initial & pull‑to‑refresh
+  const [loadingMore,setLoadingMore]= useState(false);   // infinite scroll
+  const [nextCursor, setNextCursor]= useState<number | null>(null);
 
-  /** Fetch tasks in the order the API already returns (priority + size). */
-  const load = async () => {
-    setLoad(true);
+  /** Hit the API with optional cursor → returns { tasks, nextCursor } */
+  const fetchPage = async (cursor: number | null, replace = false) => {
+    cursor ? setLoadingMore(true) : setLoading(true);
     try {
       const jwt = await getToken();
-      const res = await fetch(endpoints.tasks, {
+      const url = new URL(endpoints.tasks);
+      url.searchParams.set('take', String(PAGE_SIZE));
+      if (cursor) url.searchParams.set('cursor', String(cursor));
+
+      const res  = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${jwt}` },
       });
-      const json = await res.json();
-      setTasks(json as Task[]);
+      const { tasks: newTasks, nextCursor: nc } = await res.json();
+
+      setTasks((prev) => (replace ? newTasks : [...prev, ...newTasks]));
+      setNextCursor(nc);
     } finally {
-      setLoad(false);
+      cursor ? setLoadingMore(false) : setLoading(false);
     }
   };
 
-  /** Reload whenever the screen gets focus (pull‑to‑refresh style). */
-  useFocusEffect(useCallback(() => { load(); }, []));
+  /** initial load + refresh */
+  // reload now returns void
+  const reload = useCallback(() => {
+    fetchPage(null, true);
+  }, []);
+
+  useFocusEffect(reload);
+
+
+  /** onEndReached → load next page if available */
+  const loadMore = () => {
+    if (!loadingMore && nextCursor) fetchPage(nextCursor);
+  };
 
   const renderItem = ({ item }: { item: Task }) => (
     <View
@@ -52,7 +73,6 @@ export default function TaskList() {
         borderColor: '#E1E4E8',
       }}
     >
-      {/* coloured status bar */}
       <View
         style={{
           width: 6,
@@ -63,7 +83,6 @@ export default function TaskList() {
         }}
       />
 
-      {/* main text area */}
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.title}</Text>
         {item.images.length > 0 && (
@@ -73,9 +92,8 @@ export default function TaskList() {
         )}
       </View>
 
-      {/* placeholder action button */}
       <Pressable
-        onPress={() => router.push(`/tasks/${item.id}`)}   /* opens TaskLoader */
+        onPress={() => router.push(`/tasks/${item.id}`)}
         style={({ pressed }) => ({ padding: 8, opacity: pressed ? 0.5 : 1 })}
       >
         <Text style={{ fontSize: 18, color: '#0A84FF' }}>⟩</Text>
@@ -92,12 +110,16 @@ export default function TaskList() {
           data={tasks}
           keyExtractor={(task) => String(task.id)}
           refreshing={loading}
-          onRefresh={load}
+          onRefresh={reload}
           renderItem={renderItem}
+          onEndReachedThreshold={0.4}
+          onEndReached={loadMore}
+          ListFooterComponent={loadingMore ? (
+            <ActivityIndicator style={{ marginVertical: 12 }} />
+          ) : null}
         />
       )}
 
-      {/* floating add‑task button */}
       <Pressable
         onPress={() => router.push('/tasks/add')}
         style={({ pressed }) => ({
