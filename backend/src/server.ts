@@ -1,174 +1,164 @@
-/* ───────────────  server.ts  ─────────────── */
-import Fastify from 'fastify';
-import jwt         from '@fastify/jwt';
-import multipart   from '@fastify/multipart';
-import { PrismaClient } from '@prisma/client';
-import argon2      from 'argon2';
-import * as dotenv from 'dotenv';
-import { z }       from 'zod';
-import { randomUUID } from 'crypto';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { s3Client }  from './s3.js';
-
-dotenv.config();
-
-const prisma = new PrismaClient();
-const app    = Fastify({ logger: true });
-
-/* ───── Root ping ───── */
-app.get('/', () => ({ ok: true }));
-
-/* ───── JWT ───── */
-app.register(jwt, { secret: process.env.JWT_SECRET || 'dev-secret' });
-app.decorate('auth', async (req: any, rep: any) => {
-  try {
-    await req.jwtVerify();
-  } catch {
-    return rep.code(401).send({ error: 'Unauthorized' });
-  }
-});
-
-/* ───── Multipart support ───── */
-app.register(multipart, {
-  limits: { fileSize: 5 * 1024 * 1024 },  // 5 MB per file
-  attachFieldsToBody: 'keyValues',               // ← puts text parts into req.body
-});
-
-/* ───── Auth routes ───── */
-const RegisterBody = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  role: z.enum(['ADMIN', 'EMPLOYEE']).default('EMPLOYEE'),
-});
-
-app.post('/auth/register', async (req, rep) => {
-  const parsed = RegisterBody.safeParse(req.body);
-  if (!parsed.success) {
-    return rep.code(400).send({ error: parsed.error.flatten() });
-  }
-  const { email, password, role } = parsed.data;
-
-  if (await prisma.user.findUnique({ where: { email } })) {
-    return rep.code(409).send({ error: 'Email already in use' });
-  }
-
-  const hash = await argon2.hash(password);
-  await prisma.user.create({ data: { email, password: hash, role } });
-  return rep.code(201).send({ ok: true });
-});
-
-app.post('/auth/login', async (req, rep) => {
-  const { email, password } = req.body as { email: string; password: string };
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !(await argon2.verify(user.password, password))) {
-    return rep.code(401).send({ error: 'Bad credentials' });
-  }
-  const token = app.jwt.sign({ sub: user.id, role: user.role });
-  return { token };
-});
+  /* ───────────────  server.ts  ─────────────── */
+  import Fastify from 'fastify';
+  import jwt         from '@fastify/jwt';
+  import multipart   from '@fastify/multipart';
+  import { PrismaClient } from '@prisma/client';
+  import argon2      from 'argon2';
+  import * as dotenv from 'dotenv';
+  import { z }       from 'zod';
+  import { randomUUID } from 'crypto';
+  import { PutObjectCommand } from '@aws-sdk/client-s3';
+  import { s3Client }  from './s3.js';
+  import { Status } from '@prisma/client';
+  import { Priority } from '@prisma/client';
+  import { Size } from '@prisma/client';
 
 
 
-app.register(
-  async (f) => {
-    f.addHook('preHandler', f.auth);
+  dotenv.config();
 
-    /* GET /tasks */
-    f.get('/', async (req: any) => {
-      return prisma.task.findMany({
-        where: { userId: req.user.sub as number },
-        orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }],
-        include: { images: true },
-      });
-    });
+  const prisma = new PrismaClient();
+  const app    = Fastify({ logger: true });
 
-    /* POST /tasks */
+  /* ───── Root ping ───── */
+  app.get('/', () => ({ ok: true }));
+
+  /* ───── JWT ───── */
+  app.register(jwt, { secret: process.env.JWT_SECRET || 'dev-secret' });
+  app.decorate('auth', async (req: any, rep: any) => {
+    try {
+      await req.jwtVerify();
+    } catch {
+      return rep.code(401).send({ error: 'Unauthorized' });
+    }
+  });
+
+  /* ───── Multipart support ───── */
+  app.register(multipart, {
+    limits: { fileSize: 5 * 1024 * 1024 },  // 5 MB per file
+  });
+
+  /* ───── Auth routes ───── */
+  const RegisterBody = z.object({
+    email: z.string().email(),
+    password: z.string().min(6),
+    role: z.enum(['ADMIN', 'EMPLOYEE']).default('EMPLOYEE'),
+  });
+
+  app.post('/auth/register', async (req, rep) => {
+    const parsed = RegisterBody.safeParse(req.body);
+    if (!parsed.success) {
+      return rep.code(400).send({ error: parsed.error.flatten() });
+    }
+    const { email, password, role } = parsed.data;
+
+    if (await prisma.user.findUnique({ where: { email } })) {
+      return rep.code(409).send({ error: 'Email already in use' });
+    }
+
+    const hash = await argon2.hash(password);
+    await prisma.user.create({ data: { email, password: hash, role } });
+    return rep.code(201).send({ ok: true });
+  });
+
+  app.post('/auth/login', async (req, rep) => {
+    const { email, password } = req.body as { email: string; password: string };
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user || !(await argon2.verify(user.password, password))) {
+      return rep.code(401).send({ error: 'Bad credentials' });
+    }
+    const token = app.jwt.sign({ sub: user.id, role: user.role });
+    return { token };
+  });
+
+
+
+  // server.ts  (only the /tasks POST handler shown)
+  app.register(async (f) => {
+
+    f.addHook('preHandler', f.auth)
+    
     f.post('/', async (req: any, rep) => {
-
-      console.log('→ Content-Type:', req.headers['content-type']);
-      console.log('→ isMultipart? ', req.isMultipart());
       const userId = req.user.sub as number;
-      const { title, priority, status = 'PENDING', size, dueAt } = req.body ?? {};
 
-      if (req.isMultipart()) {
-        console.log('→ entering multipart loop');
-        for await (const part of req.parts()) {
-          console.log('   • part:', {
-            field: part.fieldname,
-            filename: part.filename,
-            mimetype: part.mimetype,
-            type: part.type
-          });
-          if (part.type !== 'file') {
-            console.log('     – skipping non-file part');
-            continue;
-          }
-          // … your S3 upload …
-          console.log('     – uploading', part.filename);
-        }
-      } else {
-        console.log('→ not multipart, skipping upload');
-      }
-
-      /* 1  create Task */
-      const task = await prisma.task.create({
-        data: {
-          title,
-          priority,
-          status,
-          size,
-          dueAt: dueAt ? new Date(dueAt) : undefined,
-          userId,
-        },
-      });
-
-      /* 2  upload images (if any) */
+      /* --- ❶  Collect parts in ONE pass ----------------------------- */
+      const fields: Record<string, string> = {};
       const images: { taskId: number; url: string; mime: string }[] = [];
 
       if (req.isMultipart()) {
         for await (const part of req.parts()) {
-          if (part.type !== 'file') continue;
-
-          const key = `tasks/${task.id}/${randomUUID()}_${part.filename}`;
-
-          await s3Client.send(
-            new PutObjectCommand({
-              Bucket: process.env.AWS_BUCKET!,
-              Key: key,
-              Body: part.file,
-              ContentType: part.mimetype,
-            })
-          );
-
-          images.push({
-            taskId: task.id,
-            url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
-            mime: part.mimetype,
-          });
+          if (part.type === 'file') {
+            const key = `tasks/tmp/${randomUUID()}_${part.filename}`;
+            await s3Client.send(
+              new PutObjectCommand({
+                Bucket: process.env.AWS_BUCKET!,
+                Key: key,
+                Body: part.file,           // ← stream still alive
+                ContentType: part.mimetype
+              })
+            );
+            images.push({
+              // the task id is not known yet – we’ll patch it after we create it
+              taskId: 0,
+              url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
+              mime: part.mimetype
+            });
+          } else {
+            // text & JSON fields come through here
+            fields[part.fieldname] = part.value;
+          }
         }
+      } else {
+        Object.assign(fields, req.body);     // fallback for JSON / urlencoded
       }
 
+      /* --- ❷  Create the Task -------------------------------------- */
+      const {
+        title,
+        priority,
+        status = 'PENDING',
+        size,
+        dueAt
+      } = fields as {
+        title: string;
+        priority: string;
+        status?: string;
+        size?: string;
+        dueAt?: string;
+      };
+
+      const task = await prisma.task.create({
+        data: {
+          title,
+          priority: priority as Priority,
+          status: status as Status,
+          size: size as Size,
+          dueAt: dueAt ? new Date(dueAt) : undefined,
+          userId
+        }
+      });
+
+      /* --- ❸  Persist image metadata (if any) ----------------------- */
       if (images.length) {
+        for (const img of images) img.taskId = task.id; // patch IDs
         await prisma.image.createMany({ data: images });
       }
 
       const full = await prisma.task.findUnique({
         where: { id: task.id },
-        include: { images: true },
+        include: { images: true }
       });
 
       return rep.code(201).send(full);
     });
-  },
-  { prefix: '/tasks' }
-);
+  }, { prefix: '/tasks' });
 
-/* ───── Start server ───── */
-const PORT = Number(process.env.PORT) || 3000;
-app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
-  if (err) {
-    app.log.error(err);
-    process.exit(1);
-  }
-  app.log.info(`🚀  API ready on 0.0.0.0:${PORT}`);
-});
+  /* ───── Start server ───── */
+  const PORT = Number(process.env.PORT) || 3000;
+  app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
+    if (err) {
+      app.log.error(err);
+      process.exit(1);
+    }
+    app.log.info(`🚀  API ready on 0.0.0.0:${PORT}`);
+  });
