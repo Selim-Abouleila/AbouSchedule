@@ -16,19 +16,32 @@ model User {
 }
 
 model Task {
-  id        Int       @id @default(autoincrement())
-  title     String
+  id          Int       @id @default(autoincrement())
+  title       String
   description String?
-  priority  Priority
-  status    Status    @default(PENDING)
-  size      Size      @default(LARGE)
-  dueAt     DateTime?
-  user      User?     @relation(fields: [userId], references: [id])
-  userId    Int?
-  createdAt DateTime  @default(now())
+  priority    Priority
+  status      Status    @default(PENDING)
+  size        Size      @default(LARGE)
+  dueAt       DateTime?
+  createdAt   DateTime  @default(now())
 
-  /// NEW — one Task ↔ many Images
-  images Image[]
+  /// NEW – optional time limit to finish the task (minutes)
+  timeCapMinutes Int?         
+
+  /// NEW – optional recurrence rule
+  recurrence     Recurrence   @default(NONE)
+  /// If you need “every 2 weeks / every 3 months”, keep this too
+  recurrenceEvery Int?        // 1 = every week/month/…
+
+  /// Optionally: stop repeating after this date
+  recurrenceEnd  DateTime?
+
+  /// Existing relation to user
+  user    User?   @relation(fields: [userId], references: [id])
+  userId  Int?
+
+  /// Existing 1‑to‑many with images
+  images  Image[]
 }
 
 model Image {
@@ -69,4 +82,12 @@ enum Status {
 enum Size {
   SMALL
   LARGE
+}
+
+enum Recurrence {
+  NONE       // one‑off (default)
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
 }

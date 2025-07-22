@@ -11,7 +11,15 @@
   import { Status } from '@prisma/client';
   import { Priority } from '@prisma/client';
   import { Size } from '@prisma/client';
+  import { Recurrence} from '@prisma/client';
   import { Upload } from '@aws-sdk/lib-storage';
+  import {
+  FastifyInstance,
+  FastifyRequest,
+  FastifyReply,
+} from 'fastify';
+
+
 
 
 
@@ -123,7 +131,11 @@
         priority,
         status = 'PENDING',
         size,
-        dueAt
+        dueAt,
+        timeCapMinutes,
+        recurrence,        // DAILY | WEEKLY | … (string)
+        recurrenceEvery,   // "1" | "2" | …
+        recurrenceEnd
       } = fields as {
         title: string;
         description?: string;
@@ -131,6 +143,10 @@
         status?: string;
         size?: string;
         dueAt?: string;
+        timeCapMinutes?: string;   // numbers come in as strings from multipart
+        recurrence?: string;       // can be undefined
+        recurrenceEvery?: string;
+        recurrenceEnd?: string;
       };
 
       const task = await prisma.task.create({
@@ -141,13 +157,17 @@
           status: status as Status,
           size: size as Size,
           dueAt: dueAt ? new Date(dueAt) : undefined,
+          timeCapMinutes: timeCapMinutes ? Number(timeCapMinutes) : undefined,
+          recurrence: recurrence ? recurrence as Recurrence : 'NONE',
+          recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
+          recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
           userId
         }
       });
 
-      /* --- ❸  Persist image metadata (if any) ----------------------- */
+      /* --- ❸  Persist image metadata (if any) ---------------------- */
       if (images.length) {
-        for (const img of images) img.taskId = task.id; // patch IDs
+        for (const img of images) img.taskId = task.id;        // patch IDs
         await prisma.image.createMany({ data: images });
       }
 
@@ -157,7 +177,9 @@
       });
 
       return rep.code(201).send(full);
-    });
+
+      });
+
 
 
     /* -----------------------  GET /tasks  ----------------------- */
