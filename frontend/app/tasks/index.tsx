@@ -30,23 +30,32 @@ export default function TaskList() {
   /** Hit the API with optional cursor → returns { tasks, nextCursor } */
   const fetchPage = async (cursor: number | null, replace = false) => {
     cursor ? setLoadingMore(true) : setLoading(true);
+
     try {
       const jwt = await getToken();
+
       const url = new URL(endpoints.tasks);
       url.searchParams.set('take', String(PAGE_SIZE));
       if (cursor) url.searchParams.set('cursor', String(cursor));
 
-      const res  = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${jwt}` },
-      });
-      const { tasks: newTasks, nextCursor: nc } = await res.json();
+      /* 1️⃣ call the API once */
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${jwt}` } });
+      const payload = await res.json();
 
-      setTasks((prev) => (replace ? newTasks : [...prev, ...newTasks]));
-      setNextCursor(nc);
+      /* 2️⃣ guarantee every task has an images array */
+      const newTasks: Task[] = (payload.tasks ?? []).map((t: any) => ({
+        ...t,
+        images: Array.isArray(t.images) ? t.images : [],   // never undefined
+      }));
+
+      /* 3️⃣ update state */
+      setTasks(prev => (replace ? newTasks : [...prev, ...newTasks]));
+      setNextCursor(payload.nextCursor);
     } finally {
       cursor ? setLoadingMore(false) : setLoading(false);
     }
   };
+
 
   /** initial load + refresh */
   // reload now returns void
@@ -62,44 +71,49 @@ export default function TaskList() {
     if (!loadingMore && nextCursor) fetchPage(nextCursor);
   };
 
-  const renderItem = ({ item }: { item: Task }) => (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderColor: '#E1E4E8',
-      }}
-    >
+  const renderItem = ({ item }: { item: Task }) => {
+    const imgCount = item.images?.length ?? 0;      // safe guard
+
+    return (
       <View
         style={{
-          width: 6,
-          height: 40,
-          marginRight: 12,
-          borderRadius: 3,
-          backgroundColor: statusColor[item.status],
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 12,
+          paddingHorizontal: 16,
+          borderBottomWidth: 1,
+          borderColor: '#E1E4E8',
         }}
-      />
-
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.title}</Text>
-        {item.images.length > 0 && (
-          <Text style={{ color: '#6e6e6e', fontSize: 13 }}>
-            {item.images.length} image{item.images.length > 1 ? 's' : ''}
-          </Text>
-        )}
-      </View>
-
-      <Pressable
-        onPress={() => router.push(`/tasks/${item.id}`)}
-        style={({ pressed }) => ({ padding: 8, opacity: pressed ? 0.5 : 1 })}
       >
-        <Text style={{ fontSize: 18, color: '#0A84FF' }}>⟩</Text>
-      </Pressable>
-    </View>
-  );
+        <View
+          style={{
+            width: 6,
+            height: 40,
+            marginRight: 12,
+            borderRadius: 3,
+            backgroundColor: statusColor[item.status],
+          }}
+        />
+
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.title}</Text>
+          {imgCount > 0 && (
+            <Text style={{ color: '#6e6e6e', fontSize: 13 }}>
+              {imgCount} image{imgCount > 1 ? 's' : ''}
+            </Text>
+          )}
+        </View>
+
+        <Pressable
+          onPress={() => router.push(`/tasks/${item.id}`)}
+          style={({ pressed }) => ({ padding: 8, opacity: pressed ? 0.5 : 1 })}
+        >
+          <Text style={{ fontSize: 18, color: '#0A84FF' }}>⟩</Text>
+        </Pressable>
+      </View>
+    );
+  };
+
 
   return (
     <View style={{ flex: 1 }}>

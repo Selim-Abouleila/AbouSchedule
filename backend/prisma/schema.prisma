@@ -26,7 +26,8 @@ model Task {
   createdAt   DateTime  @default(now())
 
   /// NEW – optional time limit to finish the task (minutes)
-  timeCapMinutes Int?         
+  timeCapMinutes Int?
+  startedAt      DateTime?         
 
   /// NEW – optional recurrence rule
   recurrence     Recurrence   @default(NONE)
