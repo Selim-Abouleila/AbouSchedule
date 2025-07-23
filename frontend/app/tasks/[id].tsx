@@ -62,6 +62,7 @@ export default function TaskDetail() {
   }, [id]);
 
 
+
   const deleteTask = () => {
     Alert.alert(
       "Delete task",
@@ -168,12 +169,28 @@ export default function TaskDetail() {
         </View>
       )}
 
+      {/* Edit button */}
+      <Pressable
+        onPress={() => router.push(`/tasks/${id}/edit`)}
+        style={{
+          alignSelf: "center",
+          marginTop: 15,
+          paddingHorizontal: 24,
+          paddingVertical: 10,
+          backgroundColor: "#FF9F0A",   // orange
+          borderRadius: 8,
+        }}
+      >
+        <Text style={{ color: "white", fontWeight: "600" }}>Edit</Text>
+      </Pressable>
+
+
       {/* Delete button */}
       <Pressable
         onPress={deleteTask}
         style={{
           alignSelf: "center",
-          marginTop: 10,
+          marginTop: 15,
           paddingHorizontal: 24,
           paddingVertical: 10,
           backgroundColor: "#FF3B30",   // red
@@ -189,7 +206,7 @@ export default function TaskDetail() {
         onPress={() => router.back()}
         style={{
           alignSelf: 'center',
-          marginTop: 20,
+          marginTop: 15,
           paddingHorizontal: 24,
           paddingVertical: 10,
           backgroundColor: '#0A84FF',

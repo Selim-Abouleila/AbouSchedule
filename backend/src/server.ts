@@ -256,6 +256,75 @@ app.register(async (f) => {
 
 
 
+  /* PATCH /tasks/:id – update fields on a task the user owns */
+  f.patch('/:id', async (req: any, rep) => {
+    const userId = req.user.sub as number;
+    const id = Number(req.params.id);
+
+    /* 1️⃣  Accept a JSON body with only the fields we allow */
+    const {
+      title,
+      description,
+      priority,
+      status,
+      size,
+      dueAt,
+      timeCapMinutes,
+      recurrence,
+      recurrenceEvery,
+      recurrenceEnd,
+      labelDone,
+    } = req.body as Partial<{
+      title: string;
+      description: string;
+      priority: Priority;
+      status: Status;
+      size: Size;
+      dueAt: string;
+      timeCapMinutes: number;
+      recurrence: Recurrence;
+      recurrenceEvery: number;
+      recurrenceEnd: string;
+      labelDone: boolean;
+    }>;
+
+    /* 2️⃣  Build the `data` object dynamically so we don't overwrite
+           unspecified columns with null / undefined */
+    const data: Record<string, any> = {};
+    if (title !== undefined) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (priority !== undefined) data.priority = priority;
+    if (status !== undefined) data.status = status;
+    if (size !== undefined) data.size = size;
+    if (dueAt !== undefined) data.dueAt = dueAt ? new Date(dueAt) : null;
+    if (timeCapMinutes !== undefined) data.timeCapMinutes = timeCapMinutes;
+    if (recurrence !== undefined) data.recurrence = recurrence;
+    if (recurrenceEvery !== undefined) data.recurrenceEvery = recurrenceEvery;
+    if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
+    if (labelDone !== undefined) data.labelDone = labelDone;
+
+    /* 3️⃣  Run the update, but only if the task belongs to this user */
+    const updated = await prisma.task.updateMany({
+      where: { id, userId },
+      data,
+    });
+
+    if (updated.count === 0) {
+      return rep.code(404).send({ error: 'Task not found' });
+    }
+
+    /* 4️⃣  Return the fresh record */
+    const task = await prisma.task.findUnique({
+      where: { id },
+      include: { images: true },
+    });
+
+    return task;
+  });
+
+
+
+
 }, { prefix: '/tasks' });
 
 /* ───── Start server ───── */
