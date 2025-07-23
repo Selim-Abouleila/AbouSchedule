@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 
@@ -59,6 +60,37 @@ export default function TaskDetail() {
     };
     fetchTask();
   }, [id]);
+
+
+  const deleteTask = () => {
+    Alert.alert(
+      "Delete task",
+      "This cannot be undone. Continue?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const jwt = await getToken();
+              const res = await fetch(`${endpoints.tasks}/${id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${jwt}` },
+              });
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              router.back();           // return to the list
+            } catch (e: any) {
+              Alert.alert("Failed to delete", e.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+
+  
 
   if (loading) {
     return (
@@ -135,6 +167,22 @@ export default function TaskDetail() {
           </ScrollView>
         </View>
       )}
+
+      {/* Delete button */}
+      <Pressable
+        onPress={deleteTask}
+        style={{
+          alignSelf: "center",
+          marginTop: 10,
+          paddingHorizontal: 24,
+          paddingVertical: 10,
+          backgroundColor: "#FF3B30",   // red
+          borderRadius: 8,
+        }}
+      >
+        <Text style={{ color: "white", fontWeight: "600" }}>Delete</Text>
+      </Pressable>
+
 
       {/* Back button */}
       <Pressable

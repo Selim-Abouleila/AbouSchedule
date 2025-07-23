@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   ScrollView,
@@ -25,14 +25,16 @@ import { getToken } from "../../src/auth";
 
 
 const PRIORITIES = [
-  "IMMEDIATE",
-  "RECURRENT",
+  "NONE",
   "ONE",
   "TWO",
   "THREE",
-  "NONE",
+  "IMMEDIATE",
+  "RECURRENT"
 ] as const;
-const STATUSES = ["PENDING", "ACTIVE", "DONE"] as const;
+
+
+const STATUSES = ["ACTIVE", "DONE", "PENDING"] as const;
 const SIZES = ["SMALL", "LARGE"] as const;
 const RECURRENCES = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 
@@ -51,9 +53,19 @@ export default function AddTask() {
   const [recurrenceEvery, setRecurrenceEvery] = useState("1");           // “every X …”
   const [recurrenceEnd, setRecurrenceEnd] = useState<Date | null>(null);
   const [showIOSRecEnd, setShowIOSRecEnd] = useState(false);
+  const [labelDone, setLabelDone] = useState(true); // optional “✓ Done” flag
+
 
   const [photos, setPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [loading, setLoad] = useState(false);
+
+  /* keep priority in sync with the recurring toggle */
+  useEffect(() => {
+    if (recurring) setPrio("RECURRENT");
+    else if (priority === "RECURRENT") setPrio("NONE");
+  }, [recurring, priority]);   // ← added priority
+
+
 
   /* pick image(s) */
   const pickImages = async () => {
@@ -97,10 +109,40 @@ export default function AddTask() {
     }
   };
 
+  /* Recuurrance Confirmation */
+  const confirmRecurring = () => {
+    Alert.alert(
+      "Recurring task",
+      "Are you sure you want this task to be recurring?",
+      [
+        { text: "Back", style: "cancel" },                // stay off
+        { text: "Yes", onPress: () => setRecurring(true) } // enable
+      ]
+    );
+  };
+
+
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setPrio("NONE");
+    setStat("ACTIVE");
+    setSize("LARGE");
+    setDueAt(null);
+    setTimeCap("");
+    setRecurring(false);
+    setRecurrence("DAILY");
+    setRecurrenceEvery("1");
+    setRecurrenceEnd(null);
+    setLabelDone(true);
+  };
+
+
   /* save */
   const save = async () => {
     if (!title) return Alert.alert("Please enter a title");
-    setLoad(true);
+    setLoad(false);
+    
 
     const jwt = await getToken();
     const form = new FormData();
@@ -128,6 +170,8 @@ export default function AddTask() {
       form.append("recurrenceEvery", recurrenceEvery);
       if (recurrenceEnd) form.append("recurrenceEnd", recurrenceEnd.toISOString());
     }
+    form.append("labelDone", labelDone.toString()); // "true" | "false"
+
 
 
     const res = await fetch(endpoints.tasks, {
@@ -140,12 +184,9 @@ export default function AddTask() {
     if (!res.ok) {
       return Alert.alert("Failed", await res.text());
     }
+    resetForm();
     router.back();
   };
-
-
-
-  /* UI */
 
 
 
@@ -178,11 +219,17 @@ export default function AddTask() {
             style={{ borderWidth: 1, borderRadius: 6, padding: 10, minHeight: 120, textAlignVertical: "top" }}
           />
 
-          {/* Priority */}
-          <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
-          <Picker selectedValue={priority} onValueChange={setPrio}>
-            {PRIORITIES.map((p) => <Picker.Item key={p} label={p} value={p} />)}
-          </Picker>
+          {/* Priority (hidden if recurring) */}
+          {!recurring && (
+            <>
+              <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
+              <Picker selectedValue={priority} onValueChange={setPrio}>
+                {PRIORITIES
+                  .filter(p => p !== "RECURRENT")   // ← exclude it from the menu
+                  .map(p => <Picker.Item key={p} label={p} value={p} />)}
+              </Picker>
+            </>
+          )}
 
           {/* Status */}
           <Text style={{ fontWeight: "bold", marginTop: 8 }}>STATUS</Text>
@@ -206,30 +253,62 @@ export default function AddTask() {
             style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
           />
 
-          {/* Recurring switch */}
-          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
-            <Text style={{ fontWeight: "bold", marginRight: 12 }}>RECURRING</Text>
-            <Pressable
-              onPress={() => setRecurring(!recurring)}
-              style={{
-                width: 50,
-                height: 30,
-                borderRadius: 15,
-                backgroundColor: recurring ? "#0A84FF" : "#CCC",
-                justifyContent: "center",
-              }}
-            >
-              <View
+          <View style={{ gap: 12 }}>
+
+            {/* RECURRING */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={{ fontWeight: "bold", marginRight: 8 }}>RECURRING</Text>
+              <Pressable
+                onPress={() =>
+                  !recurring ? confirmRecurring() : setRecurring(false)
+                }
                 style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 12,
-                  backgroundColor: "white",
-                  alignSelf: recurring ? "flex-end" : "flex-start",
-                  margin: 3,
+                  width: 50,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: recurring ? "#0A84FF" : "#CCC",
+                  justifyContent: "center",
                 }}
-              />
-            </Pressable>
+              >
+                <View
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: "white",
+                    alignSelf: recurring ? "flex-end" : "flex-start",
+                    margin: 3,
+                  }}
+                />
+              </Pressable>
+            </View>
+
+            {/* TASK DONE */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={{ fontWeight: "bold", marginRight: 8 }}>TASKER CAN LABEL DONE</Text>
+              <Pressable
+                onPress={() => setLabelDone(!labelDone)}
+                style={{
+                  width: 50,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: labelDone ? "#0A84FF" : "#CCC",
+                  justifyContent: "center",
+                }}
+              >
+                <View
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: "white",
+                    alignSelf: labelDone ? "flex-end" : "flex-start",
+                    margin: 3,
+                  }}
+                />
+              </Pressable>
+            </View>
+
           </View>
 
           {/* Recurrence details */}
@@ -319,6 +398,7 @@ export default function AddTask() {
             </Pressable>
           </View>
 
+          
           {/* Action buttons */}
           <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
           <Button title="← Back" onPress={() => router.back()} />

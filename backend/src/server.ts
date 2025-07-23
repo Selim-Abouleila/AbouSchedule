@@ -237,6 +237,25 @@ app.register(async (f) => {
   });
 
 
+  /* DELETE /tasks/:id – remove a task the user owns */
+  f.delete('/:id', async (req: any, rep) => {
+    const userId = req.user.sub as number;
+    const id = Number(req.params.id);
+
+    /* delete and make sure it belonged to this user */
+    const deleted = await prisma.task.deleteMany({
+      where: { id, userId },
+    });
+
+    if (deleted.count === 0) {
+      return rep.code(404).send({ error: 'Task not found' });
+    }
+    // Images go automatically because Image.task has onDelete: Cascade
+    return { ok: true };
+  });
+
+
+
 }, { prefix: '/tasks' });
 
 /* ───── Start server ───── */

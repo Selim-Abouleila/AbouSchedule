@@ -1,40 +1,51 @@
 // app/(app)/_layout.tsx
 import { Drawer } from 'expo-router/drawer';
 import { DrawerToggleButton } from '@react-navigation/drawer';
-import { logout } from './logout';          // your helper
 
-/* ───────── drawer layout ───────── */
 export default function AppDrawerLayout() {
   return (
     <Drawer
       screenOptions={{
         drawerType: 'slide',
-        headerLeft: () => <DrawerToggleButton />,   // hamburger
+        headerLeft: () => <DrawerToggleButton />, // hamburger icon
       }}
     >
-      {/* TASKS stack (index + add) */}
+      {/* TASK list (and nested add / detail) */}
+      <Drawer.Screen name="tasks/index" options={{ title: 'Tasks' }} />
+
+      {/* Settings page */}
+      <Drawer.Screen name="settings" options={{ title: 'Settings' }} />
+
+      {/* Login lives one level up (app/login.tsx) */}
+      <Drawer.Screen name="login" options={{ title: 'Login' }} />
+
+      {/* Logout screen we’ll add next */}
+      <Drawer.Screen name="logout" options={{ title: 'Logout' }} />
+
+      {/* ─── HIDDEN routes ─── */}
       <Drawer.Screen
-        name="tasks/index"               // ← existing list screen
-        options={{ title: 'Tasks' }}
+        name="register"
+        options={{ drawerItemStyle: { display: 'none' } }}
       />
 
-      {/* SETTINGS page (make the file below) */}
       <Drawer.Screen
-        name="settings"
-        options={{ title: 'Settings' }}
+        name="tasks/add"
+        options={{ drawerItemStyle: { display: 'none' } }}
       />
 
-      {/* LOGIN screen (already exists at /login) */}
       <Drawer.Screen
-        name="../login"                  // step up one folder
-        options={{ title: 'Login' }}
+        name="_necessary"
+        options={{ drawerItemStyle: { display: 'none' } }}
       />
 
-      {/* LOGOUT pseudo‑screen that runs the action then leaves */}
       <Drawer.Screen
-        name="logout"
-        options={{ title: 'Logout' }}
+        name="tasks/[id]"
+        options={{ drawerItemStyle: { display: 'none' } }}
       />
+
     </Drawer>
   );
+
+
+  
 }
