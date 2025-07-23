@@ -141,7 +141,8 @@ app.register(async (f) => {
       timeCapMinutes,
       recurrence,        // DAILY | WEEKLY | … (string)
       recurrenceEvery,   // "1" | "2" | …
-      recurrenceEnd
+      recurrenceEnd,
+      labelDone
     } = fields as {
       title: string;
       description?: string;
@@ -153,7 +154,11 @@ app.register(async (f) => {
       recurrence?: string;       // can be undefined
       recurrenceEvery?: string;
       recurrenceEnd?: string;
+      labelDone?: string;
     };
+
+    const done = labelDone ? labelDone === 'true' : undefined;
+
 
     const task = await prisma.task.create({
       data: {
@@ -167,6 +172,7 @@ app.register(async (f) => {
         recurrence: recurrence ? recurrence as Recurrence : 'NONE',
         recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
         recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
+        labelDone: done,
         userId
       }
     });

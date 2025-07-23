@@ -27,7 +27,7 @@ model Task {
 
   /// NEW – optional time limit to finish the task (minutes)
   timeCapMinutes Int?
-  startedAt      DateTime?         
+  startedAt      DateTime?       
 
   /// NEW – optional recurrence rule
   recurrence     Recurrence   @default(NONE)
@@ -36,6 +36,7 @@ model Task {
 
   /// Optionally: stop repeating after this date
   recurrenceEnd  DateTime?
+  labelDone      Boolean?  @default(false) @map("label_done")
 
   /// Existing relation to user
   user    User?   @relation(fields: [userId], references: [id])
