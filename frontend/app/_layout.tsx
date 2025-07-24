@@ -43,6 +43,11 @@ export default function AppDrawerLayout() {
         options={{ drawerItemStyle: { display: 'none' } }}
       />
 
+      <Drawer.Screen
+        name="[id]/edit"
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+
     </Drawer>
   );
 

@@ -13,6 +13,8 @@ import { Priority } from '@prisma/client';
 import { Size } from '@prisma/client';
 import { Recurrence } from '@prisma/client';
 import { Upload } from '@aws-sdk/lib-storage';
+// server.ts (top of the file, together with the other imports)
+import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
 import {
   FastifyInstance,
   FastifyRequest,
@@ -256,40 +258,42 @@ app.register(async (f) => {
 
 
 
-  /* PATCH /tasks/:id – update fields on a task the user owns */
-  f.patch('/:id', async (req: any, rep) => {
+  /* -----------------------------------------------------------------
+ * PATCH /tasks/:id – update fields and optionally upload / delete images
+ * ---------------------------------------------------------------- */
+  f.patch("/:id", async (req: any, rep) => {
     const userId = req.user.sub as number;
     const id = Number(req.params.id);
 
-    /* 1️⃣  Accept a JSON body with only the fields we allow */
+    /* ❶ Read multipart (or JSON) */
+    const fields: Record<string, string> = {};
+    const newImgs: { taskId: number; url: string; mime: string }[] = [];
+
+    if (req.isMultipart()) {
+      for await (const part of req.parts()) {
+        if (part.type === "file") {
+          const url = await uploadToS3(part, `tasks/${id}`);   // helper
+          newImgs.push({ taskId: id, url, mime: part.mimetype });
+        } else if (part.type === "field") {
+          fields[part.fieldname] = part.value;
+        }
+      }
+    } else {
+      Object.assign(fields, req.body);                         // JSON / url‑encoded
+    }
+
+    /* ❷ Extract scalars */
     const {
-      title,
-      description,
-      priority,
-      status,
-      size,
-      dueAt,
-      timeCapMinutes,
-      recurrence,
-      recurrenceEvery,
-      recurrenceEnd,
-      labelDone,
-    } = req.body as Partial<{
-      title: string;
-      description: string;
-      priority: Priority;
-      status: Status;
-      size: Size;
-      dueAt: string;
-      timeCapMinutes: number;
-      recurrence: Recurrence;
-      recurrenceEvery: number;
-      recurrenceEnd: string;
-      labelDone: boolean;
+      title, description, priority, status, size,
+      dueAt, timeCapMinutes, recurrence, recurrenceEvery,
+      recurrenceEnd, labelDone, keep
+    } = fields as Partial<{
+      title: string; description: string; priority: Priority; status: Status; size: Size;
+      dueAt: string; timeCapMinutes: string; recurrence: Recurrence;
+      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string;
     }>;
 
-    /* 2️⃣  Build the `data` object dynamically so we don't overwrite
-           unspecified columns with null / undefined */
+    /* ❸ Build `data` dynamically */
     const data: Record<string, any> = {};
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = description;
@@ -297,33 +301,28 @@ app.register(async (f) => {
     if (status !== undefined) data.status = status;
     if (size !== undefined) data.size = size;
     if (dueAt !== undefined) data.dueAt = dueAt ? new Date(dueAt) : null;
-    if (timeCapMinutes !== undefined) data.timeCapMinutes = timeCapMinutes;
+    if (timeCapMinutes !== undefined) data.timeCapMinutes = Number(timeCapMinutes);
     if (recurrence !== undefined) data.recurrence = recurrence;
-    if (recurrenceEvery !== undefined) data.recurrenceEvery = recurrenceEvery;
+    if (recurrenceEvery !== undefined) data.recurrenceEvery = Number(recurrenceEvery);
     if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
-    if (labelDone !== undefined) data.labelDone = labelDone;
+    if (labelDone !== undefined) data.labelDone = labelDone === "true";
 
-    /* 3️⃣  Run the update, but only if the task belongs to this user */
-    const updated = await prisma.task.updateMany({
-      where: { id, userId },
-      data,
-    });
+    /* ❹ Update row only if it belongs to the user */
+    const upd = await prisma.task.updateMany({ where: { id, userId }, data });
+    if (upd.count === 0) return rep.code(404).send({ error: "Task not found" });
 
-    if (updated.count === 0) {
-      return rep.code(404).send({ error: 'Task not found' });
+    /* ❺ Images ‍– add new, delete removed */
+    if (newImgs.length) await prisma.image.createMany({ data: newImgs });
+
+    if (keep !== undefined) {
+      const keepIds = keep.split(",").map(Number).filter(Boolean);
+      await prisma.image.deleteMany({ where: { taskId: id, id: { notIn: keepIds } } });
     }
 
-    /* 4️⃣  Return the fresh record */
-    const task = await prisma.task.findUnique({
-      where: { id },
-      include: { images: true },
-    });
-
+    /* ❻ Return fresh record */
+    const task = await prisma.task.findUnique({ where: { id }, include: { images: true } });
     return task;
   });
-
-
-
 
 }, { prefix: '/tasks' });
 
