@@ -15,7 +15,7 @@
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/drawer": "^7.5.3",
     "@react-navigation/native": "^7.1.14",
-    "expo": "~53.0.17",
+    "expo": "53.0.20",
     "expo-image-picker": "~16.1.4",
     "expo-router": "~5.1.4",
     "expo-secure-store": "~14.2.3",

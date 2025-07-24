@@ -272,7 +272,7 @@ app.register(async (f) => {
     if (req.isMultipart()) {
       for await (const part of req.parts()) {
         if (part.type === "file") {
-          const url = await uploadToS3(part, `tasks/${id}`);   // helper
+          const url = await uploadToS3(part, `tasks/tmp/`);   // helper
           newImgs.push({ taskId: id, url, mime: part.mimetype });
         } else if (part.type === "field") {
           fields[part.fieldname] = part.value;

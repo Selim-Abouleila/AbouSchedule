@@ -104,11 +104,14 @@ export default function EditTask() {
             selectionLimit: 6,
         });
 
-        if (!res.canceled) {
-            // 👇 cast the fresh picks to TaskPhoto[]
-            setPhotos(prev => [...prev, ...(res.assets as TaskPhoto[])]);
+        if (!res.canceled && res.assets?.length) {
+            setPhotos(prev => [
+                ...prev,
+                ...(res.assets as TaskPhoto[])
+            ]);
         }
     };
+
 
 
 
@@ -151,10 +154,10 @@ export default function EditTask() {
                 setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : "1");
                 setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
                 setLabelDone(Boolean(t.labelDone));
-                if (t.images?.length) {
+                if (Array.isArray(t.images) && t.images.length) {
                     setPhotos(
                         t.images.map((img: { id: number; url: string; mime: string }) => ({
-                            id: img.id,              // ← KEEP THE ID
+                            id: img.id,
                             uri: img.url,
                             width: 0,
                             height: 0,
@@ -163,6 +166,7 @@ export default function EditTask() {
                         }))
                     );
                 }
+
 
 
             } catch (e) {

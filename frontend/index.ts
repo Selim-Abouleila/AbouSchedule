@@ -1,8 +1,2 @@
-import { registerRootComponent } from 'expo';
-
-import App from './App';
-
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+// index.ts  ⟶ keep this file, replace its contents with exactly these two lines
+import 'expo-router/entry';        // let the router register itself

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 
 import { endpoints } from '../../src/api';
 import { getToken }  from '../../src/auth';
+import { useFocusEffect } from "@react-navigation/native";
 
 /*
   Place this file at:         app/tasks/[id].tsx
@@ -43,23 +44,34 @@ export default function TaskDetail() {
   const [loading, setLoad]  = useState(true);
   const [error, setError]   = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchTask = async () => {
-      try {
-        const jwt = await getToken();
-        const res = await fetch(`${endpoints.tasks}/${id}`, {
-          headers: { Authorization: `Bearer ${jwt}` },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        setTask((await res.json()) as Task);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoad(false);
-      }
-    };
-    fetchTask();
-  }, [id]);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      const loadTask = async () => {
+        setLoad(true);                    // show spinner
+        try {
+          const jwt = await getToken();
+          const res = await fetch(`${endpoints.tasks}/${id}`, {
+            headers: { Authorization: `Bearer ${jwt}` },
+          });
+          if (cancelled) return;          // component unmounted / unfocused
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          setTask(await res.json());
+          setError(null);
+        } catch (e: any) {
+          if (!cancelled) setError(e.message ?? 'Unknown error');
+        } finally {
+          if (!cancelled) setLoad(false); // hide spinner
+        }
+      };
+
+      loadTask();
+
+      // cleanup ⇒ abort state updates after unmount / blur
+      return () => { cancelled = true; };
+    }, [id])
+  );
 
 
 
