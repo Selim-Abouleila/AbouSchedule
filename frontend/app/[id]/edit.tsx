@@ -466,14 +466,33 @@ export default function EditTask() {
                     {/* Photo thumbnails + picker */}
                     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                         {photos.map((p, i) => (
-                            <Pressable key={i} onLongPress={() => {
-                                setRemovedSomething(true);               // track removal
-                                setPhotos(prev => prev.filter((_, j) => j !== i));
-                            }}>
-                                <Image source={{ uri: p.uri }} style={{ width: 70, height: 70, borderRadius: 8 }} />
+                            <Pressable
+                                key={i}
+                                onLongPress={() => {
+                                    Alert.alert(
+                                        "Remove picture",
+                                        "Do you really want to delete this photo?",
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Delete",
+                                                style: "destructive",
+                                                onPress: () => {
+                                                    setRemovedSomething(true);               // track removal
+                                                    setPhotos(prev => prev.filter((_, j) => j !== i));
+                                                },
+                                            },
+                                        ]
+                                    );
+                                }}
+                            >
+                                <Image
+                                    source={{ uri: p.uri }}
+                                    style={{ width: 70, height: 70, borderRadius: 8 }}
+                                />
                             </Pressable>
-                            
                         ))}
+
                         <Pressable
                             onPress={pickImages}
                             style={{
@@ -488,6 +507,7 @@ export default function EditTask() {
                             <Text style={{ fontSize: 28, color: "#555" }}>＋</Text>
                         </Pressable>
                     </View>
+
 
 
                     {/* Action buttons */}

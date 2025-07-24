@@ -44,6 +44,7 @@ model Task {
 
   /// Existing 1‑to‑many with images
   images  Image[]
+  documents  Document[]
 }
 
 model Image {
@@ -59,6 +60,21 @@ model Image {
   createdAt DateTime @default(now())
 
   @@index([taskId]) // speeds up SELECT … WHERE taskId = …
+}
+
+
+model Document {
+  id        Int    @id @default(autoincrement())
+  taskId    Int
+  task      Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  url       String         // or use Bytes if you prefer in‑DB storage
+  mime      String         // e.g. "application/pdf"
+  fileName  String?        // original file name (optional)
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
 }
 
 enum Role {

@@ -43,6 +43,10 @@ export default function TaskDetail() {
   const [task, setTask]     = useState<Task | null>(null);
   const [loading, setLoad]  = useState(true);
   const [error, setError]   = useState<string | null>(null);
+  // put near the other state hooks
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
 
   useFocusEffect(
     useCallback(() => {
@@ -125,108 +129,145 @@ export default function TaskDetail() {
   }
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 20 }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+    <View style={{ flex: 1 }}>
+      {/* ── main scrollable content ───────────────────────────── */}
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <View
+            style={{
+              width: 10,
+              height: 50,
+              marginRight: 12,
+              borderRadius: 4,
+              backgroundColor: statusColor[task.status],
+            }}
+          />
+          <Text style={{ fontSize: 24, fontWeight: '700', flexShrink: 1 }}>
+            {task.title}
+          </Text>
+        </View>
+
+        {/* Meta */}
+        <Text style={{ marginBottom: 4 }}>
+          <Text style={{ fontWeight: '600' }}>Priority: </Text>
+          {task.priority}
+        </Text>
+        <Text style={{ marginBottom: 4 }}>
+          <Text style={{ fontWeight: '600' }}>Size: </Text>
+          {task.size}
+        </Text>
+        <Text style={{ marginBottom: 4 }}>
+          <Text style={{ fontWeight: '600' }}>Status: </Text>
+          {task.status}
+        </Text>
+        {task.dueAt && (
+          <Text style={{ marginBottom: 4 }}>
+            <Text style={{ fontWeight: '600' }}>Due: </Text>
+            {new Date(task.dueAt).toLocaleString()}
+          </Text>
+        )}
+        <Text style={{ color: '#6e6e6e', marginBottom: 12 }}>
+          Created: {new Date(task.createdAt).toLocaleString()}
+        </Text>
+
+        {/* Images */}
+        {task.images.length > 0 && (
+          <View style={{ marginBottom: 12 }}>
+            <Text style={{ fontWeight: '600', marginBottom: 8 }}>Images</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {task.images.map((img, idx) => (
+                <Pressable
+                  key={img.id}
+                  onPress={() => {
+                    setViewerIndex(idx);
+                    setViewerOpen(true);
+                  }}
+                >
+                  <Image
+                    source={{ uri: img.url }}
+                    style={{ width: 180, height: 180, borderRadius: 12, marginRight: 12 }}
+                  />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Edit button */}
+        <Pressable
+          onPress={() => router.push(`../${id}/edit`)}
+          style={{
+            alignSelf: 'center',
+            marginTop: 15,
+            paddingHorizontal: 24,
+            paddingVertical: 10,
+            backgroundColor: '#FF9F0A',
+            borderRadius: 8,
+          }}
+        >
+          <Text style={{ color: 'white', fontWeight: '600' }}>Edit</Text>
+        </Pressable>
+
+        {/* Delete button */}
+        <Pressable
+          onPress={deleteTask}
+          style={{
+            alignSelf: 'center',
+            marginTop: 15,
+            paddingHorizontal: 24,
+            paddingVertical: 10,
+            backgroundColor: '#FF3B30',
+            borderRadius: 8,
+          }}
+        >
+          <Text style={{ color: 'white', fontWeight: '600' }}>Delete</Text>
+        </Pressable>
+
+        {/* Back button */}
+        <Pressable
+          onPress={() => router.back()}
+          style={{
+            alignSelf: 'center',
+            marginTop: 15,
+            paddingHorizontal: 24,
+            paddingVertical: 10,
+            backgroundColor: '#0A84FF',
+            borderRadius: 8,
+          }}
+        >
+          <Text style={{ color: 'white', fontWeight: '600' }}>Back</Text>
+        </Pressable>
+      </ScrollView>
+
+      {/* ── full‑screen image viewer ─────────────────────────── */}
+      {viewerOpen && (
         <View
           style={{
-            width: 10,
-            height: 50,
-            marginRight: 12,
-            borderRadius: 4,
-            backgroundColor: statusColor[task.status],
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'black',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
-        />
-        <Text style={{ fontSize: 24, fontWeight: '700', flexShrink: 1 }}>
-          {task.title}
-        </Text>
-      </View>
+        >
+          <Pressable
+            onPress={() => setViewerOpen(false)}
+            style={{ position: 'absolute', top: 40, right: 20, zIndex: 2 }}
+          >
+            <Text style={{ color: 'white', fontSize: 26 }}>✕</Text>
+          </Pressable>
 
-      {/* Meta */}
-      <Text style={{ marginBottom: 4 }}>
-        <Text style={{ fontWeight: '600' }}>Priority: </Text>
-        {task.priority}
-      </Text>
-      <Text style={{ marginBottom: 4 }}>
-        <Text style={{ fontWeight: '600' }}>Size: </Text>
-        {task.size}
-      </Text>
-      <Text style={{ marginBottom: 4 }}>
-        <Text style={{ fontWeight: '600' }}>Status: </Text>
-        {task.status}
-      </Text>
-      {task.dueAt && (
-        <Text style={{ marginBottom: 4 }}>
-          <Text style={{ fontWeight: '600' }}>Due: </Text>
-          {new Date(task.dueAt).toLocaleString()}
-        </Text>
-      )}
-      <Text style={{ color: '#6e6e6e', marginBottom: 12 }}>
-        Created: {new Date(task.createdAt).toLocaleString()}
-      </Text>
-
-      {/* Images */}
-      {task.images.length > 0 && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={{ fontWeight: '600', marginBottom: 8 }}>Images</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {task.images.map((img) => (
-              <Image
-                key={img.id}
-                source={{ uri: img.url }}
-                style={{ width: 180, height: 180, borderRadius: 12, marginRight: 12 }}
-              />
-            ))}
-          </ScrollView>
+          <Image
+            source={{ uri: task.images[viewerIndex].url }}
+            style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
+          />
         </View>
       )}
-
-      {/* Edit button */}
-      <Pressable
-        onPress={() => router.push(`../${id}/edit`)}
-        style={{
-          alignSelf: "center",
-          marginTop: 15,
-          paddingHorizontal: 24,
-          paddingVertical: 10,
-          backgroundColor: "#FF9F0A",   // orange
-          borderRadius: 8,
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "600" }}>Edit</Text>
-      </Pressable>
-
-
-      {/* Delete button */}
-      <Pressable
-        onPress={deleteTask}
-        style={{
-          alignSelf: "center",
-          marginTop: 15,
-          paddingHorizontal: 24,
-          paddingVertical: 10,
-          backgroundColor: "#FF3B30",   // red
-          borderRadius: 8,
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "600" }}>Delete</Text>
-      </Pressable>
-
-
-      {/* Back button */}
-      <Pressable
-        onPress={() => router.back()}
-        style={{
-          alignSelf: 'center',
-          marginTop: 15,
-          paddingHorizontal: 24,
-          paddingVertical: 10,
-          backgroundColor: '#0A84FF',
-          borderRadius: 8,
-        }}
-      >
-        <Text style={{ color: 'white', fontWeight: '600' }}>Back</Text>
-      </Pressable>
-    </ScrollView>
+    </View>
   );
+
 }

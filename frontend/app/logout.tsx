@@ -7,7 +7,7 @@ export default function LogoutScreen() {
     useCallback(() => {
       (async () => {
         await logoutHelper();        // 1️⃣ clear token
-        router.replace('/login');    // 2️⃣ go to login
+        router.replace('auth/login');    // 2️⃣ go to login
       })();
     }, [])                           // no deps → run each time screen gains focus
   );

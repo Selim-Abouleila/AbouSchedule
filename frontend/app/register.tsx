@@ -24,7 +24,7 @@ export default function Register() {
         throw new Error(txt || res.status.toString());
       }
       Alert.alert('Account created. Log in now.');
-      router.replace('/login');
+      router.replace('auth/login');
     } catch (e: any) {
       Alert.alert('Sign-up failed', e.message);
     } finally {

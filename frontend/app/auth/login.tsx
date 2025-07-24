@@ -9,8 +9,8 @@ import {
   Text,
 } from 'react-native';
 import { router } from 'expo-router';
-import { endpoints } from '../src/api';
-import { saveToken } from '../src/auth';
+import { endpoints } from '../../src/api';
+import { saveToken } from '../../src/auth';
 
 export default function Login() {
   const [email, setEmail]     = useState('');

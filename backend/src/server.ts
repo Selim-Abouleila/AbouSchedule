@@ -6,20 +6,14 @@ import { PrismaClient } from '@prisma/client';
 import argon2 from 'argon2';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
-import { s3Client } from './s3.js';
 import { Status } from '@prisma/client';
 import { Priority } from '@prisma/client';
 import { Size } from '@prisma/client';
 import { Recurrence } from '@prisma/client';
-import { Upload } from '@aws-sdk/lib-storage';
+
 // server.ts (top of the file, together with the other imports)
 import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
-import {
-  FastifyInstance,
-  FastifyRequest,
-  FastifyReply,
-} from 'fastify';
+
 
 
 
@@ -100,36 +94,32 @@ app.register(async (f) => {
     /* --- ❶  Collect parts in ONE pass ----------------------------- */
     const fields: Record<string, string> = {};
     const images: { taskId: number; url: string; mime: string }[] = [];
+    const documents: { taskId: number; url: string; mime: string }[] = [];
 
 
+    /* same loop, just decide where to push */
     if (req.isMultipart()) {
       for await (const part of req.parts()) {
         if (part.type === 'file') {
-          const key = `tasks/tmp/${randomUUID()}_${part.filename}`;
+          const url = await uploadToS3(part, 'tasks/tmp');
 
-          await new Upload({
-            client: s3Client,
-            params: {
-              Bucket: process.env.AWS_BUCKET!,
-              Key: key,
-              Body: part.file,                               // live stream
-              ContentType: part.mimetype || 'application/octet-stream',
-              ACL: 'public-read',
-            },
-          }).done();
+          /* heuristics: treat PDFs, DOCX, etc. as documents */
+          const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
 
-          images.push({
-            taskId: 0,
-            url: `https://${process.env.AWS_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
+          (isDoc ? documents : images).push({
+            taskId: 0,                 // patched after .create()
+            url,
             mime: part.mimetype,
           });
+
         } else if (part.type === 'field') {
-          fields[part.fieldname] = part.value;               // ← keep titles, etc.
+          fields[part.fieldname] = part.value;
         }
       }
     } else {
-      Object.assign(fields, req.body);                       // JSON / urlencoded
+      Object.assign(fields, req.body);
     }
+
 
 
     /* --- ❷  Create the Task -------------------------------------- */
@@ -171,7 +161,7 @@ app.register(async (f) => {
         size: size as Size,
         dueAt: dueAt ? new Date(dueAt) : undefined,
         timeCapMinutes: timeCapMinutes ? Number(timeCapMinutes) : undefined,
-        recurrence: recurrence ? recurrence as Recurrence : 'NONE',
+        recurrence: recurrence ? recurrence as Recurrence : Recurrence.NONE,
         recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
         recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
         labelDone: done,
@@ -185,9 +175,15 @@ app.register(async (f) => {
       await prisma.image.createMany({ data: images });
     }
 
+    /* --- ❸b  Persist document metadata ------------------------------- */
+    if (documents.length) {
+      for (const doc of documents) doc.taskId = task.id;
+      await prisma.document.createMany({ data: documents });
+    }
+
     const full = await prisma.task.findUnique({
       where: { id: task.id },
-      include: { images: true }
+      include: { images: true, documents: true }
     });
 
     return rep.code(201).send(full);
@@ -201,6 +197,7 @@ app.register(async (f) => {
     const userId = req.user.sub as number;
     const page = Math.max(Number(req.query.page) || 1, 1); // 1-based
     const take = Math.min(Number(req.query.take) || 50, 100);
+    
 
     const tasks = await prisma.task.findMany({
       where: { userId },
@@ -212,7 +209,7 @@ app.register(async (f) => {
         { size: 'asc' },
         { dueAt: 'asc' },
       ],
-      include: { images: true },
+      include: { images: true, documents: true},
     });
 
     return {
@@ -228,10 +225,11 @@ app.register(async (f) => {
   f.get('/:id', async (req: any, rep) => {
     const userId = req.user.sub as number;
     const id = Number(req.params.id);
+    
 
     const task = await prisma.task.findFirst({
       where: { id, userId },
-      include: { images: true },
+      include: { images: true, documents: true },
     });
 
     if (!task) return rep.code(404).send({ error: 'Task not found' });
@@ -268,12 +266,14 @@ app.register(async (f) => {
     /* ❶ Read multipart (or JSON) */
     const fields: Record<string, string> = {};
     const newImgs: { taskId: number; url: string; mime: string }[] = [];
+    const newDocs: { taskId: number; url: string; mime: string }[] = [];
 
     if (req.isMultipart()) {
       for await (const part of req.parts()) {
         if (part.type === "file") {
           const url = await uploadToS3(part, `tasks/tmp/`);   // helper
-          newImgs.push({ taskId: id, url, mime: part.mimetype });
+          const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
+          (isDoc ? newDocs : newImgs).push({ taskId: id, url, mime: part.mimetype });
         } else if (part.type === "field") {
           fields[part.fieldname] = part.value;
         }
@@ -286,11 +286,11 @@ app.register(async (f) => {
     const {
       title, description, priority, status, size,
       dueAt, timeCapMinutes, recurrence, recurrenceEvery,
-      recurrenceEnd, labelDone, keep
+      recurrenceEnd, labelDone, keep, keepDocs
     } = fields as Partial<{
       title: string; description: string; priority: Priority; status: Status; size: Size;
       dueAt: string; timeCapMinutes: string; recurrence: Recurrence;
-      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string;
+      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string;
     }>;
 
     /* ❸ Build `data` dynamically */
@@ -325,9 +325,23 @@ app.register(async (f) => {
       await prisma.image.createMany({ data: newImgs });
     }
 
+    if (keepDocs !== undefined) {
+      const ids = keepDocs.split(',').map(Number).filter(Boolean);
+      await prisma.document.deleteMany({
+        where: { taskId: id, id: { notIn: ids } }
+      });
+    }
+
+    if (newDocs.length) {
+      await prisma.document.createMany({ data: newDocs });
+    }
+
 
     /* ❻ Return fresh record */
-    const task = await prisma.task.findUnique({ where: { id }, include: { images: true } });
+    const task = await prisma.task.findUnique({
+      where: { id },
+      include: { images: true, documents: true }
+    });
     return task;
   });
 

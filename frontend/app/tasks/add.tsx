@@ -65,6 +65,8 @@ export default function AddTask() {
     else if (priority === "RECURRENT") setPrio("NONE");
   }, [recurring, priority]);   // ← added priority
 
+  const [removedSomething, setRemovedSomething] = useState(false);
+
 
 
   /* pick image(s) */
@@ -377,26 +379,49 @@ export default function AddTask() {
           )}
 
           {/* Photo thumbnails + picker */}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {photos.map((p, i) => (
-              <Pressable key={i} onLongPress={() => setPhotos(prev => prev.filter((_, j) => j !== i))}>
-                <Image source={{ uri: p.uri }} style={{ width: 70, height: 70, borderRadius: 8 }} />
-              </Pressable>
-            ))}
-            <Pressable
-              onPress={pickImages}
-              style={{
-                width: 70,
-                height: 70,
-                borderRadius: 8,
-                backgroundColor: "#E9E9E9",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ fontSize: 28, color: "#555" }}>＋</Text>
-            </Pressable>
-          </View>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                        {photos.map((p, i) => (
+                            <Pressable
+                                key={i}
+                                onLongPress={() => {
+                                    Alert.alert(
+                                        "Remove picture",
+                                        "Do you really want to delete this photo?",
+                                        [
+                                            { text: "Cancel", style: "cancel" },
+                                            {
+                                                text: "Delete",
+                                                style: "destructive",
+                                                onPress: () => {
+                                                    setRemovedSomething(true);               // track removal
+                                                    setPhotos(prev => prev.filter((_, j) => j !== i));
+                                                },
+                                            },
+                                        ]
+                                    );
+                                }}
+                            >
+                                <Image
+                                    source={{ uri: p.uri }}
+                                    style={{ width: 70, height: 70, borderRadius: 8 }}
+                                />
+                            </Pressable>
+                        ))}
+
+                        <Pressable
+                            onPress={pickImages}
+                            style={{
+                                width: 70,
+                                height: 70,
+                                borderRadius: 8,
+                                backgroundColor: "#E9E9E9",
+                                alignItems: "center",
+                                justifyContent: "center",
+                            }}
+                        >
+                            <Text style={{ fontSize: 28, color: "#555" }}>＋</Text>
+                        </Pressable>
+                    </View>
 
           
           {/* Action buttons */}

@@ -12,6 +12,7 @@ type Task = {
   id:       number;
   title:    string;
   status:   'PENDING' | 'ACTIVE' | 'DONE';
+  recurrence: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
   images:   { id:number; url:string }[];
 };
 
@@ -46,6 +47,7 @@ export default function TaskList() {
       const newTasks: Task[] = (payload.tasks ?? []).map((t: any) => ({
         ...t,
         images: Array.isArray(t.images) ? t.images : [],   // never undefined
+        recurrence: t.recurrence ?? 'NONE',
       }));
 
       /* 3️⃣ update state */
@@ -59,9 +61,22 @@ export default function TaskList() {
 
   /** initial load + refresh */
   // reload now returns void
+  // ⬇️ replace your current `reload` definition with this
   const reload = useCallback(() => {
-    fetchPage(null, true);
+    (async () => {
+      const jwt = await getToken();
+
+      if (!jwt) {
+        // not logged‑in → send the user to /auth/login
+        router.replace('/auth/login');
+        return;             // ⬅️ stop here, do NOT fetch tasks
+      }
+
+      // logged‑in → refresh the list as usual
+      fetchPage(null, true);
+    })();
   }, []);
+
 
   useFocusEffect(reload);
 
@@ -72,19 +87,22 @@ export default function TaskList() {
   };
 
   const renderItem = ({ item }: { item: Task }) => {
-    const imgCount = item.images?.length ?? 0;      // safe guard
+    const imgCount = item.images?.length ?? 0;
 
     return (
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
+      <Pressable
+        onPress={() => router.push(`/tasks/${item.id}`)}
+        style={({ pressed }) => ({
+          flexDirection: "row",
+          alignItems: "center",
           paddingVertical: 12,
           paddingHorizontal: 16,
           borderBottomWidth: 1,
-          borderColor: '#E1E4E8',
-        }}
+          borderColor: "#E1E4E8",
+          opacity: pressed ? 0.5 : 1,        // row tap feedback
+        })}
       >
+        {/* status bar */}
         <View
           style={{
             width: 6,
@@ -95,24 +113,27 @@ export default function TaskList() {
           }}
         />
 
+        {/* title + image count (both now clickable as well) */}
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: '600' }}>{item.title}</Text>
+          <Text style={{ fontSize: 16, fontWeight: "600" }}>{item.title}</Text>
+          {/* ① recurring label */}
+          {item.recurrence !== 'NONE' && (
+            <Text style={{ color: '#6e6e6e', fontSize: 13 }}>Recurring</Text>
+          )}
+
           {imgCount > 0 && (
-            <Text style={{ color: '#6e6e6e', fontSize: 13 }}>
-              {imgCount} image{imgCount > 1 ? 's' : ''}
+            <Text style={{ color: "#6e6e6e", fontSize: 13, fontWeight: '600' }}>
+              {imgCount} image{imgCount > 1 ? "s" : ""}
             </Text>
           )}
         </View>
 
-        <Pressable
-          onPress={() => router.push(`/tasks/${item.id}`)}
-          style={({ pressed }) => ({ padding: 8, opacity: pressed ? 0.5 : 1 })}
-        >
-          <Text style={{ fontSize: 18, color: '#0A84FF' }}>⟩</Text>
-        </Pressable>
-      </View>
+        {/* chevron (kept for visual cue, still clickable) */}
+        <Text style={{ fontSize: 18, color: "#0A84FF" }}>⟩</Text>
+      </Pressable>
     );
   };
+
 
 
   return (

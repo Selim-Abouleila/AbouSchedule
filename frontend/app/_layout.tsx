@@ -2,6 +2,8 @@
 import { Drawer } from 'expo-router/drawer';
 import { DrawerToggleButton } from '@react-navigation/drawer';
 
+
+
 export default function AppDrawerLayout() {
   return (
     <Drawer
@@ -17,7 +19,7 @@ export default function AppDrawerLayout() {
       <Drawer.Screen name="settings" options={{ title: 'Settings' }} />
 
       {/* Login lives one level up (app/login.tsx) */}
-      <Drawer.Screen name="login" options={{ title: 'Login' }} />
+      <Drawer.Screen name="auth/login" options={{ title: 'Login' }} />
 
       {/* Logout screen we’ll add next */}
       <Drawer.Screen name="logout" options={{ title: 'Logout' }} />
