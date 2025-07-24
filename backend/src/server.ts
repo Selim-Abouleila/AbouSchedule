@@ -312,12 +312,19 @@ app.register(async (f) => {
     if (upd.count === 0) return rep.code(404).send({ error: "Task not found" });
 
     /* ❺ Images ‍– add new, delete removed */
-    if (newImgs.length) await prisma.image.createMany({ data: newImgs });
-
+    /* ❺ Images – delete removed, then add new */
     if (keep !== undefined) {
-      const keepIds = keep.split(",").map(Number).filter(Boolean);
-      await prisma.image.deleteMany({ where: { taskId: id, id: { notIn: keepIds } } });
+      const keepIds = keep.split(',').map(Number).filter(Boolean);
+
+      await prisma.image.deleteMany({
+        where: { taskId: id, id: { notIn: keepIds } }
+      });
     }
+
+    if (newImgs.length) {
+      await prisma.image.createMany({ data: newImgs });
+    }
+
 
     /* ❻ Return fresh record */
     const task = await prisma.task.findUnique({ where: { id }, include: { images: true } });
