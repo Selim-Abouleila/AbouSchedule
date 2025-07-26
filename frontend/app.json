@@ -17,7 +17,12 @@
       "backgroundColor": "#ffffff"
     },
 
-    "ios": { "supportsTablet": true },
+    "ios": {
+       "supportsTablet": true,
+       "infoPlist": {
+        "NSCameraUsageDescription": "AbouSchedule needs access to the camera so you can attach photos to a task."
+      }
+    },
 
     "android": {
       "adaptiveIcon": {

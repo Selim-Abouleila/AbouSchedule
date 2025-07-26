@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
     View,
     Text,
@@ -18,11 +18,14 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from 'expo-document-picker';
+import { StyleSheet } from 'react-native';
 
 import { Picker } from "@react-native-picker/picker";
 import { useLocalSearchParams, router } from "expo-router";
 import { endpoints } from "../../src/api";
 import { getToken } from "../../src/auth";
+import { useNavigation } from "@react-navigation/native";
 
 /*  --- enums reused from AddTask ---  */
 const PRIORITIES = ["NONE", "ONE", "TWO", "THREE", "IMMEDIATE", "RECURRENT"] as const;
@@ -36,8 +39,72 @@ type TaskPhoto = ImagePicker.ImagePickerAsset & {
   id?: number;
 };
 
+type TaskDoc = DocumentPicker.DocumentPickerAsset & {
+  id?: number;          // present for documents that already exist in the DB
+};
 
 
+
+//Style Sheet for Image and Doc pickers
+const styles = StyleSheet.create({
+    /* 70 × 70 square for each picker button */
+    pickerBox: {
+        width: 70,
+        height: 70,
+        borderRadius: 8,
+        backgroundColor: '#E9E9E9',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginHorizontal: 4,
+    },
+    pickerIcon: { fontSize: 28, color: '#555' },
+
+    /* thumbnails */
+    thumbRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    thumb: { width: 70, height: 70, borderRadius: 8 },
+
+    /* picker buttons row */
+    pickerRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+
+    docRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+
+    infoBadge: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        zIndex: 10,
+        backgroundColor: '#0008',   // semi‑transparent black
+        borderRadius: 8,
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+    },
+    infoText: { fontSize: 10, color: '#fff' },
+
+});
+
+/* ── reusable “ⓘ” badge ───────────────────────── */
+const InfoBadge = ({ onPress }: { onPress: () => void }) => (
+  <Pressable onPress={onPress} style={styles.infoBadge}>
+    <Text style={styles.infoText}>ⓘ</Text>
+  </Pressable>
+);
 
 
 export default function EditTask() {
@@ -50,7 +117,9 @@ export default function EditTask() {
     const [status, setStatus] = useState<typeof STATUSES[number]>("PENDING");
     const [size, setSize] = useState<typeof SIZES[number]>("LARGE");
     const [dueAt, setDueAt] = useState<Date | null>(null);
-    const [timeCap, setTimeCap] = useState("");           // string for TextInput
+    const [timeCapH, setTimeCapH] = useState(0);     // hours
+    const [timeCapM, setTimeCapM] = useState(0);     // minutes (0-59)
+    const [showCapIOS, setShowCapIOS] = useState(false);           // string for TextInput
     const [recurring, setRecurring] = useState(false);
     const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number]>("DAILY");
     const [recEvery, setRecEvery] = useState("1");
@@ -59,6 +128,100 @@ export default function EditTask() {
     const [showIOS, setShowIOS] = useState(false);
     const [showIOSRecEnd, setShowIOSRecEnd] = useState(false);
     const [photos, setPhotos] = useState<TaskPhoto[]>([]);
+    // after photos state
+    const [docs, setDocs] = useState<TaskDoc[]>([]);
+    const [removedDocs, setRemovedDocs] = useState(false);
+
+    
+    /* selection sets */
+    const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
+    const [selectedDocs, setSelectedDocs] = useState<Set<number>>(new Set());
+    const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0;
+
+
+    /* Back button safety*/
+    const initial = useRef<null | {
+        title: string;
+        description: string;
+        status: typeof STATUSES[number];
+        priority: typeof PRIORITIES[number];
+        size: typeof SIZES[number];
+        dueAt: Date | null;
+        timeCapH: number;
+        timeCapM: number;
+        photosIds: number[];   // ids only!
+        docsIds: number[];
+    }>(null);
+
+
+    const hasUnsavedChanges = useMemo(() => {
+        if (!initial.current) return false;            // still loading
+
+        const snap = initial.current;
+
+        // scalars
+        if (title.trim() !== snap.title) return true;
+        if (description.trim() !== snap.description) return true;
+        if (status !== snap.status) return true;
+        if (priority !== snap.priority) return true;
+        if (size !== snap.size) return true;
+        if (
+            (dueAt?.toISOString() ?? null) !==
+            (snap.dueAt?.toISOString() ?? null)
+        ) return true;
+
+        if (timeCapH !== snap.timeCapH || timeCapM !== snap.timeCapM) return true;
+
+        // pictures / docs: ids that remain + new ones
+        const currentImgIds = photos.filter(p => p.id).map(p => p.id as number).sort();
+        const currentDocIds = docs.filter(d => d.id).map(d => d.id as number).sort();
+
+        if (currentImgIds.join(",") !== snap.photosIds.join(",")) return true;
+        if (currentDocIds.join(",") !== snap.docsIds.join(",")) return true;
+
+
+        if (photos.some(p => !p.id)) return true;   // new pictures
+        if (docs.some(d => !d.id)) return true;   // new docs
+
+        return false;                               // nothing changed
+    }, [
+        title, description, status, priority, size,
+        dueAt, timeCapH, timeCapM,
+        photos, docs,
+    ]);
+
+
+    /* toggle helpers */
+    const togglePhoto = (idx: number) =>
+        setSelectedPhotos(prev => {
+            const next = new Set(prev);
+            next.has(idx) ? next.delete(idx) : next.add(idx);
+            return next;
+        });
+
+    const toggleDoc = (idx: number) =>
+        setSelectedDocs(prev => {
+            const next = new Set(prev);
+            next.has(idx) ? next.delete(idx) : next.add(idx);
+            return next;
+        });
+
+    /* bulk‑delete + cancel */
+    const deleteChecked = () => {
+        if (selectedPhotos.size)
+            setPhotos(p => p.filter((_, i) => !selectedPhotos.has(i)));
+        if (selectedDocs.size)
+            setDocs(d => d.filter((_, i) => !selectedDocs.has(i)));
+        setSelectedPhotos(new Set());
+        setSelectedDocs(new Set());
+        setRemovedSomething(true);          // keeps your “onlyScalars” logic intact
+    };
+
+    const abortDelete = () => {
+        setSelectedPhotos(new Set());
+        setSelectedDocs(new Set());
+    };
+
 
 
 
@@ -94,6 +257,50 @@ export default function EditTask() {
         }
     };
 
+    /* pick time cap */
+    const showTimeCapPicker = () => {
+        const initial = new Date(0, 0, 0, timeCapH, timeCapM);
+
+        if (Platform.OS === 'android') {
+            DateTimePickerAndroid.open({
+                value: initial,
+                mode: 'time',
+                is24Hour: true,
+                onChange: (_, d) => {
+                    if (!d) return;
+                    setTimeCapH(d.getHours());
+                    setTimeCapM(d.getMinutes());
+                },
+            });
+        } else {
+            setShowCapIOS(true);          // show inline spinner
+        }
+    };
+
+    /** launch device camera and push the result into `photos` */
+    const takePhoto = async () => {
+        // ask only once – Expo caches the user’s choice
+        const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+        if (!granted) { Alert.alert('Camera access was denied'); return; }
+
+        if (photos.length >= 6) {             // same limit you use elsewhere
+            Alert.alert('Maximum 6 pictures');
+            return;
+        }
+
+        const res = await ImagePicker.launchCameraAsync({
+            quality: 0.9,            // 90 % JPEG
+            allowsEditing: false,
+            exif: false,
+        });
+
+        if (!res.canceled && res.assets?.length) {
+            setPhotos(prev => [...prev, ...res.assets]);
+        }
+    };
+
+
+
 
 
     /* pick image(s) */
@@ -113,6 +320,23 @@ export default function EditTask() {
     };
 
 
+    /* pick Doc(s) */
+    const pickDocs = async () => {
+        const res: any = await DocumentPicker.getDocumentAsync({
+            multiple: true,
+            copyToCacheDirectory: false,
+        });
+
+        if ('canceled' in res) {
+            if (res.canceled) return;
+            if (res.assets?.length) setDocs(prev => [...prev, ...res.assets]);
+            return;
+        }
+        if (res.type === 'cancel') return;
+
+        // SDK 49
+        setDocs(prev => [...prev, { uri: res.uri, name: res.name, mimeType: res.mimeType } as any]);
+    };
 
 
     /* Recuurrance Confirmation */
@@ -130,53 +354,108 @@ export default function EditTask() {
 
     const [loading, setLoad] = useState(true);
 
-    /* --------- fetch current task once ---------------------- */
+    /* --------- fetch current task once (runs whenever `id` changes) ----- */
     useEffect(() => {
+        let cancelled = false;                 // avoid setState after unmount / remount
         (async () => {
             try {
+                /* ① CLEAR stale state immediately */
+                setPhotos([]);          // <── wipe local picks from the previous task
+                setDocs([]);            // <── same for docs
+                setRemovedDocs(false);
+                setRemovedSomething(false);
+
+                setLoad(true);          // show spinner while we fetch
+
                 const jwt = await getToken();
                 const res = await fetch(`${endpoints.tasks}/${id}`, {
                     headers: { Authorization: `Bearer ${jwt}` },
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const t = await res.json();
+                if (cancelled) return;
 
-                /* pre‑fill */
+                /* ② …prefill scalars exactly as you already do… */
+                /* ② …prefill scalars … */
                 setTitle(t.title);
-                setDescription(t.description ?? "");
+                setDescription(t.description ?? '');
                 setPriority(t.priority);
                 setStatus(t.status);
                 setSize(t.size);
                 setDueAt(t.dueAt ? new Date(t.dueAt) : null);
-                setTimeCap(t.timeCapMinutes ? String(t.timeCapMinutes) : "");
-                setRecurring(t.recurrence !== "NONE");
+
+                setRecurring(t.recurrence !== 'NONE');
                 setRecurrence(t.recurrence);
-                setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : "1");
+                setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : '1');
                 setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
                 setLabelDone(Boolean(t.labelDone));
-                if (Array.isArray(t.images) && t.images.length) {
-                    setPhotos(
-                        t.images.map((img: { id: number; url: string; mime: string }) => ({
+                setSelectedPhotos(new Set());
+                setSelectedDocs(new Set());
+
+
+                /* ③ images from the server */
+                setPhotos(
+                    (Array.isArray(t.images) ? t.images : []).map(
+                        (img: { id: number; url: string; mime: string }) => ({
                             id: img.id,
                             uri: img.url,
-                            width: 0,
-                            height: 0,
-                            fileName: `task-${img.id}.jpg`,
                             mimeType: img.mime,
-                        }))
-                    );
+                        }) as TaskPhoto
+                    )
+                );
+
+                /* ④ documents from the server */
+                setDocs(
+                    (Array.isArray(t.documents) ? t.documents : []).map(
+                        (d: { id: number; url: string; mime: string; name?: string }) => ({
+                            id: d.id,
+                            uri: d.url,
+                            name: d.name ?? `doc-${d.id}`,
+                            mimeType: d.mime,
+                        }) as TaskDoc
+                    )
+                );
+
+                /* ─── time‑cap ─── */
+                let capH = 0, capM = 0;
+                if (t.timeCapMinutes) {
+                    capH = Math.floor(t.timeCapMinutes / 60);
+                    capM = t.timeCapMinutes % 60;
                 }
+                setTimeCapH(capH);
+                setTimeCapM(capM);
 
-
-
+                /* ─── snapshot (must come *after* the setters above!) ─── */
+                initial.current = {
+                    title: t.title ?? "",
+                    description: t.description ?? "",
+                    status: t.status,
+                    priority: t.priority,
+                    size: t.size,
+                    dueAt: t.dueAt ? new Date(t.dueAt) : null,
+                    timeCapH: capH,
+                    timeCapM: capM,
+                    photosIds: (t.images ?? []).map((img: any) => img.id).sort(),
+                    docsIds: (t.documents ?? []).map((d: any) => d.id).sort(),
+                };
             } catch (e) {
-                Alert.alert("Failed to load task", String(e));
-                router.back();
+                if (!cancelled) {
+                    Alert.alert('Failed to load task', String(e));
+                    router.back();
+                }
             } finally {
-                setLoad(false);
+                if (!cancelled) setLoad(false);
             }
+
+            
         })();
-    }, [id]);
+
+        /* cleanup in case the component unmounts before fetch finishes */
+        return () => {
+            cancelled = true;
+        };
+    }, [id]);            // ← runs every time you navigate to /tasks/[other‑id]/edit
+
 
     useEffect(() => {
         if (recurring) setPriority("RECURRENT");
@@ -194,78 +473,135 @@ export default function EditTask() {
 
 
     /* ----------- submit PATCH ------------------------------- */
-    const save = async () => {
-        /* … your existing validation stays here … */
+const save = async () => {
+  /* validate inputs here as before … */
 
-        const jwt = await getToken();
+  const jwt = await getToken();
 
-        // ✦ images that still have an id are being kept
-        const keepIds = photos.filter(p => p.id).map(p => p.id as number);
-        // ✦ images without id are newly added and must be uploaded
-        const newPhotos = photos.filter(p => !p.id);
+  // ----- images -----
+  const keepImgIds = photos.filter(p => p.id).map(p => p.id as number);
+  const newPhotos  = photos.filter(p => !p.id);
 
-        /* ---------- choose payload type ---------- */
-        const isOnlyScalars = newPhotos.length === 0 && removedSomething === false /* see note */;
-        if (isOnlyScalars) {
-            /* ❶ simple JSON PATCH when nothing changed on the image side */
-            const body = {
-                /* the same scalar fields you already send … */
-                title, description, priority, status, size,
-                dueAt: dueAt ? dueAt.toISOString() : null,
-                timeCapMinutes: timeCap ? Number(timeCap) : null,
-                recurrence: recurring ? recurrence : "NONE",
-                recurrenceEvery: recurring ? Number(recEvery) : null,
-                recurrenceEnd: recurring && recEnd ? recEnd.toISOString() : null,
-                labelDone,
-                keep: keepIds.join(","),              // tell the backend what to keep
-            };
+  // ----- documents -----
+  const keepDocIds = docs.filter(d => d.id).map(d => d.id as number);
+  const newDocs    = docs.filter(d => !d.id);
 
-            const res = await fetch(`${endpoints.tasks}/${id}`, {
-                method: "PATCH",
-                headers: {
-                    Authorization: `Bearer ${jwt}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(body),
-            });
-            if (!res.ok) return Alert.alert("Failed", `HTTP ${res.status}`);
-        } else {
-            /* ❷ multipart PATCH when files were added or removed */
-            const form = new FormData();
+  // decide if we can use JSON
+  const isOnlyScalars =
+    newPhotos.length === 0 &&
+    newDocs.length   === 0 &&
+    removedSomething === false &&
+    removedDocs      === false;
 
-            form.append("title", title);
-            form.append("description", description);
-            form.append("priority", priority);
-            form.append("status", status);
-            form.append("size", size);
-            if (dueAt) form.append("dueAt", dueAt.toISOString());
-            if (timeCap) form.append("timeCapMinutes", timeCap);
-            form.append("recurrence", recurring ? recurrence : "NONE");
-            if (recurring) {
-                form.append("recurrenceEvery", recEvery);
-                if (recEnd) form.append("recurrenceEnd", recEnd.toISOString());
-            }
-            form.append("labelDone", String(labelDone));
-            form.append("keep", keepIds.join(","));          // <‑‑ keep existing ids
+  //Time cap
+  const totalMinutes = timeCapH * 60 + timeCapM;
 
-            newPhotos.forEach((p, idx) =>
-                form.append(`photo${idx}`, {
-                    uri: p.uri,
-                    name: p.fileName ?? `photo${idx}.jpg`,
-                    type: p.mimeType ?? "image/jpeg",
-                } as any)                                    // RN FormData typing quirk
-            );
-
-            const res = await fetch(`${endpoints.tasks}/${id}`, {
-                method: "PATCH",
-                headers: { Authorization: `Bearer ${jwt}` },
-                body: form,
-            });
-            if (!res.ok) return Alert.alert("Failed", `HTTP ${res.status}`);
-        }
-
-        router.back();
+  if (isOnlyScalars) {
+    /* ❶ simple JSON PATCH */
+    const body = {
+      title, description, priority, status, size,
+      dueAt: dueAt ? dueAt.toISOString() : null,
+      timeCapMinutes: totalMinutes > 0 ? totalMinutes : null,
+      recurrence: recurring ? recurrence : 'NONE',
+      recurrenceEvery: recurring ? Number(recEvery) : null,
+      recurrenceEnd: recurring && recEnd ? recEnd.toISOString() : null,
+      labelDone,
+      keep:      keepImgIds.join(','),     // images
+      keepDocs:  keepDocIds.join(','),     // documents
     };
+
+    const res = await fetch(`${endpoints.tasks}/${id}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return Alert.alert('Failed', `HTTP ${res.status}`);
+  } else {
+    /* ❷ multipart PATCH */
+    const form = new FormData();
+
+    form.append('title', title);
+    form.append('description', description);
+    form.append('priority', priority);
+    form.append('status', status);
+    form.append('size', size);
+    if (dueAt) form.append('dueAt', dueAt.toISOString());
+    if (totalMinutes > 0) form.append('timeCapMinutes', String(totalMinutes));
+    form.append('recurrence', recurring ? recurrence : 'NONE');
+    if (recurring) {
+      form.append('recurrenceEvery', recEvery);
+      if (recEnd) form.append('recurrenceEnd', recEnd.toISOString());
+    }
+    form.append('labelDone', String(labelDone));
+
+    form.append('keep',     keepImgIds.join(','));   // images to keep
+    form.append('keepDocs', keepDocIds.join(','));   // docs to keep
+
+    newPhotos.forEach((p, idx) =>
+      form.append(`photo${idx}`, {
+        uri:  p.uri,
+        name: p.fileName ?? `photo${idx}.jpg`,
+        type: p.mimeType ?? 'image/jpeg',
+      } as any)
+    );
+
+    newDocs.forEach((d, idx) =>
+      form.append(`doc${idx}`, {
+        uri:  d.uri,
+        name: d.name ?? `doc${idx}`,
+        type: (d as any).mimeType ?? 'application/octet-stream',
+      } as any)
+    );
+
+    const res = await fetch(`${endpoints.tasks}/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${jwt}` },
+      body: form,
+    });
+    if (!res.ok) return Alert.alert('Failed', `HTTP ${res.status}`);
+  }
+
+  router.back();
+};
+
+const handleBack = useCallback(() => {
+    if (!hasUnsavedChanges) {           // ⬅️  let React Navigation do its thing
+      router.back();
+      return;
+    }
+
+    Alert.alert(
+      "Save task modifications?",
+      "Do you want to save before leaving?",
+      [
+        {
+          text: "No",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert(
+              "Delete Modifications?",
+              "Are you sure? This cannot be undone.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: () => {
+                    router.back();
+                  },
+                },
+              ],
+            ),
+        },
+        { text: "Yes", onPress: save },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  }, [hasUnsavedChanges, save]);
+
 
 
     /* ------------- UI --------------------------------------- */
@@ -330,15 +666,33 @@ export default function EditTask() {
                         {SIZES.map((s) => <Picker.Item key={s} label={s} value={s} />)}
                     </Picker>
 
-                    {/* Time‑cap */}
-                    <Text style={{ fontWeight: "bold", marginTop: 8 }}>TIME LIMIT (min)</Text>
-                    <TextInput
-                        keyboardType="number-pad"
-                        value={timeCap}
-                        onChangeText={setTimeCap}
-                        placeholder="e.g. 90"
-                        style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
+                    {/* Time-cap */}
+                    <Text style={{ fontWeight: 'bold', marginTop: 8 }}>TIME CAP</Text>
+
+                    <Button
+                        title={
+                            timeCapH === 0 && timeCapM === 0
+                                ? 'Set time cap'
+                                : `${timeCapH} h ${timeCapM} min`
+                        }
+                        onPress={showTimeCapPicker}
                     />
+
+                    {Platform.OS === 'ios' && showCapIOS && (
+                        <DateTimePicker
+                            value={new Date(0, 0, 0, timeCapH, timeCapM)}
+                            mode="time"
+                            display="spinner"
+                            is24Hour
+                            onChange={(_, d) => {
+                                if (!d) return;
+                                setTimeCapH(d.getHours());
+                                setTimeCapM(d.getMinutes());
+                                setShowCapIOS(false);
+                            }}
+                        />
+                    )}
+
 
                     <View style={{ gap: 12 }}>
 
@@ -464,55 +818,135 @@ export default function EditTask() {
                     )}
 
                     {/* Photo thumbnails + picker */}
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    
+                    
+                    {/* THUMBNAILS ---------------------------------------------------- */}
+                    <View style={styles.thumbRow}>
                         {photos.map((p, i) => (
                             <Pressable
                                 key={i}
-                                onLongPress={() => {
-                                    Alert.alert(
-                                        "Remove picture",
-                                        "Do you really want to delete this photo?",
-                                        [
-                                            { text: "Cancel", style: "cancel" },
-                                            {
-                                                text: "Delete",
-                                                style: "destructive",
-                                                onPress: () => {
-                                                    setRemovedSomething(true);               // track removal
-                                                    setPhotos(prev => prev.filter((_, j) => j !== i));
-                                                },
+                                onPress={() => togglePhoto(i)}
+                                onLongPress={() =>
+                                    Alert.alert('Remove picture', 'Delete this photo?', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Delete', style: 'destructive',
+                                            onPress: () => {
+                                                setPhotos(prev => prev.filter((_, j) => j !== i));
+                                                setRemovedSomething(true);
                                             },
-                                        ]
-                                    );
-                                }}
-                            >
+                                        },
+                                    ])
+                                }>
                                 <Image
                                     source={{ uri: p.uri }}
-                                    style={{ width: 70, height: 70, borderRadius: 8 }}
+                                    style={[
+                                        styles.thumb,
+                                        selectedPhotos.has(i) && {
+                                            opacity: 0.4,
+                                            borderWidth: 2,
+                                            borderColor: '#0A84FF',
+                                        },
+                                    ]}
                                 />
                             </Pressable>
-                        ))}
 
-                        <Pressable
-                            onPress={pickImages}
-                            style={{
-                                width: 70,
-                                height: 70,
-                                borderRadius: 8,
-                                backgroundColor: "#E9E9E9",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}
-                        >
-                            <Text style={{ fontSize: 28, color: "#555" }}>＋</Text>
-                        </Pressable>
+                                ))}
+                              </View>
+                    
+                              {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
+                              <View style={styles.pickerRow}>
+                                <Pressable onPress={takePhoto} style={styles.pickerBox}>
+                                  <Text style={styles.pickerIcon}>📷</Text>
+                                </Pressable>
+                    
+                                <Pressable onPress={pickImages} style={styles.pickerBox}>
+                                  <Text style={styles.pickerIcon}>🖼️</Text>
+                                </Pressable>
+                    
+                                <Pressable onPress={pickDocs} style={styles.pickerBox}>
+                                  <Text style={styles.pickerIcon}>📄</Text>
+                                </Pressable>
+                              </View>
+                    
+
+                    <View style={styles.docRow}>
+                        {docs.map((d, i) => (
+                            <Pressable
+                                key={i}
+                                onPress={() => toggleDoc(i)}
+                                onLongPress={() =>
+                                    Alert.alert('Remove file', d.name ?? 'file', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Delete',
+                                            style: 'destructive',
+                                            onPress: () => {
+                                                setDocs(prev => prev.filter((_, j) => j !== i));
+                                                setRemovedDocs(true);
+                                            },
+                                        },
+                                    ])
+                                }
+                                style={{ position: 'relative' }}   // 🆕 makes absolute overlay work
+                            >
+                                {d.mimeType?.startsWith('image/') ? (
+                                    <Image
+                                        source={{ uri: d.uri }}
+                                        style={[
+                                            styles.thumb,
+                                            selectedDocs.has(i) && {
+                                                opacity: 0.4,
+                                                borderWidth: 2,
+                                                borderColor: '#0A84FF',
+                                            },
+                                        ]}
+                                    />
+                                ) : (
+                                    <View
+                                        style={[
+                                            styles.pickerBox,
+                                            selectedDocs.has(i) && {
+                                                opacity: 0.4,
+                                                borderWidth: 2,
+                                                borderColor: '#0A84FF',
+                                            },
+                                        ]}>
+                                        <Text style={styles.pickerIcon}>📄</Text>
+                                    </View>
+                                )}
+
+                                {/* ⓘ overlay — tap shows file name */}
+                                <InfoBadge onPress={() => Alert.alert('Document', d.name ?? 'Unnamed file')} />
+                            </Pressable>
+
+
+                        ))}
                     </View>
+
+
+                    {hasSelection && (
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <Button
+                                title={`Delete ${selectedPhotos.size + selectedDocs.size} selected`}
+                                color="#FF3B30"
+                                onPress={() =>
+                                    Alert.alert('Delete selected', 'Remove all chosen items?', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        { text: 'Delete', style: 'destructive', onPress: deleteChecked },
+                                    ])
+                                }
+                            />
+                            <Button title="Cancel selection" onPress={abortDelete} />
+                        </View>
+                    )}
+
 
 
 
                     {/* Action buttons */}
                     <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
-                    <Button title="← Back" onPress={() => router.back()} />
+                    <Button title="← Back" onPress={handleBack} />
                 </View>
             </ScrollView>
         </KeyboardAvoidingView>

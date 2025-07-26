@@ -24,31 +24,26 @@ export default function AppDrawerLayout() {
       {/* Logout screen we’ll add next */}
       <Drawer.Screen name="logout" options={{ title: 'Logout' }} />
 
-      {/* ─── HIDDEN routes ─── */}
-      <Drawer.Screen
-        name="register"
-        options={{ drawerItemStyle: { display: 'none' } }}
-      />
+      {/* Edit Screen*/}
+      <Drawer.Screen name="[id]/edit" options={{ title: 'Edit Task', drawerItemStyle: { display: 'none' }, }}  />
 
-      <Drawer.Screen
-        name="tasks/add"
-        options={{ drawerItemStyle: { display: 'none' } }}
-      />
+      {/* Task Viewer*/}
+      <Drawer.Screen name="tasks/[id]" options={{ title: 'View Task', drawerItemStyle: { display: 'none' }, }}  />
+
+      {/* Task Adder*/}
+      <Drawer.Screen name="tasks/add" options={{ title: 'Add Task', drawerItemStyle: { display: 'none' }, }}  />
+
+      
+      {/*Register*/}
+      <Drawer.Screen name="register" options={{ title: 'Register', drawerItemStyle: { display: 'none' }, }}  />
 
       <Drawer.Screen
         name="_necessary"
         options={{ drawerItemStyle: { display: 'none' } }}
       />
 
-      <Drawer.Screen
-        name="tasks/[id]"
-        options={{ drawerItemStyle: { display: 'none' } }}
-      />
 
-      <Drawer.Screen
-        name="[id]/edit"
-        options={{ drawerItemStyle: { display: 'none' } }}
-      />
+      
 
     </Drawer>
   );

@@ -53,7 +53,7 @@ export default function Register() {
       <View style={{ height: 20 }} />
       <Button
         title="I already have an account"
-        onPress={() => router.replace('/login')}
+        onPress={() => router.replace('auth/login')}
       />
     </View>
   );

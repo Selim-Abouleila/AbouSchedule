@@ -13,7 +13,8 @@ import { Recurrence } from '@prisma/client';
 
 // server.ts (top of the file, together with the other imports)
 import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
-
+//helpers for sorting
+import { SORT_PRESETS } from './lib/helpers';
 
 
 
@@ -195,27 +196,25 @@ app.register(async (f) => {
   /* -----------------------  GET /tasks  ----------------------- */
   f.get('/', async (req: any) => {
     const userId = req.user.sub as number;
-    const page = Math.max(Number(req.query.page) || 1, 1); // 1-based
     const take = Math.min(Number(req.query.take) || 50, 100);
-    
+    const cursor = req.query.cursor ? Number(req.query.cursor) : null;
+
+    /* pick preset or fall back to “priority” */
+    const preset = String(req.query.sort || 'priority');
+    const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;
 
     const tasks = await prisma.task.findMany({
       where: { userId },
-      skip: (page - 1) * take,
       take,
-      orderBy: [
-        { status: 'asc' },
-        { priority: 'asc' },
-        { size: 'asc' },
-        { dueAt: 'asc' },
-      ],
-      include: { images: true, documents: true},
+      skip: cursor ? 1 : 0,
+      ...(cursor && { cursor: { id: cursor } }),
+      orderBy,
+      include: { images: true, documents: true },
     });
 
-    return {
-      tasks,
-      nextPage: tasks.length === take ? page + 1 : null,
-    };
+    const last = tasks[tasks.length - 1];
+    const nextCursor = tasks.length === take ? last.id : null;
+    return { tasks, nextCursor };
   });
 
 

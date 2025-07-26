@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   ScrollView,
@@ -9,10 +9,11 @@ import {
   Pressable,
   Image,
   Alert,
-  Platform,         // ← this one
+  Platform,
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker, {
   DateTimePickerAndroid,
@@ -21,7 +22,10 @@ import { router } from "expo-router";
 
 import { endpoints } from "../../src/api";
 import { getToken } from "../../src/auth";
-
+import { useFocusEffect } from 'expo-router';
+import { StyleSheet } from 'react-native';
+import { useMemo, useRef } from "react";
+import { useNavigation } from "@react-navigation/native";
 
 
 const PRIORITIES = [
@@ -32,6 +36,77 @@ const PRIORITIES = [
   "IMMEDIATE",
   "RECURRENT"
 ] as const;
+
+
+  /* Stylesheet for Image picker */
+  const styles = StyleSheet.create({
+  
+  pickerBox: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: '#E9E9E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+  },
+  pickerIcon: { fontSize: 28, color: '#555' },
+
+  /* thumbnails */
+  thumbRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  thumb: { width: 70, height: 70, borderRadius: 8 },
+
+  /* picker buttons row */
+  pickerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+
+  docRow: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+  justifyContent: 'center',
+  marginBottom: 12,
+},
+
+infoBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: '#0008',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    zIndex: 10,
+  },
+  infoText: { fontSize: 10, color: '#fff' },
+
+});
+
+
+
+
+
+
+/* helper badge component — place it near the top of this file */
+/* helper — now returns a Pressable */
+const InfoBadge = ({ onPress }: { onPress: () => void }) => (
+  <Pressable onPress={onPress} style={styles.infoBadge}>
+    <Text style={styles.infoText}>ⓘ</Text>
+  </Pressable>
+);
+
+
+
 
 
 const STATUSES = ["ACTIVE", "DONE", "PENDING"] as const;
@@ -45,29 +120,162 @@ export default function AddTask() {
   const [status, setStat] = useState("PENDING" as typeof STATUSES[number]);
   const [size, setSize] = useState("LARGE" as typeof SIZES[number]);
   const [dueAt, setDueAt] = useState<Date | null>(null);
-  const [showIOS, setShowIOS] = useState(false);
+  const [showIOS,     setShowIOS]     = useState(false);  
+  const [showCapIOS,  setShowCapIOS]  = useState(false);
 
-  const [timeCap, setTimeCap] = useState("");            // minutes (string so TextInput works)
-  const [recurring, setRecurring] = useState(false);         // checkbox / switch
+  
+  const [timeCapH, setTimeCapH] = useState(0);
+  const [timeCapM, setTimeCapM] = useState(0);   
+
+
+  
+  const [recurring, setRecurring] = useState(false);         
   const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number]>("DAILY");
-  const [recurrenceEvery, setRecurrenceEvery] = useState("1");           // “every X …”
+  const [recurrenceEvery, setRecurrenceEvery] = useState("1");           
   const [recurrenceEnd, setRecurrenceEnd] = useState<Date | null>(null);
   const [showIOSRecEnd, setShowIOSRecEnd] = useState(false);
-  const [labelDone, setLabelDone] = useState(true); // optional “✓ Done” flag
+  const [labelDone, setLabelDone] = useState(true); 
 
 
   const [photos, setPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [docs, setDocs] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const [loading, setLoad] = useState(false);
+
+
+
+const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
+const [selectedDocs,   setSelectedDocs]   = useState<Set<number>>(new Set());
+
+
+
+/* Back Button Driling so no task is lost */
+const hasUnsavedChanges = useMemo(
+  () =>
+    title.trim() !== "" ||
+    description.trim() !== "" ||
+    photos.length > 0 ||
+    docs.length > 0 ||
+    dueAt !== null ||
+    recurring ||                       // anything else you care about
+    timeCapH !== 0 || timeCapM !== 0,
+  [
+    title,
+    description,
+    photos,
+    docs,
+    dueAt,
+    recurring,
+    timeCapH,
+    timeCapM,
+  ],
+);
+const navigation = useNavigation();
+useEffect(() => {
+  const sub = navigation.addListener("beforeRemove", (e) => {
+    // stop the default behaviour
+    e.preventDefault();
+    handleBack();
+  });
+  return sub;
+}, [navigation, hasUnsavedChanges]);   // keep it up‑to‑date
+
+
+/* Ability to delete multiple pictures */
+
+const togglePhoto = (idx: number) =>
+  setSelectedPhotos(prev => {
+    const next = new Set(prev);
+    next.has(idx) ? next.delete(idx) : next.add(idx);
+    return next;
+  });
+
+const toggleDoc = (idx: number) =>
+  setSelectedDocs(prev => {
+    const next = new Set(prev);
+    next.has(idx) ? next.delete(idx) : next.add(idx);
+    return next;
+  });
+
+const deleteChecked = () => {
+  if (selectedPhotos.size)
+    setPhotos(p => p.filter((_, i) => !selectedPhotos.has(i)));
+  if (selectedDocs.size)
+    setDocs(d => d.filter((_, i) => !selectedDocs.has(i)));
+  setSelectedPhotos(new Set());
+  setSelectedDocs(new Set());
+};
+
+const abortDelete = () => {
+  setSelectedPhotos(new Set());
+  setSelectedDocs(new Set());
+};
+
+const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0;
+const scrollRef = useRef<ScrollView>(null);
 
   /* keep priority in sync with the recurring toggle */
   useEffect(() => {
     if (recurring) setPrio("RECURRENT");
     else if (priority === "RECURRENT") setPrio("NONE");
-  }, [recurring, priority]);   // ← added priority
+  }, [recurring, priority]);  
 
   const [removedSomething, setRemovedSomething] = useState(false);
 
 
+  /*Time cap picker */
+  const showTimeCapPicker = () => {
+  const initial = new Date(0, 0, 0, timeCapH, timeCapM);
+
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: initial,
+        mode: 'time',
+        is24Hour: true,
+        onChange: (_, d) => {
+          if (!d) return;
+          setTimeCapH(d.getHours());
+          setTimeCapM(d.getMinutes());
+        },
+      });
+    } else {
+     
+      Alert.alert(
+        '',             
+        undefined,        
+        [
+          {
+            text: 'Pick',
+            onPress: () => {
+              /* nothing here – the inline picker below handles it */
+            },
+          },
+        ],
+        { cancelable: true } 
+      );
+      setShowCapIOS(true);
+    }
+  };
+
+  /** open device camera, then push the result into `photos` */
+  const takePhoto = async () => {
+    
+    const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+    if (!granted) {
+      Alert.alert('Camera access was denied');
+      return;
+    }
+    if (photos.length >= 6) { Alert.alert('Maximum 6 pictures'); return; }
+
+    const res = await ImagePicker.launchCameraAsync({
+      quality: 0.9,        
+      allowsEditing: false, 
+      exif: false,               
+    });
+
+    if (!res.canceled && res.assets?.length) {
+      setPhotos(prev => [...prev, ...res.assets]);
+    }
+  };
 
   /* pick image(s) */
   const pickImages = async () => {
@@ -78,6 +286,55 @@ export default function AddTask() {
     });
     if (!res.canceled) setPhotos((prev) => [...prev, ...res.assets]);
   };
+
+  /* pick Doc(s) */
+  const pickDocs = async () => {
+   
+    const result: any = await DocumentPicker.getDocumentAsync({
+      multiple: true,
+      copyToCacheDirectory: false,
+    });
+
+    /* ───── SDK 50+ ───── */
+    if ('canceled' in result) {
+      if (result.canceled) return;                      
+      if (Array.isArray(result.assets) && result.assets.length) {
+        setDocs(prev => [...prev, ...result.assets]);
+      }
+      return;
+    }
+
+    /* ───── SDK 49 and earlier ───── */
+    if (result.type === 'cancel') return;      
+    setDocs(prev => [
+      ...prev,
+      { uri: result.uri, name: result.name, mimeType: result.mimeType } as any,
+    ]);
+  };
+
+  useFocusEffect(
+  useCallback(() => {
+    setPhotos([]);
+    setDocs([]);
+    setTitle('');
+    setDescription('');
+    setPrio('NONE');
+    setStat('ACTIVE');
+    setSize('LARGE');
+    setDueAt(null);
+    setTimeCapH(0);
+    setTimeCapM(0);
+    setShowCapIOS(false);
+    setRecurring(false);
+    setRecurrence('DAILY');
+    setRecurrenceEvery('1');
+    setRecurrenceEnd(null);
+    setLabelDone(true);
+    setSelectedPhotos(new Set());
+    setSelectedDocs(new Set());
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [])
+);
 
   /* pick date */
   const showPicker = () => {
@@ -117,8 +374,8 @@ export default function AddTask() {
       "Recurring task",
       "Are you sure you want this task to be recurring?",
       [
-        { text: "Back", style: "cancel" },                // stay off
-        { text: "Yes", onPress: () => setRecurring(true) } // enable
+        { text: "Back", style: "cancel" },                
+        { text: "Yes", onPress: () => setRecurring(true) } 
       ]
     );
   };
@@ -131,7 +388,6 @@ export default function AddTask() {
     setStat("ACTIVE");
     setSize("LARGE");
     setDueAt(null);
-    setTimeCap("");
     setRecurring(false);
     setRecurrence("DAILY");
     setRecurrenceEvery("1");
@@ -143,8 +399,7 @@ export default function AddTask() {
   /* save */
   const save = async () => {
     if (!title) return Alert.alert("Please enter a title");
-    setLoad(false);
-    
+    setLoad(true);
 
     const jwt = await getToken();
     const form = new FormData();
@@ -164,15 +419,24 @@ export default function AddTask() {
       } as any)
     );
 
+    docs.forEach((d, idx) =>
+      form.append(`doc${idx}`, {
+        uri: d.uri,
+        name: d.name ?? `doc${idx}`,
+        type: (d as any).mimeType ?? 'application/octet-stream',
+      } as any)
+    );
 
     /* before fetch() */
-    if (timeCap) form.append("timeCapMinutes", timeCap);
+    const totalMinutes = timeCapH * 60 + timeCapM;
+    if (totalMinutes > 0) form.append('timeCapMinutes', String(totalMinutes));
+
     if (recurring) {
       form.append("recurrence", recurrence);
       form.append("recurrenceEvery", recurrenceEvery);
       if (recurrenceEnd) form.append("recurrenceEnd", recurrenceEnd.toISOString());
     }
-    form.append("labelDone", labelDone.toString()); // "true" | "false"
+    form.append("labelDone", labelDone.toString()); 
 
 
 
@@ -192,13 +456,52 @@ export default function AddTask() {
 
 
 
+  const handleBack = useCallback(() => {
+    if (!hasUnsavedChanges) {           // ⬅️  let React Navigation do its thing
+      router.back();
+      return;
+    }
+
+    Alert.alert(
+      "Save task?",
+      "Do you want to save before leaving?",
+      [
+        {
+          text: "No",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert(
+              "Delete draft?",
+              "Are you sure? This cannot be undone.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: () => {
+                    resetForm();
+                    router.back();
+                  },
+                },
+              ],
+            ),
+        },
+        { text: "Yes", onPress: save },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
+  }, [hasUnsavedChanges, save, resetForm]);
+
+
   /* UI */
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{ padding: 24, gap: 12 }}
         keyboardShouldPersistTaps="handled"
       >
@@ -227,7 +530,7 @@ export default function AddTask() {
               <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
               <Picker selectedValue={priority} onValueChange={setPrio}>
                 {PRIORITIES
-                  .filter(p => p !== "RECURRENT")   // ← exclude it from the menu
+                  .filter(p => p !== "RECURRENT")
                   .map(p => <Picker.Item key={p} label={p} value={p} />)}
               </Picker>
             </>
@@ -245,15 +548,32 @@ export default function AddTask() {
             {SIZES.map((s) => <Picker.Item key={s} label={s} value={s} />)}
           </Picker>
 
-          {/* Time‑cap */}
-          <Text style={{ fontWeight: "bold", marginTop: 8 }}>TIME LIMIT (min)</Text>
-          <TextInput
-            keyboardType="number-pad"
-            value={timeCap}
-            onChangeText={setTimeCap}
-            placeholder="e.g. 90"
-            style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
+          {/* Time-cap */}
+          <Text style={{ fontWeight: 'bold', marginTop: 8 }}>TIME CAP</Text>
+
+          <Button
+            title={
+              timeCapH === 0 && timeCapM === 0
+                ? 'Set time cap'
+                : `${timeCapH} h ${timeCapM} min`
+            }
+            onPress={showTimeCapPicker}
           />
+
+          {/* iOS inline spinner — only visible while picking */}
+          {Platform.OS === 'ios' && showCapIOS && (
+            <DateTimePicker
+              value={new Date(0, 0, 0, timeCapH, timeCapM)}
+              mode="time"
+              display="spinner"
+              is24Hour
+              onChange={(_, d) => {
+                if (!d) return;
+                setTimeCapH(d.getHours());
+                setTimeCapM(d.getMinutes());
+              }}
+            />
+          )}
 
           <View style={{ gap: 12 }}>
 
@@ -377,56 +697,120 @@ export default function AddTask() {
               }}
             />
           )}
-
+        
           {/* Photo thumbnails + picker */}
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {photos.map((p, i) => (
-                            <Pressable
-                                key={i}
-                                onLongPress={() => {
-                                    Alert.alert(
-                                        "Remove picture",
-                                        "Do you really want to delete this photo?",
-                                        [
-                                            { text: "Cancel", style: "cancel" },
-                                            {
-                                                text: "Delete",
-                                                style: "destructive",
-                                                onPress: () => {
-                                                    setRemovedSomething(true);               // track removal
-                                                    setPhotos(prev => prev.filter((_, j) => j !== i));
-                                                },
-                                            },
-                                        ]
-                                    );
-                                }}
-                            >
-                                <Image
-                                    source={{ uri: p.uri }}
-                                    style={{ width: 70, height: 70, borderRadius: 8 }}
-                                />
-                            </Pressable>
-                        ))}
+          <View style={styles.thumbRow}>
+            {photos.map((p, i) => (
+              <Pressable
+                key={i}
+                onPress={() => togglePhoto(i)}
+                onLongPress={() =>
+                  Alert.alert('Remove picture', 'Delete this photo?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: () => setPhotos(prev => prev.filter((_, j) => j !== i)),
+                    },
+                  ])
+                }>
+                <Image
+                  source={{ uri: p.uri }}
+                  style={[
+                    styles.thumb,
+                    selectedPhotos.has(i) && {
+                      opacity: 0.4,
+                      borderWidth: 2,
+                      borderColor: '#0A84FF',
+                    },
+                  ]}
+                />
+              </Pressable>
+            ))}
 
-                        <Pressable
-                            onPress={pickImages}
-                            style={{
-                                width: 70,
-                                height: 70,
-                                borderRadius: 8,
-                                backgroundColor: "#E9E9E9",
-                                alignItems: "center",
-                                justifyContent: "center",
-                            }}
-                        >
-                            <Text style={{ fontSize: 28, color: "#555" }}>＋</Text>
-                        </Pressable>
-                    </View>
+            {/* ✂️ REMOVED docs.map() here — docs now show only in the bottom grid */}
+          </View>
 
-          
+          {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
+          <View style={styles.pickerRow}>
+            <Pressable onPress={takePhoto} style={styles.pickerBox}>
+              <Text style={styles.pickerIcon}>📷</Text>
+            </Pressable>
+
+            <Pressable onPress={pickImages} style={styles.pickerBox}>
+              <Text style={styles.pickerIcon}>🖼️</Text>
+            </Pressable>
+
+            <Pressable onPress={pickDocs} style={styles.pickerBox}>
+              <Text style={styles.pickerIcon}>📄</Text>
+            </Pressable>
+          </View>
+
+          {/* Docs shown a single time ------------------------------------------------ */}
+          <View style={styles.docRow}>
+            {docs.map((d, i) => (
+              <Pressable
+                key={i}
+                onPress={() => toggleDoc(i)}
+                onLongPress={() => Alert.alert('Document', d.name ?? 'Unnamed file')}
+                style={{ position: 'relative' }}               // 🆕 makes absolute overlay work
+              >
+                {d.mimeType?.startsWith('image/') ? (
+                  <Image
+                    source={{ uri: d.uri }}
+                    style={[
+                      styles.thumb,
+                      selectedDocs.has(i) && {
+                        opacity: 0.4,
+                        borderWidth: 2,
+                        borderColor: '#0A84FF',
+                      },
+                    ]}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.pickerBox,
+                      selectedDocs.has(i) && {
+                        opacity: 0.4,
+                        borderWidth: 2,
+                        borderColor: '#0A84FF',
+                      },
+                    ]}
+                  >
+                    <Text style={styles.pickerIcon}>📄</Text>
+                  </View>
+                )}
+
+                {/* badge now gets its own onPress */}
+                <InfoBadge
+                  onPress={() => Alert.alert('Document', d.name ?? 'Unnamed file')}
+                />
+              </Pressable>
+
+            ))}
+          </View>
+
+          {hasSelection && (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Button
+                title={`Delete ${selectedPhotos.size + selectedDocs.size} selected`}
+                color="#FF3B30"
+                onPress={() =>
+                  Alert.alert('Delete selected', 'Remove all chosen items?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: deleteChecked },
+                  ])
+                }
+              />
+              <Button title="Cancel selection" onPress={abortDelete} />
+            </View>
+          )}
+         
+
           {/* Action buttons */}
           <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
-          <Button title="← Back" onPress={() => router.back()} />
+          <Button title="← Back" onPress={handleBack} />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
