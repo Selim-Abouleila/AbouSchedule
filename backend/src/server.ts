@@ -128,7 +128,7 @@ app.register(async (f) => {
       title,
       description,
       priority,
-      status = 'PENDING',
+      status = 'ACTIVE',
       size,
       dueAt,
       timeCapMinutes,

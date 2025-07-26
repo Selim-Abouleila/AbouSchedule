@@ -21,6 +21,16 @@ export const SORT_PRESETS: Record<string, any[]> = {
   ],
   
   // If your Prisma enum was declared PENDING, ACTIVE, DONE you’re done:
+   'status‑active': [
+    { isDone: 'asc' },
+    { status  : 'desc' },
+    { priority: 'asc' },
+    { size: 'asc' },
+    { dueAt: 'asc' },
+    { createdAt: 'asc' },
+  ],
+
+
   'status‑pending': [
     { isDone: 'asc' },
     { status  : 'asc' },
