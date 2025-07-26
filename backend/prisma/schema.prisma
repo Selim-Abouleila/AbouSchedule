@@ -37,6 +37,7 @@ model Task {
   /// Optionally: stop repeating after this date
   recurrenceEnd  DateTime?
   labelDone      Boolean?  @default(false) @map("label_done")
+  isDone       Boolean          @default(false) @map("is_done")
 
   /// Existing relation to user
   user    User?   @relation(fields: [userId], references: [id])
