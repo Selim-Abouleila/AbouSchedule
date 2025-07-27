@@ -21,6 +21,7 @@ model Task {
   description String?
   priority    Priority
   status      Status    @default(PENDING)
+  previousStatus Status?
   size        Size      @default(LARGE)
   dueAt       DateTime?
   createdAt   DateTime  @default(now())

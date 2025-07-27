@@ -227,16 +227,26 @@ app.register(async (f) => {
           t.recurrence
         );
 
+        // expand recurring template
         if ((!t.recurrenceEnd || next <= t.recurrenceEnd) && next <= now) {
-          // update so we won’t duplicate this occurrence next time
+          // decide what the status should be once the new period starts
+          const newStatus =
+            t.status === 'DONE'        // if it was closed last cycle
+              ? (t.previousStatus ?? 'PENDING')   // ① restore what it was, or fall back
+              : t.status;                          // ② leave ACTIVE / PENDING unchanged
+
           await prisma.task.update({
             where: { id: t.id },
-            data: { lastOccurrence: next },
+            data: {
+              lastOccurrence: next,  // advance template
+              isDone: false,         // reopen for the user
+              status: newStatus,     // ← reset status
+            },
           });
 
-          /* virtual instance — give it a string id */
-          return { ...t, id: `R${t.id}-${+next}`, dueAt: next };
+          return {...t, id: `R${t.id}-${+next}`, dueAt: next, isDone: false, status: newStatus };
         }
+
         return t;                 // no expansion this time
       })
     );

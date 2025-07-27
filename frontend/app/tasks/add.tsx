@@ -146,6 +146,13 @@ export default function AddTask() {
 const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
 const [selectedDocs,   setSelectedDocs]   = useState<Set<number>>(new Set());
 
+/* Tool to reset Time cap */
+
+const resetTimeCap = () => {
+  setTimeCapH(0);
+  setTimeCapM(0);
+  setShowCapIOS(false);     // make sure the inline spinner disappears
+};
 
 
 /* Back Button Driling so no task is lost */
@@ -239,19 +246,7 @@ const scrollRef = useRef<ScrollView>(null);
       });
     } else {
      
-      Alert.alert(
-        '',             
-        undefined,        
-        [
-          {
-            text: 'Pick',
-            onPress: () => {
-              /* nothing here – the inline picker below handles it */
-            },
-          },
-        ],
-        { cancelable: true } 
-      );
+      
       setShowCapIOS(true);
     }
   };
@@ -332,6 +327,8 @@ const scrollRef = useRef<ScrollView>(null);
     setLabelDone(true);
     setSelectedPhotos(new Set());
     setSelectedDocs(new Set());
+    setShowIOS(false);
+    setShowIOSRecEnd(false); 
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [])
 );
@@ -393,6 +390,8 @@ const scrollRef = useRef<ScrollView>(null);
     setRecurrenceEvery("1");
     setRecurrenceEnd(null);
     setLabelDone(true);
+    setShowIOS(false);
+    setShowIOSRecEnd(false);
   };
 
 
@@ -559,6 +558,15 @@ const scrollRef = useRef<ScrollView>(null);
             }
             onPress={showTimeCapPicker}
           />
+
+          {(timeCapH !== 0 || timeCapM !== 0) && (
+            <Button
+              title="Clear time cap"
+              color="#FF3B30"          // red, like other destructive actions
+              onPress={resetTimeCap}
+            />
+          )}
+
 
           {/* iOS inline spinner — only visible while picking */}
           {Platform.OS === 'ios' && showCapIOS && (
