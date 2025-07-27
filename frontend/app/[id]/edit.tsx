@@ -154,6 +154,14 @@ export default function EditTask() {
     }>(null);
 
 
+    /* Forbidding negative numbers for reccurence */
+    const handleEveryChange = (txt: string) => {
+        // keep only 0‑9; remove minus signs, spaces, letters, etc.
+        const clean = txt.replace(/[^0-9]/g, '');
+        setRecEvery(clean);
+    };
+
+
     const hasUnsavedChanges = useMemo(() => {
         if (!initial.current) return false;            // still loading
 
@@ -761,16 +769,31 @@ const handleBack = useCallback(() => {
                                 {RECURRENCES.map((r) => <Picker.Item key={r} label={r} value={r} />)}
                             </Picker>
 
-                            {/* Every X */}
-                            <Text style={{ fontWeight: "bold", marginTop: 8 }}>EVERY</Text>
                             <TextInput
                                 keyboardType="number-pad"
                                 value={recEvery}
-                                onChangeText={setRecEvery}
+                                onChangeText={handleEveryChange}   // ← updated
                                 placeholder="e.g. 2"
                                 style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
                             />
 
+
+                            {/* ⬇️  WARNING when ‘every’ = 0 */}
+                            {recurring && recEvery === "0" && (
+                                <Text
+                                    style={{
+                                        color: "#FF9F0A",          // amber / warning
+                                        fontSize: 12,
+                                        marginTop: 4,
+                                    }}
+                                >
+                                    Setting “Every” to 0 will make this task recur automatically at the start
+                                    of the next&nbsp;
+                                    {recurrence.toLowerCase()} period&nbsp;
+                                    (midnight for daily, Monday 00:00 for weekly, the 1st of the month, or
+                                    1 January for yearly).
+                                </Text>
+                            )}
                             {/* Recurrence end */}
                             <Button
                                 title={recEnd ? `Ends ${recEnd.toLocaleDateString()}` : "End date (optional)"}

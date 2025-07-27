@@ -146,6 +146,15 @@ export default function AddTask() {
 const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
 const [selectedDocs,   setSelectedDocs]   = useState<Set<number>>(new Set());
 
+
+/* Forbidding negative numbers for reccurence */
+const handleEveryChange = (txt: string) => {
+  // keep only 0‑9; remove minus signs, spaces, letters, etc.
+  const clean = txt.replace(/[^0-9]/g, '');
+  setRecurrenceEvery(clean);
+};
+
+
 /* Tool to reset Time cap */
 
 const resetTimeCap = () => {
@@ -437,8 +446,6 @@ const scrollRef = useRef<ScrollView>(null);
     }
     form.append("labelDone", labelDone.toString()); 
 
-
-
     const res = await fetch(endpoints.tasks, {
       method: "POST",
       headers: { Authorization: `Bearer ${jwt}` },
@@ -452,8 +459,6 @@ const scrollRef = useRef<ScrollView>(null);
     resetForm();
     router.back();
   };
-
-
 
   const handleBack = useCallback(() => {
     if (!hasUnsavedChanges) {           // ⬅️  let React Navigation do its thing
@@ -650,15 +655,31 @@ const scrollRef = useRef<ScrollView>(null);
                 {RECURRENCES.map((r) => <Picker.Item key={r} label={r} value={r} />)}
               </Picker>
 
-              {/* Every X */}
-              <Text style={{ fontWeight: "bold", marginTop: 8 }}>EVERY</Text>
               <TextInput
                 keyboardType="number-pad"
                 value={recurrenceEvery}
-                onChangeText={setRecurrenceEvery}
+                onChangeText={handleEveryChange}   // ← updated
                 placeholder="e.g. 2"
                 style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
               />
+
+
+              {/* ⬇️  WARNING when ‘every’ = 0 */}
+              {recurring && recurrenceEvery === "0" && (
+                <Text
+                  style={{
+                    color: "#FF9F0A",          // amber / warning
+                    fontSize: 12,
+                    marginTop: 4,
+                  }}
+                >
+                  Setting “Every” to 0 will make this task recur automatically at the start
+                  of the next&nbsp;
+                  {recurrence.toLowerCase()} period&nbsp;
+                  (midnight for daily, Monday 00:00 for weekly, the 1st of the month, or
+                  1 January for yearly).
+                </Text>
+              )}
 
               {/* Recurrence end */}
               <Button
