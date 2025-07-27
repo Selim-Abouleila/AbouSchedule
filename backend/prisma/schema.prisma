@@ -35,6 +35,13 @@ model Task {
   /// If you need “every 2 weeks / every 3 months”, keep this too
   recurrenceEvery Int?        // 1 = every week/month/…
 
+  /** NEW — for WEEKLY */
+  recurrenceDow    Int?       // 0=Sunday … 6=Saturday
+
+  /** NEW — for MONTHLY */
+  recurrenceDom    Int?       // 1‑31  (day‑of‑month)
+
+
   /// Optionally: stop repeating after this date
   recurrenceEnd  DateTime?
   labelDone      Boolean?  @default(false) @map("label_done")

@@ -224,7 +224,9 @@ app.register(async (f) => {
           t.lastOccurrence,
           t.createdAt,
           t.recurrenceEvery ?? 1,
-          t.recurrence
+          t.recurrence,
+          t.recurrenceDow,
+          t.recurrenceDom,
         );
 
         // expand recurring template
