@@ -21,6 +21,7 @@
     "@fastify/jwt": "^9.1.0",
     "@fastify/multipart": "^9.0.3",
     "argon2": "^0.43.0",
+    "date-fns": "^4.1.0",
     "dotenv": "^17.1.0",
     "fastify": "^5.4.0",
     "fastify-jwt": "^4.2.0",

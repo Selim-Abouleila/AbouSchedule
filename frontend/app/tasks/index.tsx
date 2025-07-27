@@ -15,8 +15,10 @@ type Task = {
   id:       number;
   title:    string;
   status:   'PENDING' | 'ACTIVE' | 'DONE';
+  priority: 'NONE' | 'ONE' | 'TWO' | 'THREE' | 'IMMEDIATE' | 'RECURRENT';
   recurrence: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
   images:   { id:number; url:string }[];
+  documents: { id:number; url:string }[];
 };
 
 const statusColor: Record<Task['status'], string> = {
@@ -24,13 +26,20 @@ const statusColor: Record<Task['status'], string> = {
   ACTIVE:  '#FF453A',
   DONE:    '#32D74B',
 };
+const statusLabel: Record<Task['status'], { caption: string; color: string }> = {
+  PENDING: { caption: 'PENDING', color: '#FFD60A' },
+  ACTIVE:  { caption: 'ACTIVE',  color: '#FF453A' },
+  DONE:    { caption: 'DONE',    color: '#32D74B' },
+};
+
 
 /* Sort Choices form helper.ts */
 export const SORT_CHOICES = [
   { label: 'Priority',        value: 'priority' },
   { label: 'Recently added',  value: 'recent' },
-  { label: 'Pending first',   value: 'status‑pending' },
+  { label: 'Active first',    value: 'status‑active' },
   { label: 'Done first',      value: 'status‑done' },
+  { label: 'Pending first',   value: 'status‑pending' },
 ] as const;                              
 
 /** All valid sort keys */
@@ -138,7 +147,9 @@ export default function TaskList() {
 
       const newTasks: Task[] = (payload.tasks ?? []).map((t: any) => ({
         ...t,
+        priority: t.priority ?? 'NONE',
         images: Array.isArray(t.images) ? t.images : [],
+        documents:  Array.isArray(t.documents)  ? t.documents  : [],
         recurrence: t.recurrence ?? 'NONE',
       }));
 
@@ -177,60 +188,104 @@ useEffect(() => {
   useFocusEffect(reload);
 
 
-
-  useFocusEffect(reload);
-
-
   /** onEndReached → load next page if available */
   const loadMore = () => {
     if (!loadingMore && nextCursor) fetchPage(nextCursor);
   };
 
   const renderItem = ({ item }: { item: Task }) => {
-    const imgCount = item.images?.length ?? 0;
+  
+  const isImmediate = item.priority === 'IMMEDIATE';
+  const isDone      = item.status   === 'DONE';
+  const imgCount = item.images?.length ?? 0;
+  const docCount = item.documents?.length ?? 0;
+  const label    = statusLabel[item.status];
 
     return (
       <Pressable
         onPress={() => router.push(`/tasks/${item.id}`)}
         style={({ pressed }) => ({
-          flexDirection: "row",
-          alignItems: "center",
-          paddingVertical: 12,
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingVertical: 16,
           paddingHorizontal: 16,
           borderBottomWidth: 1,
-          borderColor: "#E1E4E8",
-          opacity: pressed ? 0.5 : 1,        // row tap feedback
+          borderColor: '#E1E4E8',
+          opacity: pressed ? 0.5 : 1,
         })}
       >
-        {/* status bar */}
+        {/* coloured side bar you already have */}
         <View
           style={{
-            width: 6,
-            height: 40,
-            marginRight: 12,
-            borderRadius: 3,
+            width: 6, height: 40, marginRight: 12, borderRadius: 3,
             backgroundColor: statusColor[item.status],
           }}
         />
 
-
-        {/* title + image count (both now clickable as well) */}
+        {/* content column */}
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: "600" }}>{item.title}</Text>
-          {/* ① recurring label */}
+          {/* ── line 1: badges ── */}
+          {/* badge row line 1 */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            {/* 🔥 IMMEDIATE badge – render only if immediate **and not done** */}
+            {isImmediate && !isDone && (
+              <View
+                style={{
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 4,
+                  marginRight: 8,
+                  backgroundColor: '#FF9F0A26',
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#FF9F0A' }}>
+                  🔥 IMMEDIATE
+                </Text>
+              </View>
+            )}
+
+            {/* status badge (always shown) */}
+            <View
+              style={{
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 4,
+                backgroundColor: label.color + '26',
+              }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: '700', color: label.color }}>
+                {label.caption}
+              </Text>
+            </View>
+          </View>
+
+
+          {/* ── line 2: title ── */}
+          <Text style={{ fontSize: 17, fontWeight: '600', marginBottom: 2 }}>
+            {item.title}
+          </Text>
+
+          {/* ── line 3: extras ── */}
           {item.recurrence !== 'NONE' && (
             <Text style={{ color: '#6e6e6e', fontSize: 13 }}>Recurring</Text>
           )}
 
           {imgCount > 0 && (
-            <Text style={{ color: "#6e6e6e", fontSize: 13, fontWeight: '600' }}>
-              {imgCount} image{imgCount > 1 ? "s" : ""}
+            <Text style={{ color: '#6e6e6e', fontSize: 13, fontWeight: '600' }}>
+              {imgCount} image{imgCount > 1 ? 's' : ''}
+            </Text>
+          )}
+
+          {docCount > 0 && (                                          /* 👈 NEW  */
+            <Text style={{ color: '#6e6e6e', fontSize: 13, fontWeight: '600' }}>
+              {docCount} doc{docCount > 1 ? 's' : ''}
             </Text>
           )}
         </View>
 
-        {/* chevron (kept for visual cue, still clickable) */}
-        <Text style={{ fontSize: 18, color: "#0A84FF" }}>⟩</Text>
+
+        {/* chevron */}
+        <Text style={{ fontSize: 18, color: '#0A84FF' }}>⟩</Text>
       </Pressable>
     );
   };

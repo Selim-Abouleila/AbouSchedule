@@ -1,3 +1,8 @@
+export const unstable_settings = {
+  initialRouteName: 'tasks/index',   // or 'index' / '(tabs)' / any drawer screen
+  statePersistence: false,
+};
+
 // app/(app)/_layout.tsx
 import { Drawer } from 'expo-router/drawer';
 import { DrawerToggleButton } from '@react-navigation/drawer';

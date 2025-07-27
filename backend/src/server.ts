@@ -15,6 +15,7 @@ import { Recurrence } from '@prisma/client';
 import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
 //helpers for sorting
 import { SORT_PRESETS } from './lib/helpers';
+import { nextDate } from "./lib/recur";
 
 
 
@@ -199,11 +200,11 @@ app.register(async (f) => {
     const take = Math.min(Number(req.query.take) || 50, 100);
     const cursor = req.query.cursor ? Number(req.query.cursor) : null;
 
-    /* pick preset or fall back to “priority” */
     const preset = String(req.query.sort || 'priority');
     const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;
 
-    const tasks = await prisma.task.findMany({
+    /* 1. fetch one page of templates (real DB rows) */
+    const rows = await prisma.task.findMany({
       where: { userId },
       take,
       skip: cursor ? 1 : 0,
@@ -212,10 +213,41 @@ app.register(async (f) => {
       include: { images: true, documents: true },
     });
 
-    const last = tasks[tasks.length - 1];
-    const nextCursor = tasks.length === take ? last.id : null;
+    /* 2. expand recurring templates whose next run ≤ now */
+    const now = new Date();
+
+    const tasks = await Promise.all(
+      rows.map(async (t) => {
+        if (t.recurrence === 'NONE') return t;
+
+        const next = nextDate(
+          t.lastOccurrence,
+          t.createdAt,
+          t.recurrenceEvery ?? 1,
+          t.recurrence
+        );
+
+        if ((!t.recurrenceEnd || next <= t.recurrenceEnd) && next <= now) {
+          // update so we won’t duplicate this occurrence next time
+          await prisma.task.update({
+            where: { id: t.id },
+            data: { lastOccurrence: next },
+          });
+
+          /* virtual instance — give it a string id */
+          return { ...t, id: `R${t.id}-${+next}`, dueAt: next };
+        }
+        return t;                 // no expansion this time
+      })
+    );
+
+    /* 3. cursor: always the *numeric* id of the last real row we fetched */
+    const lastReal = rows[rows.length - 1];
+    const nextCursor = rows.length === take ? lastReal.id : null;
+
     return { tasks, nextCursor };
   });
+
 
 
 
