@@ -146,6 +146,9 @@ export default function AddTask() {
 const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
 const [selectedDocs,   setSelectedDocs]   = useState<Set<number>>(new Set());
 
+/* For reccurance */
+const [recurrenceDow, setRecurrenceDow] = useState("1");  // 0 = Sun … 6 = Sat; default Monday
+const [recurrenceDom, setRecurrenceDom] = useState("1");  // 1 – 31
 
 /* Forbidding negative numbers for reccurence */
 const handleEveryChange = (txt: string) => {
@@ -153,6 +156,7 @@ const handleEveryChange = (txt: string) => {
   const clean = txt.replace(/[^0-9]/g, '');
   setRecurrenceEvery(clean);
 };
+
 
 
 /* Tool to reset Time cap */
@@ -442,9 +446,15 @@ const scrollRef = useRef<ScrollView>(null);
     if (recurring) {
       form.append("recurrence", recurrence);
       form.append("recurrenceEvery", recurrenceEvery);
+
+      if (recurrence === "WEEKLY") form.append("recurrenceDow", recurrenceDow);
+      if (recurrence === "MONTHLY") form.append("recurrenceDom", recurrenceDom);
+
+
+
       if (recurrenceEnd) form.append("recurrenceEnd", recurrenceEnd.toISOString());
     }
-    form.append("labelDone", labelDone.toString()); 
+    form.append("labelDone", labelDone.toString());
 
     const res = await fetch(endpoints.tasks, {
       method: "POST",
@@ -649,12 +659,13 @@ const scrollRef = useRef<ScrollView>(null);
           {/* Recurrence details */}
           {recurring && (
             <>
-              {/* Frequency */}
+            {/* Frequency */}
               <Text style={{ fontWeight: "bold", marginTop: 8 }}>FREQUENCY</Text>
               <Picker selectedValue={recurrence} onValueChange={setRecurrence}>
                 {RECURRENCES.map((r) => <Picker.Item key={r} label={r} value={r} />)}
               </Picker>
 
+            {/* Every X */}
               <TextInput
                 keyboardType="number-pad"
                 value={recurrenceEvery}
@@ -662,6 +673,37 @@ const scrollRef = useRef<ScrollView>(null);
                 placeholder="e.g. 2"
                 style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
               />
+
+              {/* ─── Target day (weekly / monthly) ─── */}
+              {recurrence === "WEEKLY" && (
+                <>
+                  <Text style={{ fontWeight: "bold", marginTop: 8 }}>DAY OF WEEK</Text>
+                  <Picker selectedValue={recurrenceDow} onValueChange={setRecurrenceDow}>
+                    {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+                      .map((d, i) => (
+                        <Picker.Item key={i} label={d} value={String(i)} />
+                      ))}
+                  </Picker>
+                </>
+              )}
+
+              {recurrence === "MONTHLY" && (
+                <>
+                  <Text style={{ fontWeight: "bold", marginTop: 8 }}>DAY OF MONTH</Text>
+                  <TextInput
+                    keyboardType="number-pad"
+                    value={recurrenceDom}
+                    onChangeText={txt =>
+                      setRecurrenceDom(
+                        txt.replace(/[^0-9]/g, "").slice(0, 2)    // keep 1‑31, trim extra digits
+                      )
+                    }
+                    placeholder="1‑31"
+                    style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
+                  />
+                </>
+              )}
+
 
 
               {/* ⬇️  WARNING when ‘every’ = 0 */}

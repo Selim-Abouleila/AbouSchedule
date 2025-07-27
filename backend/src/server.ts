@@ -135,6 +135,8 @@ app.register(async (f) => {
       timeCapMinutes,
       recurrence,        // DAILY | WEEKLY | … (string)
       recurrenceEvery,   // "1" | "2" | …
+      recurrenceDow,
+      recurrenceDom,
       recurrenceEnd,
       labelDone
     } = fields as {
@@ -147,6 +149,8 @@ app.register(async (f) => {
       timeCapMinutes?: string;   // numbers come in as strings from multipart
       recurrence?: string;       // can be undefined
       recurrenceEvery?: string;
+      recurrenceDow?: string;
+      recurrenceDom?: string;
       recurrenceEnd?: string;
       labelDone?: string;
     };
@@ -165,6 +169,8 @@ app.register(async (f) => {
         timeCapMinutes: timeCapMinutes ? Number(timeCapMinutes) : undefined,
         recurrence: recurrence ? recurrence as Recurrence : Recurrence.NONE,
         recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
+        recurrenceDow:  recurrenceDow  ? Number(recurrenceDow)  : null,
+        recurrenceDom:  recurrenceDom  ? Number(recurrenceDom)  : null,
         recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
         labelDone: done,
         userId
