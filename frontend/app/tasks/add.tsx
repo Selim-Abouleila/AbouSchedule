@@ -664,15 +664,7 @@ const scrollRef = useRef<ScrollView>(null);
               <Picker selectedValue={recurrence} onValueChange={setRecurrence}>
                 {RECURRENCES.map((r) => <Picker.Item key={r} label={r} value={r} />)}
               </Picker>
-
-            {/* Every X */}
-              <TextInput
-                keyboardType="number-pad"
-                value={recurrenceEvery}
-                onChangeText={handleEveryChange}   // ← updated
-                placeholder="e.g. 2"
-                style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
-              />
+            
 
               {/* ─── Target day (weekly / monthly) ─── */}
               {recurrence === "WEEKLY" && (
@@ -689,20 +681,36 @@ const scrollRef = useRef<ScrollView>(null);
 
               {recurrence === "MONTHLY" && (
                 <>
-                  <Text style={{ fontWeight: "bold", marginTop: 8 }}>DAY OF MONTH</Text>
-                  <TextInput
-                    keyboardType="number-pad"
-                    value={recurrenceDom}
-                    onChangeText={txt =>
-                      setRecurrenceDom(
-                        txt.replace(/[^0-9]/g, "").slice(0, 2)    // keep 1‑31, trim extra digits
-                      )
-                    }
-                    placeholder="1‑31"
-                    style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
-                  />
+                  <Text style={{ fontWeight: "bold", marginTop: 8 }}>DAY OF MONTH</Text>
+                  <Picker
+                    selectedValue={recurrenceDom}
+                    onValueChange={setRecurrenceDom}
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(n => (
+                      <Picker.Item key={n} label={String(n)} value={String(n)} />
+                    ))}
+                  </Picker>
                 </>
               )}
+
+
+              {/* Warn */}
+
+              {recurrence === "MONTHLY" && Number(recurrenceDom) > 28 && (
+                <Text style={{ fontSize: 12, color: "#FF9F0A", marginTop: 4 }}>
+                  Note: Months without a {recurrenceDom}‑day will roll over to the next month.
+                </Text>
+              )}
+
+              {/* Every X */}
+              <Text style={{ fontWeight: "bold", marginTop: 8 }}>EVERY</Text>
+              <TextInput
+                keyboardType="number-pad"
+                value={recurrenceEvery}
+                onChangeText={handleEveryChange}   // ← updated
+                placeholder="e.g. 2"
+                style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
+              />
 
 
 

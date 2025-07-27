@@ -137,6 +137,7 @@ app.register(async (f) => {
       recurrenceEvery,   // "1" | "2" | …
       recurrenceDow,
       recurrenceDom,
+      recurrenceMonth, 
       recurrenceEnd,
       labelDone
     } = fields as {
@@ -151,6 +152,7 @@ app.register(async (f) => {
       recurrenceEvery?: string;
       recurrenceDow?: string;
       recurrenceDom?: string;
+      recurrenceMonth?: string;
       recurrenceEnd?: string;
       labelDone?: string;
     };
@@ -171,6 +173,7 @@ app.register(async (f) => {
         recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
         recurrenceDow:  recurrenceDow  ? Number(recurrenceDow)  : null,
         recurrenceDom:  recurrenceDom  ? Number(recurrenceDom)  : null,
+        recurrenceMonth: recurrenceMonth ? Number(recurrenceMonth) : null,
         recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
         labelDone: done,
         userId
@@ -334,11 +337,11 @@ app.register(async (f) => {
     /* ❷ Extract scalars */
     const {
       title, description, priority, status, size,
-      dueAt, timeCapMinutes, recurrence, recurrenceEvery,
+      dueAt, timeCapMinutes, recurrence, recurrenceDow, recurrenceDom, recurrenceMonth, recurrenceEvery,
       recurrenceEnd, labelDone, keep, keepDocs
     } = fields as Partial<{
       title: string; description: string; priority: Priority; status: Status; size: Size;
-      dueAt: string; timeCapMinutes: string; recurrence: Recurrence;
+      dueAt: string; timeCapMinutes: string; recurrence: Recurrence; recurrenceDow: string; recurrenceDom: string; recurrenceMonth: string;
       recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string;
     }>;
 
@@ -353,6 +356,9 @@ app.register(async (f) => {
     if (timeCapMinutes !== undefined) data.timeCapMinutes = Number(timeCapMinutes);
     if (recurrence !== undefined) data.recurrence = recurrence;
     if (recurrenceEvery !== undefined) data.recurrenceEvery = Number(recurrenceEvery);
+    if (recurrenceDow !== undefined) data.recurrenceDow = Number(recurrenceDow);
+    if (recurrenceMonth !== undefined) data.recurrenceMonth = Number(recurrenceMonth);
+    if (recurrenceDom !== undefined) data.recurrenceDom = Number(recurrenceDom);
     if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
     if (labelDone !== undefined) data.labelDone = labelDone === "true";
 

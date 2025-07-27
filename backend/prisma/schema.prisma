@@ -37,6 +37,7 @@ model Task {
 
   /** NEW — for WEEKLY */
   recurrenceDow    Int?       // 0=Sunday … 6=Saturday
+  recurrenceMonth  Int?       // 1‑12   (NEW)
 
   /** NEW — for MONTHLY */
   recurrenceDom    Int?       // 1‑31  (day‑of‑month)

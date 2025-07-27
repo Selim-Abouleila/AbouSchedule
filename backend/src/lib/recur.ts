@@ -1,7 +1,7 @@
 import {
   addDays, addWeeks, addMonths, addYears,
   startOfDay, startOfWeek, startOfMonth, startOfYear,
-  setDay, setDate
+  setDay, setDate, set
 } from 'date-fns';
 import { Recurrence } from '@prisma/client';
 
@@ -11,7 +11,9 @@ export function nextDate(
   every = 1,
   type: Recurrence,
   dow?: number | null,   // 0‑6  (for weekly)
-  dom?: number | null    // 1‑31 (for monthly)
+  dom?: number | null,    // 1‑31 (for monthly)
+  recurrenceMonth?: number | null, // 1–12 (yearly)  ← NEW
+  recurrenceDom?: number | null
 ): Date {
   // ① normalise to period start (midnight, Monday, 1st, Jan‑1)
   const rounded =
@@ -29,10 +31,12 @@ export function nextDate(
 
     case 'WEEKLY': {
       const candidate = addWeeks(rounded, step);
-      // snap to requested weekday (default Monday 0 = Sunday => 1 = Monday)
-      const wanted = dow ?? 1;
-      return setDay(candidate, wanted, { weekStartsOn: 1 });
+      const wanted = dow ?? 1;                      // default Monday
+      let next = setDay(candidate, wanted, { weekStartsOn: 1 });
+      if (next <= rounded) next = addWeeks(next, 1); // ensure future
+      return next;
     }
+
 
     case 'MONTHLY': {
       const candidate = addMonths(rounded, step);
@@ -41,8 +45,21 @@ export function nextDate(
       return setDate(candidate, wanted);
     }
 
-    case 'YEARLY':
-      return addYears(rounded, step);
+    /* …inside switch(type)… */
+    case "YEARLY": {
+      const candidate = addYears(rounded, step);        // 1 Jan 00:00 of target year
+      const month = (recurrenceMonth ?? 1) - 1;         // JS months 0‑11
+      const day = recurrenceDom ?? 1;
+
+      // clamp Feb‑29 problems etc. by falling to last valid day
+      const temp = set(candidate, { month, date: day });
+      if (temp.getMonth() !== month) {
+        // overflowed (e.g. 31 Apr) ⇒ move to last day of that month
+        return set(candidate, { month, date: 0 });      // 0 = last day prev month
+      }
+      return temp;
+    }
+
 
     default:
       return rounded;        // NONE
