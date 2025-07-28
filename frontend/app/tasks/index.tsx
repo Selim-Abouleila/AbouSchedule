@@ -204,23 +204,26 @@ useEffect(() => {
     return (
       <Pressable
         onPress={() => router.push(`/tasks/${item.id}`)}
+        android_ripple={{ color: '#0001' }}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',
           paddingVertical: 16,
-          paddingHorizontal: 16,
           borderBottomWidth: 1,
           borderColor: '#E1E4E8',
           opacity: pressed ? 0.5 : 1,
         })}
       >
-        {/* coloured side bar you already have */}
+        {/* ②  SIDE BAR  – 4 pt wide, glued to the edge */}
         <View
           style={{
-            width: 6, height: 40, marginRight: 12, borderRadius: 3,
+            width: 4,                // was 6
+            alignSelf: 'stretch',    // full‑height bar
             backgroundColor: statusColor[item.status],
+            marginRight: 12,         // keep small gap before content
+            borderRadius: 2,
           }}
-        />
+  />
 
         {/* content column */}
         <View style={{ flex: 1 }}>
@@ -261,14 +264,35 @@ useEffect(() => {
 
 
           {/* ── line 2: title ── */}
-          <Text style={{ fontSize: 17, fontWeight: '600', marginBottom: 2 }}>
+          <Text style={{ fontSize: 17, fontWeight: '700', marginBottom: 2 }}>
             {item.title}
           </Text>
 
           {/* ── line 3: extras ── */}
-          {item.recurrence !== 'NONE' && (
-            <Text style={{ color: '#6e6e6e', fontSize: 13 }}>Recurring</Text>
-          )}
+            {/* Recurring chip ---------------------------------------------------- */}
+            {item.recurrence !== 'NONE' && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 4,
+                  marginRight: 6,                 // little gap before the next meta bit
+                }}
+              >
+                {/* icon + text share the same colour/size so they look like one unit */}
+                <Text
+                  style={{
+                    fontSize: 14,          // ⬆︎ a touch larger
+                    fontWeight: '700',     // ⬆︎ bolder
+                    color: '#6e6e6e',
+                  }}
+                >
+                  🔄 Recurring
+                </Text>
+              </View>
+            )}
 
           {imgCount > 0 && (
             <Text style={{ color: '#6e6e6e', fontSize: 13, fontWeight: '600' }}>

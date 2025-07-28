@@ -29,7 +29,7 @@ import { useNavigation } from "@react-navigation/native";
 
 /*  --- enums reused from AddTask ---  */
 const PRIORITIES = ["NONE", "ONE", "TWO", "THREE", "IMMEDIATE", "RECURRENT"] as const;
-const STATUSES = ["PENDING", "ACTIVE", "DONE"] as const;
+const STATUSES = [ "ACTIVE", "DONE", "PENDING"] as const;
 const SIZES = ["SMALL", "LARGE"] as const;
 const RECURRENCES = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 

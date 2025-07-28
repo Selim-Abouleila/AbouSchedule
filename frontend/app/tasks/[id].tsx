@@ -13,6 +13,8 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { endpoints } from '../../src/api';
 import { getToken }  from '../../src/auth';
 import { useFocusEffect } from "@react-navigation/native";
+import ImageViewing from 'react-native-image-viewing';
+
 
 /*
   Place this file at:         app/tasks/[id].tsx
@@ -20,15 +22,36 @@ import { useFocusEffect } from "@react-navigation/native";
   so this component will be shown when a task row is tapped.
 */
 
+/* Info Badge */
+const InfoBadge = ({ onPress }: { onPress: () => void }) => (
+  <Pressable
+    onPress={onPress}
+    style={{
+      position: 'absolute',
+      top: 6,          // or top: 6
+      left: 6,           // or left: 6
+      backgroundColor: '#0008',
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      borderRadius: 6,
+      zIndex: 10,
+    }}>
+    <Text style={{ color: '#fff', fontSize: 12 }}>ⓘ</Text>
+  </Pressable>
+);
+
+
 type Task = {
   id:       number;
   title:    string;
+  description: string | null;
   status:   'PENDING' | 'ACTIVE' | 'DONE';
   priority: string;
   size:     string;
   dueAt:    string | null;
   createdAt:string;
   images:   { id:number; url:string; mime:string }[];
+  documents:{ id:number; url:string; mime:string; name?:string }[];
 };
 
 const statusColor: Record<Task['status'], string> = {
@@ -167,6 +190,16 @@ export default function TaskDetail() {
             {new Date(task.dueAt).toLocaleString()}
           </Text>
         )}
+
+        {/* Description */}
+        {task.description?.trim() && (
+          <>
+            <Text style={{ fontWeight: '600', marginBottom: 2 }}>Description</Text>
+            <Text style={{ marginBottom: 12 }}>{task.description}</Text>
+          </>
+        )}
+
+
         <Text style={{ color: '#6e6e6e', marginBottom: 12 }}>
           Created: {new Date(task.createdAt).toLocaleString()}
         </Text>
@@ -183,16 +216,94 @@ export default function TaskDetail() {
                     setViewerIndex(idx);
                     setViewerOpen(true);
                   }}
+                  style={{ position: 'relative', marginRight: 12 }}
                 >
                   <Image
                     source={{ uri: img.url }}
                     style={{ width: 180, height: 180, borderRadius: 12, marginRight: 12 }}
                   />
+                  {/* zoom badge */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      left: 6,
+                      backgroundColor: '#0008',
+                      paddingHorizontal: 4,
+                      paddingVertical: 1,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Text style={{ color: 'white', fontSize: 12 }}>🔍</Text>
+                  </View>
                 </Pressable>
               ))}
             </ScrollView>
           </View>
         )}
+
+        {task.documents.length > 0 && (
+          <View style={{ marginBottom: 12 }}>
+            <Text style={{ fontWeight: '600', marginBottom: 8 }}>Documents</Text>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {task.documents.map((doc) => {
+                const isImg = doc.mime.startsWith('image/');
+                const name = doc.name ?? `doc-${doc.id}`;
+
+                return (
+                  <View /* wrapper lets us layer the badge */
+                    key={doc.id}
+                    style={{ marginRight: 12, position: 'relative' }}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        // if it’s an image, open zoom viewer later if you want,
+                        // otherwise hand off to OS or just show the name
+                        Alert.alert('Document', name);
+                      }}
+                    >
+                      {isImg ? (
+                        <Image
+                          source={{ uri: doc.url }}
+                          style={{ width: 180, height: 180, borderRadius: 12 }}
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 180,
+                            height: 180,
+                            borderRadius: 12,
+                            backgroundColor: '#E9E9E9',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Text style={{ fontSize: 40 }}>📄</Text>
+                          <Text
+                            numberOfLines={1}
+                            style={{
+                              marginTop: 8,
+                              maxWidth: 160,
+                              textAlign: 'center',
+                            }}
+                          >
+                            {name}
+                          </Text>
+                        </View>
+                      )}
+                    </Pressable>
+
+                    {/* ⓘ badge goes on top of everything */}
+                    <InfoBadge onPress={() => Alert.alert('Document', name)} />
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+
 
         {/* Edit button */}
         <Pressable
@@ -241,32 +352,14 @@ export default function TaskDetail() {
       </ScrollView>
 
       {/* ── full‑screen image viewer ─────────────────────────── */}
-      {viewerOpen && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'black',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          <Pressable
-            onPress={() => setViewerOpen(false)}
-            style={{ position: 'absolute', top: 40, right: 20, zIndex: 2 }}
-          >
-            <Text style={{ color: 'white', fontSize: 26 }}>✕</Text>
-          </Pressable>
+      <ImageViewing
+        images={task.images.map(img => ({ uri: img.url }))}
+        imageIndex={viewerIndex}
+        visible={viewerOpen}
+        onRequestClose={() => setViewerOpen(false)}
+        swipeToCloseEnabled
+      />
 
-          <Image
-            source={{ uri: task.images[viewerIndex].url }}
-            style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
-          />
-        </View>
-      )}
     </View>
   );
 

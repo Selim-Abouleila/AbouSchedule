@@ -285,15 +285,34 @@ app.register(async (f) => {
   f.get('/:id', async (req: any, rep) => {
     const userId = req.user.sub as number;
     const id = Number(req.params.id);
-    
 
-    const task = await prisma.task.findFirst({
+    const t = await prisma.task.findFirst({
       where: { id, userId },
       include: { images: true, documents: true },
     });
+    if (!t) return rep.code(404).send({ error: 'Task not found' });
 
-    if (!task) return rep.code(404).send({ error: 'Task not found' });
-    return task;
+    /* ── compute the next run for recurring templates ─────────── */
+    let next: Date | null = null;
+    if (t.recurrence !== 'NONE') {
+      next = nextDate(
+        t.lastOccurrence,
+        t.createdAt,
+        t.recurrenceEvery ?? 1,
+        t.recurrence,
+        t.recurrenceDow,
+        t.recurrenceDom,
+        t.recurrenceMonth,
+        t.recurrenceDom,
+      );
+      if (t.recurrenceEnd && next > t.recurrenceEnd) next = null;  // already expired
+    }
+
+    return {
+      ...t,
+      lastOccurrence: t.lastOccurrence,   // may be null for brand‑new tasks
+      nextOccurrence: next,               // null ⇢ none scheduled
+    };
   });
 
 
