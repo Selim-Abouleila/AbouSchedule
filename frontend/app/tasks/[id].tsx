@@ -42,17 +42,27 @@ const InfoBadge = ({ onPress }: { onPress: () => void }) => (
 
 
 type Task = {
-  id:       number;
-  title:    string;
+  id: number;
+  title: string;
   description: string | null;
-  status:   'PENDING' | 'ACTIVE' | 'DONE';
+  status: 'PENDING' | 'ACTIVE' | 'DONE';
   priority: string;
-  size:     string;
-  dueAt:    string | null;
-  createdAt:string;
-  images:   { id:number; url:string; mime:string }[];
-  documents:{ id:number; url:string; mime:string; name?:string }[];
+  size: string;
+  dueAt: string | null;
+  createdAt: string;
+  /** NEW */
+  recurrence: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  recurrenceEvery: number | null;
+  recurrenceDow?: number | null;   // 0–6
+  recurrenceDom?: number | null;   // 1–31
+  recurrenceMonth?: number | null;   // 1–12
+  lastOccurrence: string | null;
+  nextOccurrence: string | null;
+
+  images:    { id: number; url: string; mime: string }[];
+  documents: { id: number; url: string; mime: string; name?: string }[];
 };
+
 
 const statusColor: Record<Task['status'], string> = {
   PENDING: '#FFD60A',
@@ -191,12 +201,73 @@ export default function TaskDetail() {
           </Text>
         )}
 
+        {/* Recurrence (only when the task is a template) */}
+        {task.recurrence !== 'NONE' && (
+          <>
+            <Text style={{ fontWeight: '600', marginBottom: 4 }}>Recurrence: </Text>
+
+            {/* type & frequency */}
+            <Text style={{ marginBottom: 4 }}>
+              <Text style={{ fontWeight: '600' }}>  -Type: </Text>
+              {task.recurrence}
+            </Text>
+            <Text style={{ marginBottom: 4 }}>
+              <Text style={{ fontWeight: '600' }}>  -Every: </Text>
+              {task.recurrenceEvery ?? 1}
+            </Text>
+
+            {/* ─── specific target day/date ─── */}
+            {task.recurrence === 'WEEKLY' && (
+              <Text style={{ marginBottom: 4 }}>
+                <Text style={{ fontWeight: '600' }}>  -Day of week: </Text>
+                {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+                [task.recurrenceDow ?? 1]}
+              </Text>
+            )}
+
+            {task.recurrence === 'MONTHLY' && (
+              <Text style={{ marginBottom: 4 }}>
+                <Text style={{ fontWeight: '600' }}>  -Day of month: </Text>
+                {task.recurrenceDom ?? 1}
+              </Text>
+            )}
+
+            {task.recurrence === 'YEARLY' && (
+              <Text style={{ marginBottom: 4 }}>
+                <Text style={{ fontWeight: '600' }}>  -Date: </Text>
+                {`${[
+                  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+                ][(task.recurrenceMonth ?? 1) - 1]} ${task.recurrenceDom ?? 1}`}
+              </Text>
+            )}
+
+            {/* last / next runs */}
+            <Text style={{ marginBottom: 4 }}>
+              <Text style={{ fontWeight: '600' }}>  -Last occurrence: </Text>
+              {task.lastOccurrence
+                ? new Date(task.lastOccurrence).toLocaleString()
+                : '—'}
+            </Text>
+            <Text style={{ marginBottom: 12 }}>
+              <Text style={{ fontWeight: '600' }}>  -Next occurrence: </Text>
+              {task.nextOccurrence
+                ? new Date(task.nextOccurrence).toLocaleString()
+                : '—'}
+            </Text>
+          </>
+        )}
+
+
+
         {/* Description */}
         {task.description?.trim() && (
-          <>
-            <Text style={{ fontWeight: '600', marginBottom: 2 }}>Description</Text>
-            <Text style={{ marginBottom: 12 }}>{task.description}</Text>
-          </>
+          <View style={{ marginTop: 12, marginBottom: 12 }}>
+            <Text style={{ fontWeight: '600', marginBottom: 2 }}>
+              Description
+            </Text>
+            <Text>{task.description}</Text>
+          </View>
         )}
 
 

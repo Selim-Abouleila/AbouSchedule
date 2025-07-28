@@ -1,3 +1,4 @@
+/* util/date‑helpers.ts */
 import {
   addDays, addWeeks, addMonths, addYears,
   startOfDay, startOfWeek, startOfMonth, startOfYear,
@@ -10,13 +11,14 @@ export function nextDate(
   start: Date,
   every = 1,
   type: Recurrence,
-  dow?: number | null,   // 0‑6  (for weekly)
-  dom?: number | null,    // 1‑31 (for monthly)
-  recurrenceMonth?: number | null, // 1–12 (yearly)  ← NEW
-  recurrenceDom?: number | null
+  dow?: number | null,           // 0–6 (weekly)
+  dom?: number | null,           // 1–31 (monthly & yearly)
+  recMonth?: number | null,      // 1–12 (yearly)
+  recDom?: number | null,
 ): Date {
-  // ① normalise to period start (midnight, Monday, 1st, Jan‑1)
-  const rounded =
+
+  /* 1 . normalize the reference point */
+  const base =
     type === 'DAILY'   ? startOfDay(last ?? start) :
     type === 'WEEKLY'  ? startOfWeek(last ?? start, { weekStartsOn: 1 }) :
     type === 'MONTHLY' ? startOfMonth(last ?? start) :
@@ -27,41 +29,52 @@ export function nextDate(
 
   switch (type) {
     case 'DAILY':
-      return addDays(rounded, step);
+      return addDays(base, step);
 
+    /* ---------- WEEKLY ---------- */
     case 'WEEKLY': {
-      const candidate = addWeeks(rounded, step);
-      const wanted = dow ?? 1;                      // default Monday
-      let next = setDay(candidate, wanted, { weekStartsOn: 1 });
-      if (next <= rounded) next = addWeeks(next, 1); // ensure future
+      const wanted = dow ?? 1;                        // default Monday
+      // ① try the wanted weekday inside *this* week
+      let next = setDay(base, wanted, { weekStartsOn: 1 });
+      // ② if that’s not in the future → add the step
+      if (next <= (last ?? start)) next = addWeeks(next, step);
       return next;
     }
 
-
+    /* ---------- MONTHLY ---------- */
     case 'MONTHLY': {
-      const candidate = addMonths(rounded, step);
-      const wanted = dom ?? 1;                    // default 1st
-      // if Feb 30th → rolls into March; acceptable for most use‑cases
-      return setDate(candidate, wanted);
-    }
-
-    /* …inside switch(type)… */
-    case "YEARLY": {
-      const candidate = addYears(rounded, step);        // 1 Jan 00:00 of target year
-      const month = (recurrenceMonth ?? 1) - 1;         // JS months 0‑11
-      const day = recurrenceDom ?? 1;
-
-      // clamp Feb‑29 problems etc. by falling to last valid day
-      const temp = set(candidate, { month, date: day });
-      if (temp.getMonth() !== month) {
-        // overflowed (e.g. 31 Apr) ⇒ move to last day of that month
-        return set(candidate, { month, date: 0 });      // 0 = last day prev month
+      const wanted = dom ?? 1;                        // default 1st
+      // setDate rolls 31 Feb → 03 Mar etc. (acceptable)
+      let next = setDate(base, wanted);
+      if (next <= (last ?? start)) {
+        next = setDate(addMonths(base, step), wanted);
       }
-      return temp;
+      return next;
     }
 
+    /* ---------- YEARLY ---------- */
+    case 'YEARLY': {
+      const m = (recMonth ?? 1) - 1;                  // JS months 0–11
+      const d = recDom ?? 1;
+
+      /* helper: clamp 31 Apr → 30 Apr, 29 Feb → 28 Feb */
+      const clamp = (yearStart: Date) => {
+        let candidate = set(yearStart, { month: m, date: d });
+        return candidate.getMonth() === m
+          ? candidate
+          : set(yearStart, { month: m, date: 0 });    // last day prev‑month
+      };
+
+      // ① date inside *this* year
+      let next = clamp(base);
+      // ② too late?  go N years forward
+      if (next <= (last ?? start)) {
+        next = clamp(addYears(base, step));
+      }
+      return next;
+    }
 
     default:
-      return rounded;        // NONE
+      return base;            // NONE
   }
 }
