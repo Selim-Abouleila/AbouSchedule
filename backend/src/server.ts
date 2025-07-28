@@ -280,6 +280,19 @@ app.register(async (f) => {
     return { tasks, nextCursor };
   });
 
+  // GET /media  (inside the same /tasks router or a new one)
+  f.get('/media', async (req: any) => {
+    const userId = req.user.sub as number;
+
+    /* bring images + docs for all the user's tasks */
+    const [images, docs] = await Promise.all([
+      prisma.image.findMany({ where: { task: { userId } } }),
+      prisma.document.findMany({ where: { task: { userId } } }),
+    ]);
+
+    return { images, documents: docs };
+  });
+
 
   /* GET /tasks/:id – single task for the logged-in user */
   f.get('/:id', async (req: any, rep) => {
