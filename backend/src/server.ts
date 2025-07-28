@@ -280,18 +280,32 @@ app.register(async (f) => {
     return { tasks, nextCursor };
   });
 
-  // GET /media  (inside the same /tasks router or a new one)
+  // GET /media
   f.get('/media', async (req: any) => {
     const userId = req.user.sub as number;
 
-    /* bring images + docs for all the user's tasks */
+    /* fetch original DB rows */
     const [images, docs] = await Promise.all([
       prisma.image.findMany({ where: { task: { userId } } }),
       prisma.document.findMany({ where: { task: { userId } } }),
     ]);
 
-    return { images, documents: docs };
-  });
+    /* add thumbUrl for each image row */
+    const thumbImages = images.map(img => ({
+      ...img,
+      /*  ❶  If your files are on S3 + CloudFront/Cloudflare: */
+      thumbUrl: `${img.url}?w=200&h=200&fit=cover`,   // query string resize
+
+      /*  ❷  Or if you store resized copies side‑by‑side:           */
+      // thumbUrl: img.url.replace('/original/', '/thumbs/'),
+
+      /*  ❸  Or if you have a dedicated thumbnails table:            */
+      // thumbUrl: await prisma.imageThumb.findUnique({ where: { id: img.id } }).url,
+    }));
+
+    return { images: thumbImages, documents: docs };
+});
+
 
 
   /* GET /tasks/:id – single task for the logged-in user */

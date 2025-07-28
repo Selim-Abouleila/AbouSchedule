@@ -17,11 +17,17 @@ export default function AppDrawerLayout() {
         headerLeft: () => <DrawerToggleButton />, // hamburger icon
       }}
     >
+
+      
       {/* TASK list (and nested add / detail) */}
       <Drawer.Screen name="tasks/index" options={{ title: 'Tasks' }} />
 
       {/* Settings page */}
       <Drawer.Screen name="settings" options={{ title: 'Settings' }} />
+
+
+      {/* Media page */}
+      <Drawer.Screen name="media/media" options={{ title: 'Media' }} />
 
       {/* Login lives one level up (app/login.tsx) */}
       <Drawer.Screen name="auth/login" options={{ title: 'Login' }} />
@@ -38,9 +44,10 @@ export default function AppDrawerLayout() {
       {/* Task Adder*/}
       <Drawer.Screen name="tasks/add" options={{ title: 'Add Task', drawerItemStyle: { display: 'none' }, }}  />
 
-      
-      {/*Register*/}
-      <Drawer.Screen name="register" options={{ title: 'Register', drawerItemStyle: { display: 'none' }, }}  />
+      {/* Task Adder*/}
+      <Drawer.Screen name="register" options={{ title: 'Add Task', drawerItemStyle: { display: 'none' }, }}  />
+  
+  
 
       <Drawer.Screen
         name="_necessary"
