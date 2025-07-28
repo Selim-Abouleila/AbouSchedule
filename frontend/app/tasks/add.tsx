@@ -149,6 +149,8 @@ const [selectedDocs,   setSelectedDocs]   = useState<Set<number>>(new Set());
 /* For reccurance */
 const [recurrenceDow, setRecurrenceDow] = useState("1");  // 0 = Sun … 6 = Sat; default Monday
 const [recurrenceDom, setRecurrenceDom] = useState("1");  // 1 – 31
+const [recurrenceMonth, setRecurrenceMonth] = useState("1");
+const [showYearlyPicker, setShowYearlyPicker] = useState(false);
 
 /* Forbidding negative numbers for reccurence */
 const handleEveryChange = (txt: string) => {
@@ -157,6 +159,25 @@ const handleEveryChange = (txt: string) => {
   setRecurrenceEvery(clean);
 };
 
+
+
+/* This is for yearly recurring tasks */
+const openYearlyPicker = () => {
+  if (Platform.OS === "android") {
+    // any placeholder date; we ignore the year later
+    DateTimePickerAndroid.open({
+      value: new Date(),                // today
+      mode: "date",
+      onChange: (_, d) => {
+        if (!d) return;
+        setRecurrenceMonth(String(d.getMonth() + 1)); // 0‑based → 1‑based
+        setRecurrenceDom(String(d.getDate()));
+      },
+    });
+  } else {
+    setShowYearlyPicker(true);          // will render inline spinner
+  }
+};
 
 
 /* Tool to reset Time cap */
@@ -198,6 +219,16 @@ useEffect(() => {
   });
   return sub;
 }, [navigation, hasUnsavedChanges]);   // keep it up‑to‑date
+
+/* Recurrence reset */
+useEffect(() => {
+  if (recurrence !== "WEEKLY")  setRecurrenceDow("1");
+  if (recurrence !== "MONTHLY") setRecurrenceDom("1");
+  if (recurrence !== "YEARLY") {
+    setRecurrenceMonth("1");
+    setRecurrenceDom("1");
+  }
+}, [recurrence]);
 
 
 /* Ability to delete multiple pictures */
@@ -449,6 +480,11 @@ const scrollRef = useRef<ScrollView>(null);
 
       if (recurrence === "WEEKLY") form.append("recurrenceDow", recurrenceDow);
       if (recurrence === "MONTHLY") form.append("recurrenceDom", recurrenceDom);
+      if (recurrence === "YEARLY") {
+        form.append("recurrenceMonth", recurrenceMonth);
+        form.append("recurrenceDom", recurrenceDom);
+      }
+
 
 
 
@@ -693,9 +729,45 @@ const scrollRef = useRef<ScrollView>(null);
                 </>
               )}
 
+              {/* YEARLY target date ------------------------------------------------ */}
+              {recurrence === "YEARLY" && (
+                <>
+                  <Text style={{ fontWeight: "bold", marginTop: 8 }}>DATE</Text>
+
+                  <Button
+                    title={
+                      recurrenceMonth && recurrenceDom
+                        ? `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
+                          "Sep", "Oct", "Nov", "Dec"][Number(recurrenceMonth) - 1]} ${recurrenceDom}`
+                        : "Pick a date"
+                    }
+                    onPress={openYearlyPicker}
+                  />
+
+                  {/* iOS inline picker */}
+                  {Platform.OS === "ios" && showYearlyPicker && (
+                    <DateTimePicker
+                      value={new Date()}
+                      mode="date"
+                      display="inline"
+                      onChange={(_, d) => {
+                        if (!d) return;
+                        setShowYearlyPicker(false);
+                        setRecurrenceMonth(String(d.getMonth() + 1));
+                        setRecurrenceDom(String(d.getDate()));
+                      }}
+                    />
+                  )}
+
+                  {Number(recurrenceDom) > 28 && (
+                    <Text style={{ fontSize: 12, color: "#FF9F0A", marginTop: 4 }}>
+                      In shorter months the task will recur on the last day available.
+                    </Text>
+                  )}
+                </>
+              )}
 
               {/* Warn */}
-
               {recurrence === "MONTHLY" && Number(recurrenceDom) > 28 && (
                 <Text style={{ fontSize: 12, color: "#FF9F0A", marginTop: 4 }}>
                   Note: Months without a {recurrenceDom}‑day will roll over to the next month.

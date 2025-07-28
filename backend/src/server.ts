@@ -159,13 +159,22 @@ app.register(async (f) => {
 
     const done = labelDone ? labelDone === 'true' : undefined;
 
+    /* Set Previous Status */
+
+    const initStatus = status as Status;               // value that came from UI
+    const prevStatus =
+      initStatus === 'DONE' && recurrence && recurrence !== 'NONE'
+        ? 'ACTIVE'                                      // or 'PENDING', your choice
+        : null;
+
 
     const task = await prisma.task.create({
       data: {
         title,
         description,
         priority: priority as Priority,
-        status: status as Status,
+        status: initStatus,
+        previousStatus: prevStatus,
         size: size as Size,
         dueAt: dueAt ? new Date(dueAt) : undefined,
         timeCapMinutes: timeCapMinutes ? Number(timeCapMinutes) : undefined,
@@ -236,6 +245,8 @@ app.register(async (f) => {
           t.recurrence,
           t.recurrenceDow,
           t.recurrenceDom,
+          t.recurrenceMonth,
+          t.recurrenceDom,
         );
 
         // expand recurring template
@@ -251,7 +262,7 @@ app.register(async (f) => {
             data: {
               lastOccurrence: next,  // advance template
               isDone: false,         // reopen for the user
-              status: newStatus,     // ← reset status
+              status: t.previousStatus ?? 'PENDING',     // ← reset status
             },
           });
 
@@ -390,6 +401,13 @@ app.register(async (f) => {
     if (newDocs.length) {
       await prisma.document.createMany({ data: newDocs });
     }
+    // example in your PATCH route
+    if (data.status === 'DONE') {
+      // fetch current status first (or rely on the row you already have)
+      const current = await prisma.task.findUnique({ where: { id } });
+      data.previousStatus = current?.status ?? null;
+    }
+
 
 
     /* ❻ Return fresh record */

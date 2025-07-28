@@ -139,6 +139,58 @@ export default function EditTask() {
     const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0;
 
 
+    /* For reccurance */
+    const [recurrenceDow, setRecurrenceDow] = useState("1");  // 0 = Sun … 6 = Sat; default Monday
+    const [recurrenceDom, setRecurrenceDom] = useState("1");  // 1 – 31
+    const [recurrenceMonth, setRecurrenceMonth] = useState("1");
+    const [showYearlyPicker, setShowYearlyPicker] = useState(false);
+
+    /* Reset day selectors whenever the frequency changes */
+    /* Reset selectors whenever the user switches frequency */
+    useEffect(() => {
+        switch (recurrence) {
+            case "WEEKLY":   // we care only about DOW
+                setRecurrenceDom("1");
+                setRecurrenceMonth("1");
+                break;
+
+            case "MONTHLY":  // we care only about DOM
+                setRecurrenceDow("1");
+                setRecurrenceMonth("1");
+                break;
+
+            case "YEARLY":   // we care about MONTH + DOM
+                setRecurrenceDow("1");
+                break;
+
+            default:         // DAILY → nothing else matters
+                setRecurrenceDow("1");
+                setRecurrenceDom("1");
+                setRecurrenceMonth("1");
+        }
+    }, [recurrence]);
+
+
+    /* Yearly picker for reccurance */
+    const openYearlyPicker = () => {
+        if (Platform.OS === "android") {
+            DateTimePickerAndroid.open({
+                value: new Date(),     // year ignored
+                mode: "date",
+                onChange: (_, d) => {
+                    if (!d) return;
+                    setRecurrenceMonth(String(d.getMonth() + 1)); // 0‑based → 1‑based
+                    setRecurrenceDom(String(d.getDate()));
+                },
+            });
+        } else {
+            setShowYearlyPicker(true);
+        }
+    };
+
+
+
+
     /* Back button safety*/
     const initial = useRef<null | {
         title: string;
@@ -395,6 +447,9 @@ export default function EditTask() {
                 setRecurring(t.recurrence !== 'NONE');
                 setRecurrence(t.recurrence);
                 setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : '1');
+                setRecurrenceMonth(t.recurrenceMonth ? String(t.recurrenceMonth) : "1");
+                setRecurrenceDom(  t.recurrenceDom   ? String(t.recurrenceDom)   : "1");
+                setRecurrenceDow(  t.recurrenceDow   ? String(t.recurrenceDow)   : "1");
                 setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
                 setLabelDone(Boolean(t.labelDone));
                 setSelectedPhotos(new Set());
@@ -518,6 +573,7 @@ const save = async () => {
       keepDocs:  keepDocIds.join(','),     // documents
     };
 
+
     const res = await fetch(`${endpoints.tasks}/${id}`, {
       method: 'PATCH',
       headers: {
@@ -539,10 +595,22 @@ const save = async () => {
     if (dueAt) form.append('dueAt', dueAt.toISOString());
     if (totalMinutes > 0) form.append('timeCapMinutes', String(totalMinutes));
     form.append('recurrence', recurring ? recurrence : 'NONE');
+
+    /* Append for recurring */
     if (recurring) {
       form.append('recurrenceEvery', recEvery);
+
+      if (recurrence === "WEEKLY") form.append("recurrenceDow", recurrenceDow);
+      if (recurrence === "MONTHLY") form.append("recurrenceDom", recurrenceDom);
+      if (recurrence === "YEARLY") {
+        form.append("recurrenceMonth", recurrenceMonth);
+        form.append("recurrenceDom", recurrenceDom); }
+
       if (recEnd) form.append('recurrenceEnd', recEnd.toISOString());
     }
+
+
+
     form.append('labelDone', String(labelDone));
 
     form.append('keep',     keepImgIds.join(','));   // images to keep
@@ -769,6 +837,73 @@ const handleBack = useCallback(() => {
                                 {RECURRENCES.map((r) => <Picker.Item key={r} label={r} value={r} />)}
                             </Picker>
 
+
+                            {/* ─── Target day (weekly / monthly) ─── */}
+                            {recurrence === "WEEKLY" && (
+                                <>
+                                    <Text style={{ fontWeight: "bold", marginTop: 8 }}>DAY OF WEEK</Text>
+                                    <Picker selectedValue={recurrenceDow} onValueChange={setRecurrenceDow}>
+                                        {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+                                            .map((d, i) => (
+                                                <Picker.Item key={i} label={d} value={String(i)} />
+                                            ))}
+                                    </Picker>
+                                </>
+                            )}
+
+                            {recurrence === "MONTHLY" && (
+                                <>
+                                    <Text style={{ fontWeight: "bold", marginTop: 8 }}>DAY OF MONTH</Text>
+                                    <Picker
+                                        selectedValue={recurrenceDom}
+                                        onValueChange={setRecurrenceDom}
+                                    >
+                                        {Array.from({ length: 31 }, (_, i) => i + 1).map(n => (
+                                            <Picker.Item key={n} label={String(n)} value={String(n)} />
+                                        ))}
+                                    </Picker>
+                                </>
+                            )}
+
+                            {/* YEARLY target date ------------------------------------------------ */}
+                            {recurrence === "YEARLY" && (
+                                <>
+                                    <Text style={{ fontWeight: "bold", marginTop: 8 }}>DATE</Text>
+
+                                    <Button
+                                        title={
+                                            recurrenceMonth && recurrenceDom
+                                                ? `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
+                                                    "Sep", "Oct", "Nov", "Dec"][Number(recurrenceMonth) - 1]} ${recurrenceDom}`
+                                                : "Pick a date"
+                                        }
+                                        onPress={openYearlyPicker}
+                                    />
+
+                                    {/* iOS inline picker */}
+                                    {Platform.OS === "ios" && showYearlyPicker && (
+                                        <DateTimePicker
+                                            value={new Date()}
+                                            mode="date"
+                                            display="inline"
+                                            onChange={(_, d) => {
+                                                if (!d) return;
+                                                setShowYearlyPicker(false);
+                                                setRecurrenceMonth(String(d.getMonth() + 1));
+                                                setRecurrenceDom(String(d.getDate()));
+                                            }}
+                                        />
+                                    )}
+
+                                    {Number(recurrenceDom) > 28 && (
+                                        <Text style={{ fontSize: 12, color: "#FF9F0A", marginTop: 4 }}>
+                                            In shorter months the task will recur on the last day available.
+                                        </Text>
+                                    )}
+                                </>
+                            )}
+
+                            {/* EVERY X */}
                             <TextInput
                                 keyboardType="number-pad"
                                 value={recEvery}
@@ -776,6 +911,13 @@ const handleBack = useCallback(() => {
                                 placeholder="e.g. 2"
                                 style={{ borderWidth: 1, borderRadius: 6, padding: 10 }}
                             />
+
+                            {/* Warn */}
+                            {recurrence === "MONTHLY" && Number(recurrenceDom) > 28 && (
+                                <Text style={{ fontSize: 12, color: "#FF9F0A", marginTop: 4 }}>
+                                    Note: Months without a {recurrenceDom}‑day will roll over to the next month.
+                                </Text>
+                            )}
 
 
                             {/* ⬇️  WARNING when ‘every’ = 0 */}
