@@ -281,9 +281,6 @@ app.register(async (f) => {
   });
 
 
-
-
-
   /* GET /tasks/:id – single task for the logged-in user */
   f.get('/:id', async (req: any, rep) => {
     const userId = req.user.sub as number;
@@ -373,9 +370,20 @@ app.register(async (f) => {
     if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
     if (labelDone !== undefined) data.labelDone = labelDone === "true";
 
+
+
+
+    // set previous status
+    if (data.status === 'DONE') {
+      // fetch current status first (or rely on the row you already have)
+      const current = await prisma.task.findUnique({ where: { id } });
+      data.previousStatus = current?.status ?? null;
+    }
+
     /* ❹ Update row only if it belongs to the user */
     const upd = await prisma.task.updateMany({ where: { id, userId }, data });
     if (upd.count === 0) return rep.code(404).send({ error: "Task not found" });
+    
 
     /* ❺ Images ‍– add new, delete removed */
     /* ❺ Images – delete removed, then add new */
@@ -401,12 +409,7 @@ app.register(async (f) => {
     if (newDocs.length) {
       await prisma.document.createMany({ data: newDocs });
     }
-    // example in your PATCH route
-    if (data.status === 'DONE') {
-      // fetch current status first (or rely on the row you already have)
-      const current = await prisma.task.findUnique({ where: { id } });
-      data.previousStatus = current?.status ?? null;
-    }
+    
 
 
 
