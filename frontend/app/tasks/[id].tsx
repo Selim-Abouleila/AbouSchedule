@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,10 @@ import { endpoints } from '../../src/api';
 import { getToken }  from '../../src/auth';
 import { useFocusEffect } from "@react-navigation/native";
 import ImageViewing from 'react-native-image-viewing';
+// ⬆️ new import
+import { Image as ExpoImage } from 'expo-image';
+import { Image as RNImage } from 'react-native';
+
 
 
 /*
@@ -21,6 +25,11 @@ import ImageViewing from 'react-native-image-viewing';
   The list screen already navigates via router.push(`/tasks/${id}`)
   so this component will be shown when a task row is tapped.
 */
+
+
+
+
+
 
 /* Info Badge */
 const InfoBadge = ({ onPress }: { onPress: () => void }) => (
@@ -79,6 +88,17 @@ export default function TaskDetail() {
   // put near the other state hooks
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  // 🔸 1. keep a counter that we bump on every open
+  const [viewerNonce, setViewerNonce] = useState(0);
+
+  // helper so the thumbnail onPress is cleaner
+  const openViewer = (idx: number) => {
+    setViewerIndex(idx);
+    setViewerNonce(n => n + 1);   // forces a fresh mount
+    setViewerOpen(true);
+  };
+
+  
 
 
   useFocusEffect(
@@ -110,6 +130,17 @@ export default function TaskDetail() {
     }, [id])
   );
 
+  /*Prewarm cache as sonn as image arrives*/
+
+  useEffect(() => {
+  if (task?.images.length) {
+    task.images.forEach(img =>
+      // same 1 200 px variant you pass to the viewer ↓
+      RNImage.prefetch(`${img.url}?w=1200`)
+    );
+  }
+}, [task]);
+
 
 
   const deleteTask = () => {
@@ -138,9 +169,6 @@ export default function TaskDetail() {
       ]
     );
   };
-
-
-  
 
   if (loading) {
     return (
@@ -258,8 +286,6 @@ export default function TaskDetail() {
           </>
         )}
 
-
-
         {/* Description */}
         {task.description?.trim() && (
           <View style={{ marginTop: 12, marginBottom: 12 }}>
@@ -279,20 +305,23 @@ export default function TaskDetail() {
         {task.images.length > 0 && (
           <View style={{ marginBottom: 12 }}>
             <Text style={{ fontWeight: '600', marginBottom: 8 }}>Images</Text>
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {task.images.map((img, idx) => (
                 <Pressable
                   key={img.id}
-                  onPress={() => {
-                    setViewerIndex(idx);
-                    setViewerOpen(true);
-                  }}
+                  onPress={() => openViewer(idx)}          // opens modal
                   style={{ position: 'relative', marginRight: 12 }}
                 >
-                  <Image
-                    source={{ uri: img.url }}
-                    style={{ width: 180, height: 180, borderRadius: 12, marginRight: 12 }}
+                  <ExpoImage
+                    source={{ uri: img.url, cacheKey: String(img.id) }}
+                    style={{ width: 180, height: 180, borderRadius: 12 }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    priority="high"
+                    transition={100}
                   />
+
                   {/* zoom badge */}
                   <View
                     style={{
@@ -312,6 +341,7 @@ export default function TaskDetail() {
             </ScrollView>
           </View>
         )}
+
 
         {task.documents.length > 0 && (
           <View style={{ marginBottom: 12 }}>
@@ -422,14 +452,22 @@ export default function TaskDetail() {
         </Pressable>
       </ScrollView>
 
-      {/* ── full‑screen image viewer ─────────────────────────── */}
-      <ImageViewing
-        images={task.images.map(img => ({ uri: img.url }))}
-        imageIndex={viewerIndex}
-        visible={viewerOpen}
-        onRequestClose={() => setViewerOpen(false)}
-        swipeToCloseEnabled
-      />
+
+      {viewerOpen && (
+        <ImageViewing
+          key={`viewer-${viewerNonce}`}
+          images={task.images.map(i => ({
+            uri: `${i.url}?w=1200`,
+            cache: 'force-cache',      // ← always look in cache first
+          }))}
+          imageIndex={viewerIndex}
+          visible
+          onRequestClose={() => setViewerOpen(false)}
+          swipeToCloseEnabled
+          presentationStyle="overFullScreen"
+        />
+      )}
+
 
     </View>
   );

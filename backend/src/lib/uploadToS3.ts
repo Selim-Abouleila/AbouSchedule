@@ -22,6 +22,7 @@ export async function uploadToS3(
       Body:   part.file,
       ContentType: part.mimetype ?? "application/octet-stream",
       ACL: "public-read",
+      CacheControl: "public, max-age=31536000, immutable"
     },
   }).done();
 
