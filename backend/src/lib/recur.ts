@@ -5,7 +5,7 @@ import {
   setDay, setDate, set
 } from 'date-fns';
 import { Recurrence } from '@prisma/client';
-import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 
 
 export function nextDate(
@@ -29,16 +29,18 @@ export function nextDate(
 
   const step = every <= 0 ? 1 : every;
 
+
   const midnightCairo = (d: Date) => {
-    // ① represent `d` in Africa/Cairo
-    const z = utcToZonedTime(d, 'Africa/Cairo');
+    // convert UTC → Cairo local
+    const local = toZonedTime(d, 'Africa/Cairo');
 
-    // ② clamp to local 00:00 00
-    z.setHours(0, 0, 0, 0);
+    // clamp to 00:00 in Cairo
+    local.setHours(0, 0, 0, 0);
 
-    // ③ convert that Cairo‑local midnight back to UTC for storage
-  return zonedTimeToUtc(z, 'Africa/Cairo');
-};
+    // convert that Cairo‑midnight back to UTC
+    return fromZonedTime(local, 'Africa/Cairo');
+  };
+
 
 
   switch (type) {
