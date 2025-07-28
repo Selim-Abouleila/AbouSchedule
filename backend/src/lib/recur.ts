@@ -27,9 +27,14 @@ export function nextDate(
 
   const step = every <= 0 ? 1 : every;
 
+  const midnightLocal = (d: Date) => {
+    d.setHours(0, 0, 0, 0);   // local midnight where the code runs
+    return d;
+  };
+
   switch (type) {
     case 'DAILY':
-      return addDays(base, step);
+      return midnightLocal(addDays(base, step));
 
     /* ---------- WEEKLY ---------- */
     case 'WEEKLY': {
@@ -38,7 +43,7 @@ export function nextDate(
       let next = setDay(base, wanted, { weekStartsOn: 1 });
       // ② if that’s not in the future → add the step
       if (next <= (last ?? start)) next = addWeeks(next, step);
-      return next;
+      return midnightLocal(next);
     }
 
     /* ---------- MONTHLY ---------- */
@@ -49,7 +54,7 @@ export function nextDate(
       if (next <= (last ?? start)) {
         next = setDate(addMonths(base, step), wanted);
       }
-      return next;
+      return midnightLocal(next);
     }
 
     /* ---------- YEARLY ---------- */
@@ -71,7 +76,7 @@ export function nextDate(
       if (next <= (last ?? start)) {
         next = clamp(addYears(base, step));
       }
-      return next;
+      return midnightLocal(next);
     }
 
     default:

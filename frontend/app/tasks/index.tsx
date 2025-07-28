@@ -229,42 +229,43 @@ useEffect(() => {
         <View style={{ flex: 1 }}>
           {/* ── line 1: badges ── */}
           {/* badge row line 1 */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-            {/* 🔥 IMMEDIATE badge – render only if immediate **and not done** */}
+          {/* container row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+
+            {/* status badge – always shown, sits LEFT */}
+            <View
+              style={{
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 4,
+                marginRight: 8,           // ← gap *after* status badge
+                backgroundColor: label.color + '26',
+              }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: label.color }}>
+                {label.caption}
+              </Text>
+            </View>
+
+            {/* 🔥 IMMEDIATE badge – only if needed, now on the RIGHT */}
             {isImmediate && !isDone && (
               <View
                 style={{
                   paddingHorizontal: 6,
                   paddingVertical: 2,
                   borderRadius: 4,
-                  marginRight: 8,
                   backgroundColor: '#FF9F0A26',
-                }}
-              >
+                }}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: '#FF9F0A' }}>
                   🔥 IMMEDIATE
                 </Text>
               </View>
             )}
-
-            {/* status badge (always shown) */}
-            <View
-              style={{
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                borderRadius: 4,
-                backgroundColor: label.color + '26',
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: '700', color: label.color }}>
-                {label.caption}
-              </Text>
-            </View>
           </View>
 
 
+
           {/* ── line 2: title ── */}
-          <Text style={{ fontSize: 17, fontWeight: '700', marginBottom: 2 }}>
+          <Text style={{ fontSize: 17, fontWeight: '700', marginBottom: 2, marginTop: 4,}}>
             {item.title}
           </Text>
 
