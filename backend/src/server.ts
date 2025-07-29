@@ -237,33 +237,26 @@ app.register(async (f) => {
 f.get('/', async (req: any, rep) => {
   const userId = req.user.sub as number;
 
-  /* optional cursor‑based paging */
-  const take    = Math.min(Number(req.query.take) || 50, 100);
-  const cursor  = req.query.cursor ? Number(req.query.cursor) : null;
+  /* paging */
+  const take   = Math.min(Number(req.query.take) || 50, 100);
+  const cursor = req.query.cursor ? Number(req.query.cursor) : null;
 
-  /* simple sort presets (priority | dueAt | createdAt) */
-  const SORT_PRESETS: Record<string, any> = {
-    priority:  { priority: 'asc',  dueAt: 'asc',  id: 'asc' },
-    due:       { dueAt:   'asc',  priority: 'asc', id: 'asc' },
-    created:   { createdAt: 'desc' },
-  };
-  const preset   = String(req.query.sort || 'priority');
-  const orderBy  = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;
+  /* pick preset from query or default */
+  const preset  = String(req.query.sort || 'priority');
+  const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;  // ← array
 
-  /* 1. fetch one page of tasks (real DB rows only) */
   const tasks = await prisma.task.findMany({
-    where:  { userId },
+    where: { userId },
     take,
-    skip:   cursor ? 1 : 0,
+    skip: cursor ? 1 : 0,
     ...(cursor && { cursor: { id: cursor } }),
-    orderBy,
-    include: { images: true, documents: true },   // keep if you need them
+    orderBy,                               // ✅ now valid
+    include: { images: true, documents: true },
   });
 
-  /* 2. compute the next paging cursor (numeric id of last row) */
-  const nextCursor = tasks.length === take ? tasks[tasks.length - 1].id : null;
+  const nextCursor =
+    tasks.length === take ? tasks[tasks.length - 1].id : null;
 
-  /* 3. return plain rows */
   return { tasks, nextCursor };
 });
 
