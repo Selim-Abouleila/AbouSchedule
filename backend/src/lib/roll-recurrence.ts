@@ -57,7 +57,7 @@ export function startRecurrenceRoller() {
             nextOccurrence: next,
             status:
               t.status === 'DONE'
-                ? t.previousStatus ?? 'PENDING'
+                ? t.previousStatus ?? 'ACTIVE'
                 : t.status,
             isDone: false,
           },

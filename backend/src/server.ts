@@ -181,10 +181,7 @@ app.register(async (f) => {
     /* Set Previous Status */
 
     const initStatus = status as Status;               // value that came from UI
-    const prevStatus =
-      initStatus === 'DONE' && recurrence && recurrence !== 'NONE'
-        ? 'ACTIVE'                                      // or 'PENDING', your choice
-        : null;
+    const prevStatus = initStatus !== 'DONE' ? initStatus : null;
 
 
     const task = await prisma.task.create({
@@ -392,11 +389,14 @@ f.get('/:id', async (req: any, rep) => {
 
 
     // set previous status
-    if (data.status === 'DONE') {
-      // fetch current status first (or rely on the row you already have)
-      const current = await prisma.task.findUnique({ where: { id } });
-      data.previousStatus = current?.status ?? null;
+    /* ── previousStatus logic ─────────────────────────── */
+    if (status !== undefined && status !== 'DONE') {
+      // only copy when the new status is NOT 'DONE'
+      data.previousStatus = status;
     }
+    /* if status === 'DONE', data.previousStatus is left undefined
+       → Prisma doesn’t touch the column, so it stays as‑is */
+
 
     /* ❹ Update row only if it belongs to the user */
     const upd = await prisma.task.updateMany({ where: { id, userId }, data });
