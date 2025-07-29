@@ -31,14 +31,9 @@ export function nextDate(
 
 
   const midnightCairo = (d: Date) => {
-    // convert UTC → Cairo local
-    const local = toZonedTime(d, 'Africa/Cairo');
-
-    // clamp to 00:00 in Cairo
-    local.setHours(0, 0, 0, 0);
-
-    // convert that Cairo‑midnight back to UTC
-    return fromZonedTime(local, 'Africa/Cairo');
+     const local = toZonedTime(d, 'Africa/Cairo'); // UTC ➜ Cairo
+    local.setHours(0, 0, 0, 0);                   // clamp to 00:00
+    return local;   
   };
 
 

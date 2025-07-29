@@ -16,7 +16,7 @@ import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.t
 //helpers for sorting
 import { SORT_PRESETS } from './lib/helpers';
 import { nextDate } from "./lib/recur";
-
+import { startRecurrenceRoller } from "./lib/roll-recurrence"
 
 
 
@@ -234,72 +234,39 @@ app.register(async (f) => {
 
 
   /* -----------------------  GET /tasks  ----------------------- */
-  f.get('/', async (req: any) => {
-    const userId = req.user.sub as number;
-    const take = Math.min(Number(req.query.take) || 50, 100);
-    const cursor = req.query.cursor ? Number(req.query.cursor) : null;
+f.get('/', async (req: any, rep) => {
+  const userId = req.user.sub as number;
 
-    const preset = String(req.query.sort || 'priority');
-    const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;
+  /* optional cursor‑based paging */
+  const take    = Math.min(Number(req.query.take) || 50, 100);
+  const cursor  = req.query.cursor ? Number(req.query.cursor) : null;
 
-    /* 1. fetch one page of templates (real DB rows) */
-    const rows = await prisma.task.findMany({
-      where: { userId },
-      take,
-      skip: cursor ? 1 : 0,
-      ...(cursor && { cursor: { id: cursor } }),
-      orderBy,
-      include: { images: true, documents: true },
-    });
+  /* simple sort presets (priority | dueAt | createdAt) */
+  const SORT_PRESETS: Record<string, any> = {
+    priority:  { priority: 'asc',  dueAt: 'asc',  id: 'asc' },
+    due:       { dueAt:   'asc',  priority: 'asc', id: 'asc' },
+    created:   { createdAt: 'desc' },
+  };
+  const preset   = String(req.query.sort || 'priority');
+  const orderBy  = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;
 
-    /* 2. expand recurring templates whose next run ≤ now */
-    const now = new Date();
-
-    const tasks = await Promise.all(
-      rows.map(async (t) => {
-        if (t.recurrence === 'NONE') return t;
-
-        const next = nextDate(
-          t.lastOccurrence,
-          t.createdAt,
-          t.recurrenceEvery ?? 1,
-          t.recurrence,
-          t.recurrenceDow,
-          t.recurrenceDom,
-          t.recurrenceMonth,
-          t.recurrenceDom,
-        );
-
-        // expand recurring template
-        if ((!t.recurrenceEnd || next <= t.recurrenceEnd) && next <= now) {
-          // decide what the status should be once the new period starts
-          const newStatus =
-            t.status === 'DONE'        // if it was closed last cycle
-              ? (t.previousStatus ?? 'PENDING')   // ① restore what it was, or fall back
-              : t.status;                          // ② leave ACTIVE / PENDING unchanged
-
-          await prisma.task.update({
-            where: { id: t.id },
-            data: {
-              lastOccurrence: next,  // advance template
-              isDone: false,         // reopen for the user
-              status: t.previousStatus ?? 'PENDING',     // ← reset status
-            },
-          });
-
-          return {...t, id: `R${t.id}-${+next}`, dueAt: next, isDone: false, status: newStatus };
-        }
-
-        return t;                 // no expansion this time
-      })
-    );
-
-    /* 3. cursor: always the *numeric* id of the last real row we fetched */
-    const lastReal = rows[rows.length - 1];
-    const nextCursor = rows.length === take ? lastReal.id : null;
-
-    return { tasks, nextCursor };
+  /* 1. fetch one page of tasks (real DB rows only) */
+  const tasks = await prisma.task.findMany({
+    where:  { userId },
+    take,
+    skip:   cursor ? 1 : 0,
+    ...(cursor && { cursor: { id: cursor } }),
+    orderBy,
+    include: { images: true, documents: true },   // keep if you need them
   });
+
+  /* 2. compute the next paging cursor (numeric id of last row) */
+  const nextCursor = tasks.length === take ? tasks[tasks.length - 1].id : null;
+
+  /* 3. return plain rows */
+  return { tasks, nextCursor };
+});
+
 
   // GET /media
   f.get('/media', async (req: any) => {
@@ -356,8 +323,6 @@ f.get('/:id', async (req: any, rep) => {
 });
 
 
-
-
   /* DELETE /tasks/:id – remove a task the user owns */
   f.delete('/:id', async (req: any, rep) => {
     const userId = req.user.sub as number;
@@ -374,7 +339,6 @@ f.get('/:id', async (req: any, rep) => {
     // Images go automatically because Image.task has onDelete: Cascade
     return { ok: true };
   });
-
 
 
   /* -----------------------------------------------------------------
@@ -483,6 +447,8 @@ f.get('/:id', async (req: any, rep) => {
   });
 
 }, { prefix: '/tasks' });
+
+startRecurrenceRoller();
 
 /* ───── Start server ───── */
 const PORT = Number(process.env.PORT) || 3000;
