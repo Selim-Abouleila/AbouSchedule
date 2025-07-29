@@ -280,7 +280,14 @@ export default function TaskDetail() {
             <Text style={{ marginBottom: 12 }}>
               <Text style={{ fontWeight: '600' }}>  -Next occurrence: </Text>
               {task.nextOccurrence
-                ? new Date(task.nextOccurrence).toLocaleString()
+                ? new Date(task.nextOccurrence).toLocaleString(undefined, {
+                  timeZone: 'Africa/Cairo',
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
                 : '—'}
             </Text>
           </>

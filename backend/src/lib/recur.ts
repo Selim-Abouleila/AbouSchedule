@@ -5,7 +5,7 @@ import {
   setDay, setDate, set
 } from 'date-fns';
 import { Recurrence } from '@prisma/client';
-import { fromZonedTime, toZonedTime } from 'date-fns-tz';
+
 
 
 export function nextDate(
@@ -30,17 +30,18 @@ export function nextDate(
   const step = every <= 0 ? 1 : every;
 
 
-  const midnightCairo = (d: Date) => {
-     const local = toZonedTime(d, 'Africa/Cairo'); // UTC ➜ Cairo
-    local.setHours(0, 0, 0, 0);                   // clamp to 00:00
-    return local;   
+  /** clamp any Date to 21:00 UTC on that same day */
+  const atNineUtc = (d: Date) => {
+    const u = new Date(d);
+    u.setUTCHours(21, 0, 0, 0);
+    return u;
   };
 
 
 
   switch (type) {
     case 'DAILY':
-      return midnightCairo(addDays(base, step));
+      return atNineUtc(addDays(base, step));
 
     /* ---------- WEEKLY ---------- */
     case 'WEEKLY': {
@@ -49,7 +50,7 @@ export function nextDate(
       let next = setDay(base, wanted, { weekStartsOn: 1 });
       // ② if that’s not in the future → add the step
       if (next <= (last ?? start)) next = addWeeks(next, step);
-      return midnightCairo(next);
+      return atNineUtc(next);
     }
 
     /* ---------- MONTHLY ---------- */
@@ -60,7 +61,7 @@ export function nextDate(
       if (next <= (last ?? start)) {
         next = setDate(addMonths(base, step), wanted);
       }
-      return midnightCairo(next);
+      return atNineUtc(next);
     }
 
     /* ---------- YEARLY ---------- */
@@ -82,7 +83,7 @@ export function nextDate(
       if (next <= (last ?? start)) {
         next = clamp(addYears(base, step));
       }
-      return midnightCairo(next);
+      return atNineUtc(next);
     }
 
     default:
