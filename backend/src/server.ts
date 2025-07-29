@@ -139,7 +139,9 @@ app.register(async (f) => {
       recurrenceDom,
       recurrenceMonth, 
       recurrenceEnd,
-      labelDone
+      labelDone,
+      lastOccurrence,
+      nextOccurrence
     } = fields as {
       title: string;
       description?: string;
@@ -155,7 +157,24 @@ app.register(async (f) => {
       recurrenceMonth?: string;
       recurrenceEnd?: string;
       labelDone?: string;
+      lastOccurrence?: string;
+      nextOccurrence?: string;
     };
+
+    const anchor = dueAt ? new Date(dueAt)              // user‑supplied
+      : new Date();
+
+    /* ── 2. work out the first “next” occurrence ───────── */
+    const firstNextOccurrence  = nextDate(
+  /* last  */ null,                                 // never run yet
+  /* start */ anchor,                               // template start
+      recurrenceEvery ? Number(recurrenceEvery) : 1,
+      recurrence ? (recurrence as Recurrence) : Recurrence.NONE,
+      recurrenceDow ? Number(recurrenceDow) : null,
+      recurrenceDom ? Number(recurrenceDom) : null,
+      recurrenceMonth ? Number(recurrenceMonth) : null,
+      recurrenceDom ? Number(recurrenceDom) : null
+    );
 
     const done = labelDone ? labelDone === 'true' : undefined;
 
@@ -185,6 +204,8 @@ app.register(async (f) => {
         recurrenceMonth: recurrenceMonth ? Number(recurrenceMonth) : null,
         recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
         labelDone: done,
+        lastOccurrence: null,
+        nextOccurrence: firstNextOccurrence,
         userId
       }
     });
@@ -308,64 +329,32 @@ app.register(async (f) => {
 
 
 
-  /* GET /tasks/:id – single task for the logged-in user */
-  f.get('/:id', async (req: any, rep) => {
+  /* GET /tasks/:id – returns one DB row, unchanged */
+f.get('/:id', async (req: any, rep) => {
   const userId = req.user.sub as number;
-  const rawId  = String(req.params.id);
+  const raw    = String(req.params.id);
 
-  // ── 1. normalise the id ───────────────────────────────
-  let dbId: number;
-  let occTS: number | null = null;
+  /* 1. extract the numeric part (supports "R123‑…" and "123") */
+  const match  = raw.match(/^R?(\d+)/);
+  if (!match) return rep.code(400).send({ error: 'Bad task id' });
 
-  if (rawId.startsWith('R')) {
-    const m = rawId.match(/^R(\d+)-(\d+)$/);
-    if (!m) return rep.code(400).send({ error: 'Bad task id' });
-    dbId  = +m[1];
-    occTS = +m[2];            // Unix ms of this occurrence
-  } else {
-    dbId = +rawId;
-  }
+  const dbId = +match[1];
   if (!Number.isFinite(dbId)) {
     return rep.code(400).send({ error: 'Bad task id' });
   }
 
-  // ── 2. fetch the template row ─────────────────────────
-  const t = await prisma.task.findFirst({
+  /* 2. fetch exactly what’s in the DB */
+  const task = await prisma.task.findFirst({
     where: { id: dbId, userId },
     include: { images: true, documents: true },
   });
-  if (!t) return rep.code(404).send({ error: 'Task not found' });
 
-  // ── 3. if this is a virtual occurrence, pretend now ──
-  let out: any = t;
-  if (occTS !== null) {
-  const occDate = new Date(occTS);
-  const templateStart = t.dueAt ?? occDate;  // ← avoid null
+  if (!task) return rep.code(404).send({ error: 'Task not found' });
 
-  out = {
-    ...t,
-    id: rawId,
-    dueAt: occDate,
-    status:
-      t.status === 'DONE' ? (t.previousStatus ?? 'PENDING') : t.status,
-    isDone: false,
-    lastOccurrence: t.lastOccurrence,
-    nextOccurrence: nextDate(
-      /* last  */ occDate,        // this occurrence
-      /* start */ templateStart,  // anchor of the series
-      t.recurrenceEvery ?? 1,
-      t.recurrence,
-      t.recurrenceDow,
-      t.recurrenceDom,
-      t.recurrenceMonth,
-      t.recurrenceDom            // yearly day‑of‑month
-    ),
-  };
-}
-
-
-  return out;
+  /* 3. return row as‑is (lastOccurrence, nextOccurrence already set) */
+  return task;
 });
+
 
 
 
