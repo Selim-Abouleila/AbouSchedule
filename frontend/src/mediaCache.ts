@@ -1,66 +1,130 @@
-import * as FileSystem from "expo-file-system";
-import * as Crypto from "expo-crypto";
+// src/helpers/mediaHelper.ts
+import * as FileSystem from 'expo-file-system'
+import { endpoints }        from './api'
+import { getToken }         from './auth'
+import { jwtDecode }        from 'jwt-decode'
+import * as Crypto          from 'expo-crypto'
 
-/* ---------- constants ---------- */
-const DIR        = FileSystem.cacheDirectory + "media/";
-const MAX_CACHE  = 1 * 1024 * 1024 * 1024;           // 200 MB
+// Base path inside the app’s sandbox:
+const MEDIA_BASE = FileSystem.documentDirectory + 'media'
 
-/* ---------- cache maintenance ---------- */
-export async function ensureDir() {
-  await FileSystem.makeDirectoryAsync(DIR, { intermediates: true }).catch(() => {});
+interface JwtPayload { sub: string }
+
+async function makeFileName(url: string): Promise<string> {
+  const hash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.MD5,
+    url
+  )
+  const ext = url.split('.').pop()!.split('?')[0]
+  return `${hash}.${ext}`
 }
 
-export async function pruneMediaCache() {
-  await ensureDir();                             // ↙️ first make sure DIR exists
-  const files = await FileSystem.readDirectoryAsync(DIR);
+// right under makeFileName(...)
+function getDocFileName(url: string): string {
+  // grab “foo.pdf” (or whatever) out of “https://…/foo.pdf?token=…”
+  return url.split('/').pop()!.split('?')[0]
+}
 
-  const stats = await Promise.all(
-    files.map(async f => {
-      const info = await FileSystem.getInfoAsync(DIR + f);
-      if (!info.exists) return { path: DIR + f, mtime: 0, size: 0 };
 
-      return {
-        path: DIR + f,
-        mtime: info.modificationTime ?? 0,
-        size: info.size ?? 0,
-      };
-    })
-  );
+async function getUserId(): Promise<string> {
+  const token = await getToken()
+  if (!token) throw new Error('No authentication token found')
+  const { sub: userId } = jwtDecode<JwtPayload>(token)
+  return userId
+}
 
-  let total = stats.reduce((s, f) => s + f.size, 0);
-  if (total <= MAX_CACHE) return;
+/**
+ * Ensure the folder exists and return its URI
+ */
+async function ensureFolder(path: string): Promise<string> {
+  const info = await FileSystem.getInfoAsync(path)
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(path, { intermediates: true })
+  }
+  return path
+}
 
-  stats.sort((a, b) => a.mtime - b.mtime);       // oldest first
-  for (const f of stats) {
-    await FileSystem.deleteAsync(f.path);
-    total -= f.size;
-    if (total <= MAX_CACHE) break;
+/**
+ * Creates user-specific folders for images and documents
+ */
+export async function initUserMediaFolder(): Promise<string> {
+  const userId = await getUserId()
+  const imgDir = `${MEDIA_BASE}/${userId}/images`
+  return ensureFolder(imgDir)
+}
+
+export async function initUserDocsFolder(): Promise<string> {
+  const userId = await getUserId()
+  const docDir = `${MEDIA_BASE}/${userId}/documents`
+  return ensureFolder(docDir)
+}
+
+/**
+ * Sync down images AND documents from the backend
+ */
+export async function syncMedia(): Promise<void> {
+  const token = await getToken();
+  if (!token) throw new Error('Not authenticated');
+
+  try {
+    // 1. Fetch the media manifest from your backend
+    const res = await fetch(endpoints.media, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch media: ${res.status}`);
+    }
+
+    // 2. Parse out the two arrays
+    const { images, documents } = (await res.json()) as {
+      images: Array<{ url: string }>;
+      documents: Array<{ url: string }>;
+    };
+
+    // 3. Download images (only if missing)
+    const imgDir = await initUserMediaFolder();
+    for (const { url } of images) {
+      const name = await makeFileName(url);
+      const fileUri = `${imgDir}/${name}`;
+      const info = await FileSystem.getInfoAsync(fileUri);
+      if (!info.exists) {
+        await FileSystem.downloadAsync(url, fileUri);
+      }
+    }
+
+    // 4. Download documents (only if missing)
+    const docDir = await initUserDocsFolder();
+    for (const { url } of documents) {
+      const name = getDocFileName(url);
+      const fileUri = `${docDir}/${name}`;
+      const info = await FileSystem.getInfoAsync(fileUri);
+      if (!info.exists) {
+        await FileSystem.downloadAsync(url, fileUri);
+      }
+    }
+
+  } catch (e) {
+    // If offline or any step fails, we swallow the error
+    // so the UI can still read whatever is already cached on disk.
+    console.warn('syncMedia failed (possibly offline); loading cache only:', e);
   }
 }
 
-/* ---------- helpers for downloading / resolving ---------- */
-export async function cachePath(url: string) {
-  const name = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    url
-  );
-  const ext = url.match(/\.\w{3,4}$/)?.[0] ?? "";
-  return DIR + name + ext;
+
+/**
+ * List local image URIs
+ */
+export async function getLocalMediaUris(): Promise<string[]> {
+  const imgDir = await initUserMediaFolder()
+  const files = await FileSystem.readDirectoryAsync(imgDir)
+  return files.map(name => `${imgDir}/${name}`)
 }
 
-export async function localUri(url: string) {
-  await ensureDir();
-
-  const path = await cachePath(url);
-  const info = await FileSystem.getInfoAsync(path);
-
-  if (info.exists) return path;                  // already cached
-
-  await FileSystem.downloadAsync(url, path);     // first download
-  return path;
-}
-
-/* optional full purge */
-export async function clearMediaCache() {
-  await FileSystem.deleteAsync(DIR, { idempotent: true });
+/**
+ * List local document URIs
+ */
+export async function getLocalDocumentUris(): Promise<string[]> {
+  const docDir = await initUserDocsFolder()
+  const files = await FileSystem.readDirectoryAsync(docDir)
+  return files.map(name => `${docDir}/${name}`)
 }

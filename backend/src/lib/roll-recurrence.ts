@@ -3,7 +3,11 @@ import cron   from 'node-cron';
 import { nextDate } from "./recur";
 import { Recurrence } from '@prisma/client';
 import { PrismaClient } from '@prisma/client';
-
+import {
+  addDays, addWeeks, addMonths, addYears,
+  startOfDay, startOfWeek, startOfMonth, startOfYear,
+  setDay, setDate, set, subDays
+} from 'date-fns';
 const prisma = new PrismaClient();
 
 export function startRecurrenceRoller() {
@@ -47,6 +51,11 @@ export function startRecurrenceRoller() {
             t.recurrenceMonth,
             t.recurrenceDom
           );
+
+          if (next <= last) {
+  // nudge it forward — one day is plenty, one minute also works
+  next = addDays(last, 1);         // or addMinutes(last, 1)
+}
         }
 
         /* 3. update row in one DB write */

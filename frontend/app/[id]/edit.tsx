@@ -561,7 +561,7 @@ const save = async () => {
 
   if (isOnlyScalars) {
     /* ❶ simple JSON PATCH */
-    const body = {
+    const body: any = {
       title, description, priority, status, size,
       dueAt: dueAt ? dueAt.toISOString() : null,
       timeCapMinutes: totalMinutes > 0 ? totalMinutes : null,
@@ -572,6 +572,19 @@ const save = async () => {
       keep:      keepImgIds.join(','),     // images
       keepDocs:  keepDocIds.join(','),     // documents
     };
+
+    if (recurring) {
+        if (recurrence === "WEEKLY") {
+          body.recurrenceDow = Number(recurrenceDow);
+        }
+        if (recurrence === "MONTHLY") {
+          body.recurrenceDom = Number(recurrenceDom);
+        }
+        if (recurrence === "YEARLY") {
+          body.recurrenceMonth = Number(recurrenceMonth);
+         body.recurrenceDom   = Number(recurrenceDom);
+        }
+      }
 
 
     const res = await fetch(`${endpoints.tasks}/${id}`, {
