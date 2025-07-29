@@ -2,7 +2,7 @@
 import {
   addDays, addWeeks, addMonths, addYears,
   startOfDay, startOfWeek, startOfMonth, startOfYear,
-  setDay, setDate, set
+  setDay, setDate, set, subDays
 } from 'date-fns';
 import { Recurrence } from '@prisma/client';
 
@@ -32,7 +32,9 @@ export function nextDate(
 
   /** clamp any Date to 21:00 UTC on that same day */
   const atNineUtc = (d: Date) => {
-    const u = new Date(d);
+    // 1) go back one full day
+    const u = subDays(d, 1);
+    // 2) clamp to 21:00 UTC exactly
     u.setUTCHours(21, 0, 0, 0);
     return u;
   };

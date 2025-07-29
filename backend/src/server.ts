@@ -394,8 +394,54 @@ f.get('/:id', async (req: any, rep) => {
       // only copy when the new status is NOT 'DONE'
       data.previousStatus = status;
     }
-    /* if status === 'DONE', data.previousStatus is left undefined
-       → Prisma doesn’t touch the column, so it stays as‑is */
+    /// ❸b · If the user changed any recurrence field, recompute nextOccurrence
+    const existing = await prisma.task.findUnique({
+      where: { id, userId },
+      select: {
+        dueAt: true,
+        recurrence: true,
+        recurrenceEvery: true,
+        recurrenceDow: true,
+        recurrenceDom: true,
+        recurrenceMonth: true,
+        recurrenceEnd: true,
+      },
+    });
+    if (!existing) return rep.code(404).send({ error: "Task not found" });
+
+    const recFieldsChanged =
+      recurrence !== undefined ||
+      recurrenceEvery !== undefined ||
+      recurrenceDow !== undefined ||
+      recurrenceDom !== undefined ||
+      recurrenceMonth !== undefined;
+
+    if (recFieldsChanged) {
+      // pick up either the new dueAt or fall back to the old one or now
+      const anchor = data.dueAt ?? existing.dueAt ?? new Date();
+
+      // merge in new or existing recurrence settings
+      const everyVal = data.recurrenceEvery ?? existing.recurrenceEvery ?? 1;
+      const typeVal = (data.recurrence as Recurrence) ?? existing.recurrence;
+      const dowVal = data.recurrenceDow ?? existing.recurrenceDow ?? null;
+      const domVal = data.recurrenceDom ?? existing.recurrenceDom ?? null;
+      const monthVal = data.recurrenceMonth ?? existing.recurrenceMonth ?? null;
+
+      // re‑run your nextDate helper
+      data.nextOccurrence = nextDate(
+    /* last */ null,
+    /* start */ anchor,
+    /* every */ everyVal,
+    /* type  */ typeVal,
+    /* dow   */ dowVal,
+    /* dom   */ domVal,
+    /* month */ monthVal,
+    /* recDom*/ domVal
+      );
+
+      // clear lastOccurrence so it truly restarts
+      data.lastOccurrence = null;
+    }
 
 
     /* ❹ Update row only if it belongs to the user */
@@ -428,8 +474,6 @@ f.get('/:id', async (req: any, rep) => {
       await prisma.document.createMany({ data: newDocs });
     }
     
-
-
 
     /* ❻ Return fresh record */
     const task = await prisma.task.findUnique({
