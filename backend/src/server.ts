@@ -310,52 +310,62 @@ app.register(async (f) => {
 
   /* GET /tasks/:id – single task for the logged-in user */
   f.get('/:id', async (req: any, rep) => {
-    const userId = req.user.sub as number;
-    const rawId = String(req.params.id);
+  const userId = req.user.sub as number;
+  const rawId  = String(req.params.id);
 
-    // ── 1. normalise the id ───────────────────────────────
-    let dbId: number;
-    let occTS: number | null = null;
+  // ── 1. normalise the id ───────────────────────────────
+  let dbId: number;
+  let occTS: number | null = null;
 
-    if (rawId.startsWith('R')) {
-      const m = rawId.match(/^R(\d+)-(\d+)$/);
-      if (!m) return rep.code(400).send({ error: 'Bad task id' });
-      dbId = +m[1];
-      occTS = +m[2];            // Unix ms of this occurrence
-    } else {
-      dbId = +rawId;
-    }
-    if (!Number.isFinite(dbId)) {
-      return rep.code(400).send({ error: 'Bad task id' });
-    }
+  if (rawId.startsWith('R')) {
+    const m = rawId.match(/^R(\d+)-(\d+)$/);
+    if (!m) return rep.code(400).send({ error: 'Bad task id' });
+    dbId  = +m[1];
+    occTS = +m[2];            // Unix ms of this occurrence
+  } else {
+    dbId = +rawId;
+  }
+  if (!Number.isFinite(dbId)) {
+    return rep.code(400).send({ error: 'Bad task id' });
+  }
 
-    // ── 2. fetch the template row ─────────────────────────
-    const t = await prisma.task.findFirst({
-      where: { id: dbId, userId },
-      include: { images: true, documents: true },
-    });
-    if (!t) return rep.code(404).send({ error: 'Task not found' });
-
-    // ── 3. if this is a virtual occurrence, pretend now ──
-    let out: any = t;
-    if (occTS !== null) {
-      const occDate = new Date(occTS);
-      out = {
-        ...t,
-        id: rawId,                     // keep the “R…” id for the client
-        dueAt: occDate,
-        status: t.status === 'DONE' ? (t.previousStatus ?? 'PENDING') : t.status,
-        isDone: false,
-        lastOccurrence: t.lastOccurrence,
-        nextOccurrence: nextDate(occDate, occDate, t.recurrenceEvery ?? 1,
-          t.recurrence, t.recurrenceDow,
-          t.recurrenceDom, t.recurrenceMonth,
-          t.recurrenceDom),
-      };
-    }
-
-    return out;
+  // ── 2. fetch the template row ─────────────────────────
+  const t = await prisma.task.findFirst({
+    where: { id: dbId, userId },
+    include: { images: true, documents: true },
   });
+  if (!t) return rep.code(404).send({ error: 'Task not found' });
+
+  // ── 3. if this is a virtual occurrence, pretend now ──
+  let out: any = t;
+  if (occTS !== null) {
+  const occDate = new Date(occTS);
+  const templateStart = t.dueAt ?? occDate;  // ← avoid null
+
+  out = {
+    ...t,
+    id: rawId,
+    dueAt: occDate,
+    status:
+      t.status === 'DONE' ? (t.previousStatus ?? 'PENDING') : t.status,
+    isDone: false,
+    lastOccurrence: t.lastOccurrence,
+    nextOccurrence: nextDate(
+      /* last  */ occDate,        // this occurrence
+      /* start */ templateStart,  // anchor of the series
+      t.recurrenceEvery ?? 1,
+      t.recurrence,
+      t.recurrenceDow,
+      t.recurrenceDom,
+      t.recurrenceMonth,
+      t.recurrenceDom            // yearly day‑of‑month
+    ),
+  };
+}
+
+
+  return out;
+});
 
 
 
