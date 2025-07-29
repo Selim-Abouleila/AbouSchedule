@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
 export function startRecurrenceRoller() {
   /* “0 0 * * *” = midnight every day; TZ makes it Cairo midnight */
   cron.schedule(
-    '23 0 * * *',
+    '35 0 * * *',
     async () => {
       const now = new Date();
 

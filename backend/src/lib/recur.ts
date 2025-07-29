@@ -45,48 +45,39 @@ export function nextDate(
     case 'DAILY':
       return atNineUtc(addDays(base, step));
 
-    /* ---------- WEEKLY ---------- */
     case 'WEEKLY': {
-      const wanted = dow ?? 1;                        // default Monday
-      // ① try the wanted weekday inside *this* week
-      let next = setDay(base, wanted, { weekStartsOn: 1 });
-      // ② if that’s not in the future → add the step
-      if (next <= (last ?? start)) next = addWeeks(next, step);
+      const wanted = dow ?? 1; // default Monday
+      let next = addWeeks(base, step); // Start by moving forward
+      next = setDay(next, wanted, { weekStartsOn: 1 }); // Adjust to the desired day
+      if (next <= base) next = addWeeks(next, 1); // Ensure it's in the future
       return atNineUtc(next);
     }
 
-    /* ---------- MONTHLY ---------- */
     case 'MONTHLY': {
-      const wanted = dom ?? 1;                        // default 1st
-      // setDate rolls 31 Feb → 03 Mar etc. (acceptable)
-      let next = setDate(base, wanted);
-      if (next <= (last ?? start)) {
-        next = setDate(addMonths(base, step), wanted);
-      }
+      const wanted = dom ?? 1; // default 1st
+      let next = addMonths(base, step); // Start by moving forward
+      next = setDate(next, wanted); // Adjust to the desired day
+      if (next <= base) next = addMonths(next, 1); // Ensure it's in the future
       return atNineUtc(next);
     }
 
-    /* ---------- YEARLY ---------- */
     case 'YEARLY': {
-      const m = (recMonth ?? 1) - 1;                  // JS months 0–11
+      const m = (recMonth ?? 1) - 1; // JS months 0–11
       const d = recDom ?? 1;
 
-      /* helper: clamp 31 Apr → 30 Apr, 29 Feb → 28 Feb */
+      /* helper: clamp 31 Apr → 30 Apr, 29 Feb → 28 Feb */
       const clamp = (yearStart: Date) => {
         let candidate = set(yearStart, { month: m, date: d });
         return candidate.getMonth() === m
           ? candidate
-          : set(yearStart, { month: m, date: 0 });    // last day prev‑month
+          : set(yearStart, { month: m, date: 0 }); // last day prev-month
       };
 
-      // ① date inside *this* year
-      let next = clamp(base);
-      // ② too late?  go N years forward
-      if (next <= (last ?? start)) {
-        next = clamp(addYears(base, step));
-      }
-      return atNineUtc(next);
-    }
+      let next = addYears(base, step); // Start by moving forward
+      next = clamp(set(next, { month: m, date: d })); // Adjust and clamp
+      if (next <= base) next = addYears(next, 1); // Ensure it's in the future
+  return atNineUtc(next);
+}
 
     default:
       return base;            // NONE
