@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 import { endpoints } from '../../src/api';
 import { getToken }  from '../../src/auth';
@@ -22,6 +23,7 @@ import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
+
 
 
 
@@ -109,6 +111,8 @@ export default function TaskDetail() {
     
     // Get filename from URL
     const filename = getDocFileName(url);
+    // Clean filename for sharing by removing AWS S3 key prefix
+    const cleanFilename = getCleanFileName(filename);
     const fileUri = `${FileSystem.documentDirectory}documents/${filename}`;
     
     // Check if file exists locally
@@ -116,6 +120,14 @@ export default function TaskDetail() {
     console.log('File info:', info);
     
     if (!info.exists) {
+      // Create documents directory if it doesn't exist
+      const documentsDir = `${FileSystem.documentDirectory}documents`;
+      const dirInfo = await FileSystem.getInfoAsync(documentsDir);
+      if (!dirInfo.exists) {
+        console.log('Creating documents directory:', documentsDir);
+        await FileSystem.makeDirectoryAsync(documentsDir, { intermediates: true });
+      }
+      
       // Download the file
       console.log('Downloading document:', url, 'to:', fileUri);
       try {
@@ -188,11 +200,21 @@ export default function TaskDetail() {
       try {
         const isAvailable = await Sharing.isAvailableAsync();
         if (isAvailable) {
-          await Sharing.shareAsync(fileUri, {
+          // Create a copy with clean filename for sharing
+          const cleanFileUri = `${FileSystem.documentDirectory}documents/${cleanFilename}`;
+          await FileSystem.copyAsync({
+            from: fileUri,
+            to: cleanFileUri
+          });
+          
+          await Sharing.shareAsync(cleanFileUri, {
             mimeType: mimeType,
             dialogTitle: 'Open Document',
             UTI: getUTIForExtension(extension || '')
           });
+          
+          // Clean up the temporary file
+          await FileSystem.deleteAsync(cleanFileUri, { idempotent: true });
         } else {
           Alert.alert('Error', 'Sharing is not available on this device');
         }
@@ -222,6 +244,19 @@ export default function TaskDetail() {
     }
   };
 
+  // Helper function to clean filename by removing AWS S3 key prefix
+  const getCleanFileName = (filename: string): string => {
+    // Remove UUID prefix if present (format: uuid_filename.pdf)
+    if (filename.includes('_')) {
+      const parts = filename.split('_');
+      // If we have more than 1 part and the first part looks like a UUID (32+ characters)
+      if (parts.length > 1 && parts[0].length >= 32) {
+        return parts.slice(1).join('_');
+      }
+    }
+    return filename;
+  };
+
   // Helper function to get UTI for iOS sharing
   const getUTIForExtension = (extension: string): string => {
     switch (extension.toLowerCase()) {
@@ -240,6 +275,43 @@ export default function TaskDetail() {
         return 'public.plain-text';
       default:
         return 'public.data';
+    }
+  };
+
+  // Helper function to format file size in human-readable format
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  // Helper function to get readable file type from MIME type
+  const getReadableFileType = (mimeType: string): string => {
+    switch (mimeType.toLowerCase()) {
+      case 'application/pdf':
+        return 'PDF Document';
+      case 'application/msword':
+        return 'Word Document (.doc)';
+      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        return 'Word Document (.docx)';
+      case 'application/vnd.ms-excel':
+        return 'Excel Spreadsheet (.xls)';
+      case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+        return 'Excel Spreadsheet (.xlsx)';
+      case 'application/vnd.ms-powerpoint':
+        return 'PowerPoint Presentation (.ppt)';
+      case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+        return 'PowerPoint Presentation (.pptx)';
+      case 'text/plain':
+        return 'Text Document';
+      case 'application/rtf':
+        return 'Rich Text Document';
+      default:
+        return mimeType;
     }
   };
 
@@ -335,121 +407,186 @@ export default function TaskDetail() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
       {/* ── main scrollable content ───────────────────────────── */}
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+        <View style={{ 
+          flexDirection: 'row', 
+          alignItems: 'center', 
+          marginBottom: 20,
+          backgroundColor: 'white',
+          padding: 16,
+          borderRadius: 12,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+        }}>
           <View
             style={{
-              width: 10,
-              height: 50,
-              marginRight: 12,
-              borderRadius: 4,
+              width: 6,
+              height: 40,
+              marginRight: 16,
+              borderRadius: 3,
               backgroundColor: statusColor[task.status],
             }}
           />
-          <Text style={{ fontSize: 24, fontWeight: '700', flexShrink: 1 }}>
+          <Text style={{ fontSize: 22, fontWeight: '700', flexShrink: 1, color: '#1a1a1a' }}>
             {task.title}
           </Text>
         </View>
 
         {/* Meta */}
-        <Text style={{ marginBottom: 4 }}>
-          <Text style={{ fontWeight: '600' }}>Priority: </Text>
-          {task.priority}
-        </Text>
-        <Text style={{ marginBottom: 4 }}>
-          <Text style={{ fontWeight: '600' }}>Size: </Text>
-          {task.size}
-        </Text>
-        <Text style={{ marginBottom: 4 }}>
-          <Text style={{ fontWeight: '600' }}>Status: </Text>
-          {task.status}
-        </Text>
-        {task.dueAt && (
-          <Text style={{ marginBottom: 4 }}>
-            <Text style={{ fontWeight: '600' }}>Due: </Text>
-            {new Date(task.dueAt).toLocaleString()}
-          </Text>
-        )}
+        <View style={{
+          backgroundColor: 'white',
+          padding: 16,
+          borderRadius: 12,
+          marginBottom: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 3,
+          elevation: 2,
+        }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text style={{ fontWeight: '600', color: '#666' }}>Priority</Text>
+            <Text style={{ color: '#1a1a1a' }}>{task.priority}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text style={{ fontWeight: '600', color: '#666' }}>Size</Text>
+            <Text style={{ color: '#1a1a1a' }}>{task.size}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text style={{ fontWeight: '600', color: '#666' }}>Status</Text>
+            <Text style={{ color: '#1a1a1a' }}>{task.status}</Text>
+          </View>
+          {task.dueAt && (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Due</Text>
+              <Text style={{ color: '#1a1a1a' }}>{new Date(task.dueAt).toLocaleString()}</Text>
+            </View>
+          )}
+        </View>
 
         {/* Recurrence (only when the task is a template) */}
         {task.recurrence !== 'NONE' && (
-          <>
-            <Text style={{ fontWeight: '600', marginBottom: 4 }}>Recurrence: </Text>
+          <View style={{
+            backgroundColor: 'white',
+            padding: 16,
+            borderRadius: 12,
+            marginBottom: 16,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 3,
+            elevation: 2,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <Ionicons name="repeat" size={18} color="#6c757d" style={{ marginRight: 8 }} />
+              <Text style={{ fontWeight: '600', fontSize: 16, color: '#1a1a1a' }}>Recurrence</Text>
+            </View>
 
             {/* type & frequency */}
-            <Text style={{ marginBottom: 4 }}>
-              <Text style={{ fontWeight: '600' }}>  -Type: </Text>
-              {task.recurrence}
-            </Text>
-            <Text style={{ marginBottom: 4 }}>
-              <Text style={{ fontWeight: '600' }}>  -Every: </Text>
-              {task.recurrenceEvery ?? 1}
-            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Type</Text>
+              <Text style={{ color: '#1a1a1a', textTransform: 'capitalize' }}>{task.recurrence.toLowerCase()}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Every</Text>
+              <Text style={{ color: '#1a1a1a' }}>{task.recurrenceEvery ?? 1}</Text>
+            </View>
 
             {/* ─── specific target day/date ─── */}
             {task.recurrence === 'WEEKLY' && (
-              <Text style={{ marginBottom: 4 }}>
-                <Text style={{ fontWeight: '600' }}>  -Day of week: </Text>
-                {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-                [task.recurrenceDow ?? 1]}
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontWeight: '600', color: '#666' }}>Day of week</Text>
+                <Text style={{ color: '#1a1a1a' }}>
+                  {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+                  [task.recurrenceDow ?? 1]}
+                </Text>
+              </View>
             )}
 
             {task.recurrence === 'MONTHLY' && (
-              <Text style={{ marginBottom: 4 }}>
-                <Text style={{ fontWeight: '600' }}>  -Day of month: </Text>
-                {task.recurrenceDom ?? 1}
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontWeight: '600', color: '#666' }}>Day of month</Text>
+                <Text style={{ color: '#1a1a1a' }}>{task.recurrenceDom ?? 1}</Text>
+              </View>
             )}
 
             {task.recurrence === 'YEARLY' && (
-              <Text style={{ marginBottom: 4 }}>
-                <Text style={{ fontWeight: '600' }}>  -Date: </Text>
-                {`${[
-                  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-                ][(task.recurrenceMonth ?? 1) - 1]} ${task.recurrenceDom ?? 1}`}
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontWeight: '600', color: '#666' }}>Date</Text>
+                <Text style={{ color: '#1a1a1a' }}>
+                  {`${[
+                    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+                  ][(task.recurrenceMonth ?? 1) - 1]} ${task.recurrenceDom ?? 1}`}
+                </Text>
+              </View>
             )}
 
             {/* last / next runs */}
-            <Text style={{ marginBottom: 4 }}>
-              <Text style={{ fontWeight: '600' }}>  -Last occurrence: </Text>
-              {task.lastOccurrence
-                ? new Date(task.lastOccurrence).toLocaleString()
-                : '—'}
-            </Text>
-            <Text style={{ marginBottom: 12 }}>
-              <Text style={{ fontWeight: '600' }}>  -Next occurrence: </Text>
-              {task.nextOccurrence
-                ? new Date(task.nextOccurrence).toLocaleString()
-                : '—'}
-            </Text>
-          </>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Last occurrence</Text>
+              <Text style={{ color: '#1a1a1a' }}>
+                {task.lastOccurrence
+                  ? new Date(task.lastOccurrence).toLocaleDateString()
+                  : '—'}
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Next occurrence</Text>
+              <Text style={{ color: '#1a1a1a' }}>
+                {task.nextOccurrence
+                  ? new Date(task.nextOccurrence).toLocaleDateString()
+                  : '—'}
+              </Text>
+            </View>
+          </View>
         )}
 
         {/* Description */}
         {task.description?.trim() && (
-          <View style={{ marginTop: 12, marginBottom: 12 }}>
-            <Text style={{ fontWeight: '600', marginBottom: 2 }}>
+          <View style={{
+            backgroundColor: 'white',
+            padding: 16,
+            borderRadius: 12,
+            marginBottom: 16,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 3,
+            elevation: 2,
+          }}>
+            <Text style={{ fontWeight: '600', marginBottom: 8, color: '#1a1a1a' }}>
               Description
             </Text>
-            <Text>{task.description}</Text>
+            <Text style={{ color: '#666', lineHeight: 20 }}>{task.description}</Text>
           </View>
         )}
 
 
-        <Text style={{ color: '#6e6e6e', marginBottom: 12 }}>
+        <Text style={{ color: '#999', marginBottom: 16, fontSize: 12, textAlign: 'center' }}>
           Created: {new Date(task.createdAt).toLocaleString()}
         </Text>
 
         {/* Images */}
         {task.images.length > 0 && (
-          <View style={{ marginBottom: 12 }}>
-            <Text style={{ fontWeight: '600', marginBottom: 8 }}>Images</Text>
+          <View style={{
+            backgroundColor: 'white',
+            padding: 16,
+            borderRadius: 12,
+            marginBottom: 16,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 3,
+            elevation: 2,
+          }}>
+            <Text style={{ fontWeight: '600', marginBottom: 12, color: '#1a1a1a' }}>Images</Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {task.images.map((img, idx) => (
@@ -460,7 +597,7 @@ export default function TaskDetail() {
                 >
                   <ExpoImage
                     source={{ uri: img.url, cacheKey: String(img.id) }}
-                    style={{ width: 180, height: 180, borderRadius: 12 }}
+                    style={{ width: 160, height: 160, borderRadius: 8 }}
                     contentFit="cover"
                     cachePolicy="memory-disk"
                     priority="high"
@@ -471,15 +608,15 @@ export default function TaskDetail() {
                   <View
                     style={{
                       position: 'absolute',
-                      top: 6,
-                      left: 6,
-                      backgroundColor: '#0008',
-                      paddingHorizontal: 4,
-                      paddingVertical: 1,
-                      borderRadius: 6,
+                      top: 8,
+                      left: 8,
+                      backgroundColor: 'rgba(0,0,0,0.7)',
+                      paddingHorizontal: 6,
+                      paddingVertical: 3,
+                      borderRadius: 12,
                     }}
                   >
-                    <Text style={{ color: 'white', fontSize: 12 }}>🔍</Text>
+                    <Text style={{ color: 'white', fontSize: 10 }}>🔍</Text>
                   </View>
                 </Pressable>
               ))}
@@ -489,15 +626,39 @@ export default function TaskDetail() {
 
 
         {task.documents.length > 0 && (
-          <View style={{ marginBottom: 12 }}>
-            <Text style={{ fontWeight: '600', marginBottom: 8 }}>Documents</Text>
+          <View style={{
+            backgroundColor: 'white',
+            padding: 16,
+            borderRadius: 12,
+            marginBottom: 16,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 3,
+            elevation: 2,
+          }}>
+            <Text style={{ fontWeight: '600', marginBottom: 12, color: '#1a1a1a' }}>Documents</Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {task.documents.map((doc) => {
-                const isImg = doc.mime.startsWith('image/');
-                const name = doc.name ?? `doc-${doc.id}`;
-                const decodedName = decodeURIComponent(name);
-                const title = decodedName.includes('_') ? decodedName.split('_').slice(1).join('_') : decodedName;
+                             {task.documents.map((doc) => {
+                 const isImg = doc.mime.startsWith('image/');
+                 
+                                   // Get the proper filename from the URL if name is not available
+                  const getDisplayName = () => {
+                    if (doc.name && doc.name !== `doc-${doc.id}`) {
+                      // Use the name from database if it's not a generic doc-id
+                      return decodeURIComponent(doc.name);
+                    } else {
+                      // Extract filename from URL
+                      const filename = getDocFileName(doc.url);
+                      // Remove UUID prefix if present (format: uuid_filename.pdf)
+                      const cleanName = filename.includes('_') ? filename.split('_').slice(1).join('_') : filename;
+                      // Decode any remaining URL encoding (like %20 for spaces)
+                      return decodeURIComponent(cleanName) || `Document ${doc.id}`;
+                    }
+                  };
+                 
+                 const title = getDisplayName();
 
                 return (
                   <View /* wrapper lets us layer the badge */
@@ -523,24 +684,27 @@ export default function TaskDetail() {
                       ) : (
                         <View
                           style={{
-                            width: 180,
-                            height: 180,
-                            borderRadius: 12,
-                            backgroundColor: '#E9E9E9',
+                            width: 160,
+                            height: 160,
+                            borderRadius: 8,
+                            backgroundColor: '#f8f9fa',
                             justifyContent: 'center',
                             alignItems: 'center',
                             position: 'relative',
+                            borderWidth: 1,
+                            borderColor: '#e9ecef',
                           }}
                         >
-                          <Text style={{ fontSize: 40 }}>📄</Text>
+                          <Text style={{ fontSize: 36 }}>📄</Text>
                           <Text
                             numberOfLines={2}
                             style={{
                               marginTop: 8,
-                              maxWidth: 160,
+                              maxWidth: 140,
                               textAlign: 'center',
-                              fontSize: 12,
+                              fontSize: 11,
                               color: '#666',
+                              lineHeight: 14,
                             }}
                           >
                             {title}
@@ -550,21 +714,86 @@ export default function TaskDetail() {
                             position: 'absolute',
                             top: 8,
                             right: 8,
-                            backgroundColor: '#0008',
+                            backgroundColor: 'rgba(0,0,0,0.7)',
                             borderRadius: 12,
                             width: 24,
                             height: 24,
                             justifyContent: 'center',
                             alignItems: 'center',
                           }}>
-                            <Text style={{ color: 'white', fontSize: 12 }}>📂</Text>
+                            <Text style={{ color: 'white', fontSize: 10 }}>📂</Text>
                           </View>
                         </View>
                       )}
                     </Pressable>
 
                     {/* ⓘ badge goes on top of everything */}
-                    <InfoBadge onPress={() => Alert.alert('Document Info', `Name: ${title}\nType: ${doc.mime}`)} />
+                    <InfoBadge onPress={async () => {
+                      try {
+                        console.log('Getting file size for:', doc.url);
+                        
+                        // Try HEAD request first (more efficient)
+                        let response = await fetch(doc.url, { 
+                          method: 'HEAD',
+                          headers: {
+                            'Accept': '*/*'
+                          }
+                        });
+                        
+                        let fileSize = 'Unknown size';
+                        const contentLength = response.headers.get('content-length');
+                        
+                        console.log('Content-Length header:', contentLength);
+                        
+                        if (contentLength && contentLength !== '0') {
+                          fileSize = formatFileSize(parseInt(contentLength));
+                        } else {
+                          // If HEAD doesn't work, try GET but abort quickly
+                          console.log('HEAD failed, trying GET...');
+                          const controller = new AbortController();
+                          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+                          
+                          try {
+                            response = await fetch(doc.url, { 
+                              signal: controller.signal,
+                              headers: {
+                                'Accept': '*/*'
+                              }
+                            });
+                            
+                            clearTimeout(timeoutId);
+                            const getContentLength = response.headers.get('content-length');
+                            
+                            if (getContentLength && getContentLength !== '0') {
+                              fileSize = formatFileSize(parseInt(getContentLength));
+                            } else {
+                              // Last resort: get size from response body
+                              const blob = await response.blob();
+                              fileSize = formatFileSize(blob.size);
+                            }
+                          } catch (getError) {
+                            console.error('GET request failed:', getError);
+                            fileSize = 'Unable to determine';
+                          }
+                        }
+                        
+                        console.log('Final file size:', fileSize);
+                        
+                        Alert.alert('Document Info', 
+                          `Name: ${title}\n` +
+                          `Type: ${getReadableFileType(doc.mime)}\n` +
+                          `Size: ${fileSize}`
+                        );
+                      } catch (error) {
+                        console.error('Error getting file size:', error);
+                        // Fallback if we can't get file size
+                        Alert.alert('Document Info', 
+                          `Name: ${title}\n` +
+                          `Type: ${getReadableFileType(doc.mime)}\n` +
+                          `Size: Unable to determine`
+                        );
+                      }
+                    }} />
                   </View>
                 );
               })}
@@ -576,55 +805,79 @@ export default function TaskDetail() {
 
         {/* Action buttons */}
         <View style={{
-          flexDirection: 'row',
-          justifyContent: 'space-around',
-          marginTop: 20,
-          paddingHorizontal: 20,
+          backgroundColor: 'white',
+          marginTop: 24,
+          marginHorizontal: 20,
+          padding: 20,
+          borderRadius: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          elevation: 4,
         }}>
-          {/* Edit button */}
-          <Pressable
-            onPress={() => router.push(`../${id}/edit`)}
-            style={{
-              paddingHorizontal: 20,
-              paddingVertical: 10,
-              backgroundColor: '#FF9F0A',
-              borderRadius: 8,
-              minWidth: 80,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: 'white', fontWeight: '600' }}>Edit</Text>
-          </Pressable>
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}>
+            {/* Edit button */}
+            <Pressable
+              onPress={() => router.push(`../${id}/edit`)}
+              style={{
+                flex: 1,
+                paddingVertical: 16,
+                backgroundColor: '#FF9F0A',
+                borderRadius: 12,
+                alignItems: 'center',
+                shadowColor: '#FF9F0A',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                elevation: 6,
+              }}
+            >
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Edit</Text>
+            </Pressable>
 
-          {/* Delete button */}
-          <Pressable
-            onPress={deleteTask}
-            style={{
-              paddingHorizontal: 20,
-              paddingVertical: 10,
-              backgroundColor: '#FF3B30',
-              borderRadius: 8,
-              minWidth: 80,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: 'white', fontWeight: '600' }}>Delete</Text>
-          </Pressable>
+            {/* Delete button */}
+            <Pressable
+              onPress={deleteTask}
+              style={{
+                flex: 1,
+                paddingVertical: 16,
+                backgroundColor: '#FF3B30',
+                borderRadius: 12,
+                alignItems: 'center',
+                shadowColor: '#FF3B30',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                elevation: 6,
+              }}
+            >
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Delete</Text>
+            </Pressable>
 
-          {/* Back button */}
-          <Pressable
-            onPress={() => router.back()}
-            style={{
-              paddingHorizontal: 20,
-              paddingVertical: 10,
-              backgroundColor: '#0A84FF',
-              borderRadius: 8,
-              minWidth: 80,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: 'white', fontWeight: '600' }}>Back</Text>
-          </Pressable>
+            {/* Back button */}
+            <Pressable
+              onPress={() => router.back()}
+              style={{
+                flex: 1,
+                paddingVertical: 16,
+                backgroundColor: '#0A84FF',
+                borderRadius: 12,
+                alignItems: 'center',
+                shadowColor: '#0A84FF',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 8,
+                elevation: 6,
+              }}
+            >
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Back</Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
 

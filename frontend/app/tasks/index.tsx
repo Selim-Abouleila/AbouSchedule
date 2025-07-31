@@ -194,9 +194,8 @@ useEffect(() => {
   };
 
   const renderItem = ({ item }: { item: Task }) => {
-  
+  const isDone = item.status === 'DONE';
   const isImmediate = item.priority === 'IMMEDIATE';
-  const isDone      = item.status   === 'DONE';
   const imgCount = item.images?.length ?? 0;
   const docCount = item.documents?.length ?? 0;
   const label    = statusLabel[item.status];
@@ -206,42 +205,52 @@ useEffect(() => {
         onPress={() => router.push(`/tasks/${item.id}`)}
         android_ripple={{ color: '#0001' }}
         style={({ pressed }) => ({
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingVertical: 16,
-          borderBottomWidth: 1,
-          borderColor: '#E1E4E8',
-          opacity: pressed ? 0.5 : 1,
+          backgroundColor: isImmediate && !isDone ? '#FFF5E6' : 'white',
+          marginBottom: 12,
+          borderRadius: 12,
+          padding: 16,
+          shadowColor: isImmediate && !isDone ? '#FF9F0A' : '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: isImmediate && !isDone ? 0.15 : 0.05,
+          shadowRadius: isImmediate && !isDone ? 6 : 3,
+          elevation: isImmediate && !isDone ? 4 : 2,
+          opacity: pressed ? 0.7 : 1,
+          borderWidth: isImmediate && !isDone ? 1 : 0,
+          borderColor: isImmediate && !isDone ? '#FF9F0A' : 'transparent',
         })}
       >
-        {/* ②  SIDE BAR  – 4 pt wide, glued to the edge */}
+        {/* ②  SIDE BAR  – 4 pt wide, glued to the edge */}
+        {/* Status indicator bar */}
         <View
           style={{
-            width: 4,                // was 6
-            alignSelf: 'stretch',    // full‑height bar
+            width: 4,
+            height: 40,
+            position: 'absolute',
+            left: 0,
+            top: 16,
             backgroundColor: statusColor[item.status],
-            marginRight: 12,         // keep small gap before content
-            borderRadius: 2,
+            borderTopRightRadius: 2,
+            borderBottomRightRadius: 2,
           }}
-  />
+        />
 
         {/* content column */}
-        <View style={{ flex: 1 }}>
-          {/* ── line 1: badges ── */}
-          {/* badge row line 1 */}
+        <View style={{ flex: 1, marginLeft: 12, marginRight: 4 }}>
+          {/* ── line 1: badges ── */}
+          {/* badge row line 1 */}
           {/* container row */}
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
 
             {/* status badge – always shown, sits LEFT */}
             <View
               style={{
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                borderRadius: 4,
-                marginRight: 8,           // ← gap *after* status badge
-                backgroundColor: label.color + '26',
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 6,
+                marginRight: 8,
+                backgroundColor: label.color + '20',
               }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: label.color }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: label.color }}>
                 {label.caption}
               </Text>
             </View>
@@ -250,47 +259,64 @@ useEffect(() => {
             {isImmediate && !isDone && (
               <View
                 style={{
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 4,
-                  backgroundColor: '#FF9F0A26',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: '#FF9F0A',
+                  shadowColor: '#FF9F0A',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: 3,
                 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#FF9F0A' }}>
-                  🔥 IMMEDIATE
+                <Ionicons name="flame" size={12} color="white" style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: 'white' }}>
+                  IMMEDIATE
                 </Text>
               </View>
             )}
           </View>
 
-
-
-          {/* ── line 2: title ── */}
-          <Text style={{ fontSize: 17, fontWeight: '700', marginBottom: 2, marginTop: 4,}}>
+          {/* ── line 2: title ── */}
+          <Text style={{ 
+            fontSize: 16, 
+            fontWeight: '600', 
+            marginBottom: 8, 
+            color: isImmediate && !isDone ? '#B45309' : '#1a1a1a',
+            lineHeight: 20,
+          }}>
             {item.title}
           </Text>
 
-          {/* ── line 3: extras ── */}
+          {/* ── line 3: extras ── */}
             {/* Recurring chip ---------------------------------------------------- */}
             {item.recurrence !== 'NONE' && (
               <View
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 4,
-                  marginRight: 6,                 // little gap before the next meta bit
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: isImmediate && !isDone ? '#FFF0D6' : '#f8f9fa',
+                  borderWidth: 1,
+                  borderColor: isImmediate && !isDone ? '#FFB366' : '#e9ecef',
+                  marginBottom: 8,
                 }}
               >
-                {/* icon + text share the same colour/size so they look like one unit */}
+                <Ionicons name="repeat" size={14} color={isImmediate && !isDone ? '#B45309' : '#6c757d'} style={{ marginRight: 6 }} />
                 <Text
                   style={{
-                    fontSize: 14,          // ⬆︎ a touch larger
-                    fontWeight: '700',     // ⬆︎ bolder
-                    color: '#6e6e6e',
+                    fontSize: 12,
+                    fontWeight: '600',
+                    color: isImmediate && !isDone ? '#B45309' : '#495057',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
                   }}
                 >
-                  🔄 Recurring
+                  Recurring
                 </Text>
               </View>
             )}
@@ -309,8 +335,7 @@ useEffect(() => {
         </View>
 
 
-        {/* chevron */}
-        <Text style={{ fontSize: 18, color: '#0A84FF' }}>⟩</Text>
+
       </Pressable>
     );
   };
@@ -320,12 +345,13 @@ useEffect(() => {
 
 
   return (
-  <View style={{ flex: 1 }}>
-
+  <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
 
     {/* ───── Task list (pull‑to‑refresh & infinite scroll) ───── */}
     {loading && tasks.length === 0 ? (
-      <ActivityIndicator style={{ marginTop: 40 }} />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#0A84FF" />
+      </View>
     ) : (
       <FlatList
         data={tasks}
@@ -335,9 +361,13 @@ useEffect(() => {
         renderItem={renderItem}
         onEndReachedThreshold={0.4}
         onEndReached={loadMore}
+        contentContainerStyle={{ padding: 16 }}
+        showsVerticalScrollIndicator={false}
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator style={{ marginVertical: 12 }} />
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#0A84FF" />
+            </View>
           ) : null
         }
       />
@@ -348,19 +378,23 @@ useEffect(() => {
       onPress={() => router.push('/tasks/add')}
       style={({ pressed }) => ({
         position: 'absolute',
-        right: 24,
-        bottom: 24,
+        right: 20,
+        bottom: 20,
         backgroundColor: '#0A84FF',
-        borderRadius: 32,
-        padding: 16,
-        opacity: pressed ? 0.7 : 1,
-        shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
+        borderRadius: 28,
+        width: 56,
+        height: 56,
+        justifyContent: 'center',
+        alignItems: 'center',
+        opacity: pressed ? 0.8 : 1,
+        shadowColor: '#0A84FF',
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 8,
       })}
     >
-      <Text style={{ color: 'white', fontSize: 24, lineHeight: 24 }}>＋</Text>
+      <Ionicons name="add" size={24} color="white" />
     </Pressable>
 
     {/* ───── Android / fallback sort‑menu modal (new) ───── */}

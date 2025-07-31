@@ -6,10 +6,26 @@ export const unstable_settings = {
 // app/(app)/_layout.tsx
 import { Drawer } from 'expo-router/drawer';
 import { DrawerToggleButton } from '@react-navigation/drawer';
-
-
+import { useEffect, useState } from 'react';
+import { isAdmin } from '../src/auth';
 
 export default function AppDrawerLayout() {
+  const [showAdminPanel, setShowAdminPanel] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    checkAdminStatus();
+  }, []);
+
+  const checkAdminStatus = async () => {
+    try {
+      const adminStatus = await isAdmin();
+      setShowAdminPanel(adminStatus);
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      setShowAdminPanel(false);
+    }
+  };
+
   return (
     <Drawer
       screenOptions={{
@@ -25,6 +41,18 @@ export default function AppDrawerLayout() {
       {/* Settings page */}
       <Drawer.Screen name="settings" options={{ title: 'Settings' }} />
 
+      {/* Admin Panel - only visible to admins */}
+      {showAdminPanel && (
+        <Drawer.Screen 
+          name="admin" 
+          options={{ 
+            title: 'Admin Panel',
+            drawerIcon: ({ color, size }) => (
+              <DrawerToggleButton />
+            ),
+          }} 
+        />
+      )}
 
       {/* Media page */}
       <Drawer.Screen name="media/media" options={{ title: 'Media' }} />
@@ -32,7 +60,7 @@ export default function AppDrawerLayout() {
       {/* Login lives one level up (app/login.tsx) */}
       <Drawer.Screen name="auth/login" options={{ title: 'Login' }} />
 
-      {/* Logout screen we’ll add next */}
+      {/* Logout screen we'll add next */}
       <Drawer.Screen name="logout" options={{ title: 'Logout' }} />
 
       {/* Edit Screen*/}
@@ -45,7 +73,7 @@ export default function AppDrawerLayout() {
       <Drawer.Screen name="tasks/add" options={{ title: 'Add Task', drawerItemStyle: { display: 'none' }, }}  />
 
       {/* Task Adder*/}
-      <Drawer.Screen name="register" options={{ title: 'Add Task', drawerItemStyle: { display: 'none' }, }}  />
+      <Drawer.Screen name="register" options={{ title: 'Register', drawerItemStyle: { display: 'none' }, }}  />
   
   
 

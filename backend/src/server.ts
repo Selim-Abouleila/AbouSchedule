@@ -566,6 +566,124 @@ f.get('/:id', async (req: any, rep) => {
 
 }, { prefix: '/tasks' });
 
+/* ───── Admin routes ───── */
+app.register(async (f) => {
+  f.addHook('preHandler', f.auth);
+
+  // Get all users (admin only)
+  f.get('/users', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        role: true,
+      },
+    });
+    return users;
+  });
+
+  // Toggle user role (admin only)
+  f.post('/users/:id/toggle-role', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return rep.code(404).send({ error: 'User not found' });
+    }
+
+    // Prevent admin from demoting themselves
+    if (user.id === req.user.sub) {
+      return rep.code(400).send({ error: 'Cannot modify your own role' });
+    }
+
+    const newRole = user.role === 'ADMIN' ? 'EMPLOYEE' : 'ADMIN';
+    await prisma.user.update({
+      where: { id: userId },
+      data: { role: newRole },
+    });
+
+    return { message: 'Role updated successfully' };
+  });
+
+  // Delete user (admin only)
+  f.post('/users/:id/delete', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return rep.code(404).send({ error: 'User not found' });
+    }
+
+    // Prevent admin from deleting themselves
+    if (user.id === req.user.sub) {
+      return rep.code(400).send({ error: 'Cannot delete your own account' });
+    }
+
+    // Delete user's tasks first (due to foreign key constraint)
+    await prisma.task.deleteMany({
+      where: { userId },
+    });
+
+    // Delete the user
+    await prisma.user.delete({
+      where: { id: userId },
+    });
+
+    return { message: 'User deleted successfully' };
+  });
+
+  // Get all tasks (admin only)
+  f.get('/all-tasks', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const tasks = await prisma.task.findMany({
+      include: {
+        user: {
+          select: {
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return tasks;
+  });
+
+}, { prefix: '/admin' });
+
 startRecurrenceRoller();
 
 /* ───── Start server ───── */
