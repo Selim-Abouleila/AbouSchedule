@@ -68,6 +68,7 @@ type Task = {
   user?: {
     id: number;
     email: string;
+    username?: string;
     role: string;
   };
 };
@@ -318,9 +319,9 @@ export default function AdminTaskDetail() {
           <Text style={{ fontSize: 14, color: '#6c757d', marginBottom: 4 }}>
             Task for user:
           </Text>
-                     <Text style={{ fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>
-             {task.user?.email || `User ID: ${userId}`}
-           </Text>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>
+            {task.user?.username ? `${task.user.username} (${task.user.email})` : task.user?.email || `User ID: ${userId}`}
+          </Text>
         </View>
       </View>
 

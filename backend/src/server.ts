@@ -1053,6 +1053,7 @@ app.register(async (f) => {
           select: {
             id: true,
             email: true,
+            username: true,
             role: true,
           },
         },

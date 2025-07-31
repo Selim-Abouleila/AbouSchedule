@@ -16,20 +16,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { endpoints } from '../src/api';
 
 export default function Register() {
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPw] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!email || !password) {
-      Alert.alert('Fill both fields'); return;
+    if (!username || !email || !password) {
+      Alert.alert('Fill all fields'); return;
     }
     setLoading(true);
     try {
       const res = await fetch(endpoints.register, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, email, password }),
       });
       if (!res.ok) {
         const txt = await res.text();
@@ -103,6 +104,43 @@ export default function Register() {
 
           {/* Form Section */}
           <View style={{ marginBottom: 24 }}>
+            {/* Username Input */}
+            <View style={{ marginBottom: 16 }}>
+              <Text style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: '#495057',
+                marginBottom: 8,
+              }}>
+                Username
+              </Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: '#e9ecef',
+                borderRadius: 12,
+                backgroundColor: '#f8f9fa',
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+              }}>
+                <Ionicons name="person-outline" size={20} color="#6c757d" style={{ marginRight: 12 }} />
+                <TextInput
+                  placeholder="Choose a username"
+                  placeholderTextColor="#adb5bd"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={username}
+                  onChangeText={setUsername}
+                  style={{
+                    flex: 1,
+                    fontSize: 16,
+                    color: '#1a1a1a',
+                  }}
+                />
+              </View>
+            </View>
+
             {/* Email Input */}
             <View style={{ marginBottom: 16 }}>
               <Text style={{
