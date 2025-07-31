@@ -13,6 +13,9 @@ import { Recurrence } from '@prisma/client';
 
 // server.ts (top of the file, together with the other imports)
 import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
 
 //helpers for sorting
 import { SORT_PRESETS } from './lib/helpers';
@@ -349,8 +352,45 @@ f.get('/:id', async (req: any, rep) => {
 
   if (!task) return rep.code(404).send({ error: 'Task not found' });
 
-  /* 3. return row as‑is (lastOccurrence, nextOccurrence already set) */
-  return task;
+  /* 3. Generate pre-signed URLs for documents */
+  const documentsWithSignedUrls = await Promise.all(
+    task.documents.map(async (doc) => {
+      try {
+        const url = new URL(doc.url);
+        const key = url.pathname.substring(1);
+        
+        const command = new GetObjectCommand({
+          Bucket: process.env.AWS_BUCKET!,
+          Key: key,
+        });
+        
+        // Create a new S3 client instance for pre-signed URLs
+        const presignerClient = new S3Client({
+          region: process.env.AWS_REGION ?? 'eu-north-1',
+          credentials: {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+          },
+        });
+        
+        const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+        
+        return {
+          ...doc,
+          url: signedUrl,
+        };
+      } catch (error) {
+        console.error('Error generating signed URL for document:', error);
+        return doc;
+      }
+    })
+  );
+
+  /* 4. return task with pre-signed document URLs */
+  return {
+    ...task,
+    documents: documentsWithSignedUrls,
+  };
 });
 
 

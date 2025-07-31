@@ -22,7 +22,25 @@ async function makeFileName(url: string): Promise<string> {
 // right under makeFileName(...)
 function getDocFileName(url: string): string {
   // grab “foo.pdf” (or whatever) out of “https://…/foo.pdf?token=…”
-  return url.split('/').pop()!.split('?')[0]
+  // Handle both regular S3 URLs and pre-signed URLs
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/');
+    const filename = pathParts[pathParts.length - 1];
+    
+    // If filename is empty or doesn't have an extension, fall back to old method
+    if (!filename || !filename.includes('.')) {
+      const fallback = url.split('/').pop()!.split('?')[0];
+      return decodeURIComponent(fallback);
+    }
+    
+    // Decode URL-encoded characters (like %20 for spaces, %CC%81 for accents)
+    return decodeURIComponent(filename);
+  } catch (error) {
+    // Fallback to old method if URL parsing fails
+    const fallback = url.split('/').pop()!.split('?')[0];
+    return decodeURIComponent(fallback);
+  }
 }
 
 
@@ -146,4 +164,24 @@ export async function getLocalDocumentUris(): Promise<string[]> {
   const docDir = await initUserDocsFolder()
   const files = await FileSystem.readDirectoryAsync(docDir)
   return files.map(name => `${docDir}/${name}`)
+}
+
+/**
+ * Clear all cached media and force re-download
+ */
+export async function clearMediaCache(): Promise<void> {
+  try {
+    const userId = await getUserId()
+    const mediaDir = `${MEDIA_BASE}/${userId}`
+    
+    // Check if the directory exists
+    const info = await FileSystem.getInfoAsync(mediaDir)
+    if (info.exists) {
+      // Delete the entire user media directory
+      await FileSystem.deleteAsync(mediaDir, { idempotent: true })
+      console.log('Cleared media cache for user:', userId)
+    }
+  } catch (error) {
+    console.error('Error clearing media cache:', error)
+  }
 }

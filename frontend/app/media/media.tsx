@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, FlatList, Image, Text, Pressable, ActivityIndicator, StyleSheet, Share, Button, Platform, Alert} from 'react-native';
 import ImageViewing from 'react-native-image-viewing';
-import { syncMedia, getLocalMediaUris, getLocalDocumentUris } from '../../src/mediaCache';
+import { syncMedia, getLocalMediaUris, getLocalDocumentUris, clearMediaCache } from '../../src/mediaCache';
 import { Ionicons } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -40,6 +40,20 @@ export default function MediaScreen() {
       else setLoading(false);
     }
   }, [mode]);
+
+  const handleClearCache = async () => {
+    try {
+      setLoading(true);
+      await clearMediaCache();
+      await loadMedia(true);
+      Alert.alert('Success', 'Cache cleared and media refreshed');
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      Alert.alert('Error', 'Failed to clear cache');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadMedia();
@@ -158,35 +172,22 @@ const shareSelected = async () => {
           Alert.alert('Error', 'Could not open document');
         }
       } else {
-        // iOS: Try to open with default app using Linking
-        console.log('Using iOS Linking');
+        // iOS: Use Sharing directly since Linking doesn't work well with file URLs
+        console.log('Using iOS Sharing');
         try {
-          // Create a file URL that iOS can understand (fileUri already has file:// prefix)
-          const fileUrl = fileUri.startsWith('file://') ? fileUri : `file://${fileUri}`;
-          console.log('File URL:', fileUrl);
-          
-          const canOpen = await Linking.canOpenURL(fileUrl);
-          console.log('Can open URL:', canOpen);
-          
-          if (canOpen) {
-            await Linking.openURL(fileUrl);
+          const isAvailable = await Sharing.isAvailableAsync();
+          if (isAvailable) {
+            await Sharing.shareAsync(fileUri, {
+              mimeType: mimeType,
+              dialogTitle: 'Open Document',
+              UTI: getUTIForExtension(extension || '')
+            });
           } else {
-            // Fallback: try sharing with specific app selection
-            console.log('Falling back to Sharing');
-            const isAvailable = await Sharing.isAvailableAsync();
-            if (isAvailable) {
-              await Sharing.shareAsync(fileUri, {
-                mimeType: mimeType,
-                dialogTitle: 'Open Document',
-                UTI: getUTIForExtension(extension || '')
-              });
-            } else {
-              Alert.alert('Error', 'No app available to open this document type');
-            }
+            Alert.alert('Error', 'Sharing is not available on this device');
           }
         } catch (error) {
-          console.error('Error opening document on iOS:', error);
-          Alert.alert('Error', 'Could not open document. Try sharing instead.');
+          console.error('Error sharing document on iOS:', error);
+          Alert.alert('Error', 'Could not share document');
         }
       }
     } catch (error) {
@@ -276,7 +277,11 @@ const shareSelected = async () => {
       const filename = item.replace(/^.*[\\\/]/, '');
       // drop the extension if you want “MyDoc” instead of “MyDoc.pdf”
       const rawName = item.split('/').pop()!;       // e.g. "26a0878f‑cfb1‑408e‑956a‑e90285d28155_MyDoc.pdf"
-      const title = rawName.slice(37);           // drops the "26a0878f…_"
+      // Get the filename from the path and decode URL-encoded characters
+      const decodedName = decodeURIComponent(filename);
+      
+      // Remove the UUID prefix if it exists (format: uuid_filename.pdf)
+      const title = decodedName.includes('_') ? decodedName.split('_').slice(1).join('_') : decodedName;
 
       const inSelection = selected.size > 0;
 
@@ -317,14 +322,6 @@ const shareSelected = async () => {
           {!inSelection && (
             <Ionicons name="open-outline" size={20} color="#666" style={styles.openIcon} />
           )}
-          
-          {/* share button overlay */}
-          <Pressable
-            style={styles.shareButton}
-            onPress={() => Share.share({ url: item })}
-          >
-            <Ionicons name="share-outline" size={18} color="#fff" />
-          </Pressable>
         </Pressable>
       );
     }
@@ -344,6 +341,12 @@ const shareSelected = async () => {
           onPress={() => setMode('documents')}
         >
           <Text style={mode === 'documents' ? styles.activeText : styles.inactiveText}>Documents</Text>
+        </Pressable>
+        <Pressable
+          style={styles.clearCacheButton}
+          onPress={handleClearCache}
+        >
+          <Ionicons name="refresh" size={16} color="#666" />
         </Pressable>
       </View>
       <FlatList
@@ -384,9 +387,10 @@ const shareSelected = async () => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  toggleRow: { flexDirection: 'row', justifyContent: 'center', marginVertical: 8 },
+  toggleRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginVertical: 8 },
   toggleButton: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, marginHorizontal: 4, backgroundColor: '#eee' },
   activeToggle: { backgroundColor: '#0A84FF' },
+  clearCacheButton: { padding: 8, marginLeft: 8 },
   activeText: { color: 'white', fontWeight: '600' },
   inactiveText: { color: '#333' },
   list: { padding: 8 },

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   Alert,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 
@@ -17,6 +18,10 @@ import ImageViewing from 'react-native-image-viewing';
 // ⬆️ new import
 import { Image as ExpoImage } from 'expo-image';
 import { Image as RNImage } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Sharing from 'expo-sharing';
+import * as Linking from 'expo-linking';
 
 
 
@@ -96,6 +101,146 @@ export default function TaskDetail() {
     setViewerIndex(idx);
     setViewerNonce(n => n + 1);   // forces a fresh mount
     setViewerOpen(true);
+  };
+
+  // Document opening functionality
+  const openDocument = async (url: string) => {
+    console.log('Attempting to open document:', url);
+    
+    // Get filename from URL
+    const filename = getDocFileName(url);
+    const fileUri = `${FileSystem.documentDirectory}documents/${filename}`;
+    
+    // Check if file exists locally
+    const info = await FileSystem.getInfoAsync(fileUri);
+    console.log('File info:', info);
+    
+    if (!info.exists) {
+      // Download the file
+      console.log('Downloading document:', url, 'to:', fileUri);
+      try {
+        await FileSystem.downloadAsync(url, fileUri);
+        const newInfo = await FileSystem.getInfoAsync(fileUri);
+        console.log('Downloaded file size:', 'size' in newInfo ? newInfo.size : 'unknown');
+        if ('size' in newInfo && newInfo.size && newInfo.size < 1000) {
+          console.warn('Downloaded file is suspiciously small:', newInfo.size);
+          Alert.alert('Warning', 'Document appears to be corrupted or incomplete. Size: ' + newInfo.size + ' bytes');
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to download document:', error);
+        Alert.alert('Error', 'Failed to download document');
+        return;
+      }
+    } else {
+      // File exists, check if it's corrupted
+      if ('size' in info && info.size && info.size < 1000) {
+        console.warn('Existing file is corrupted (small size):', info.size, 'bytes');
+        Alert.alert('Warning', 'Document appears to be corrupted. Size: ' + info.size + ' bytes');
+        return;
+      }
+    }
+
+    const extension = filename.split('.').pop()?.toLowerCase();
+    let mimeType = 'application/octet-stream';
+    
+    switch (extension) {
+      case 'pdf':
+        mimeType = 'application/pdf';
+        break;
+      case 'doc':
+        mimeType = 'application/msword';
+        break;
+      case 'docx':
+        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        break;
+      case 'xls':
+        mimeType = 'application/vnd.ms-excel';
+        break;
+      case 'xlsx':
+        mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        break;
+      case 'ppt':
+        mimeType = 'application/vnd.ms-powerpoint';
+        break;
+      case 'pptx':
+        mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        break;
+      case 'txt':
+        mimeType = 'text/plain';
+        break;
+    }
+    
+    console.log('MIME type:', mimeType);
+    
+    if (Platform.OS === 'android') {
+      console.log('Using Android IntentLauncher');
+      const result = await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: fileUri,
+        flags: 1,
+        type: mimeType,
+      });
+      if (result.resultCode !== 0) {
+        Alert.alert('Error', 'Could not open document');
+      }
+    } else {
+      console.log('Using iOS Sharing');
+      try {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: mimeType,
+            dialogTitle: 'Open Document',
+            UTI: getUTIForExtension(extension || '')
+          });
+        } else {
+          Alert.alert('Error', 'Sharing is not available on this device');
+        }
+      } catch (error) {
+        console.error('Error sharing document on iOS:', error);
+        Alert.alert('Error', 'Could not share document');
+      }
+    }
+  };
+
+  // Helper function to get filename from URL
+  const getDocFileName = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      const filename = pathParts[pathParts.length - 1];
+      
+      if (!filename || !filename.includes('.')) {
+        const fallback = url.split('/').pop()!.split('?')[0];
+        return decodeURIComponent(fallback);
+      }
+      
+      return decodeURIComponent(filename);
+    } catch (error) {
+      const fallback = url.split('/').pop()!.split('?')[0];
+      return decodeURIComponent(fallback);
+    }
+  };
+
+  // Helper function to get UTI for iOS sharing
+  const getUTIForExtension = (extension: string): string => {
+    switch (extension.toLowerCase()) {
+      case 'pdf':
+        return 'com.adobe.pdf';
+      case 'doc':
+      case 'docx':
+        return 'org.openxmlformats.wordprocessingml.document';
+      case 'xls':
+      case 'xlsx':
+        return 'org.openxmlformats.spreadsheetml.sheet';
+      case 'ppt':
+      case 'pptx':
+        return 'org.openxmlformats.presentationml.presentation';
+      case 'txt':
+        return 'public.plain-text';
+      default:
+        return 'public.data';
+    }
   };
 
   
@@ -351,6 +496,8 @@ export default function TaskDetail() {
               {task.documents.map((doc) => {
                 const isImg = doc.mime.startsWith('image/');
                 const name = doc.name ?? `doc-${doc.id}`;
+                const decodedName = decodeURIComponent(name);
+                const title = decodedName.includes('_') ? decodedName.split('_').slice(1).join('_') : decodedName;
 
                 return (
                   <View /* wrapper lets us layer the badge */
@@ -359,9 +506,13 @@ export default function TaskDetail() {
                   >
                     <Pressable
                       onPress={() => {
-                        // if it’s an image, open zoom viewer later if you want,
-                        // otherwise hand off to OS or just show the name
-                        Alert.alert('Document', name);
+                        if (isImg) {
+                          // For images, you could open in the image viewer
+                          Alert.alert('Image Document', 'Image documents can be viewed in the image viewer');
+                        } else {
+                          // For documents, open with the document opener
+                          openDocument(doc.url);
+                        }
                       }}
                     >
                       {isImg ? (
@@ -378,25 +529,42 @@ export default function TaskDetail() {
                             backgroundColor: '#E9E9E9',
                             justifyContent: 'center',
                             alignItems: 'center',
+                            position: 'relative',
                           }}
                         >
                           <Text style={{ fontSize: 40 }}>📄</Text>
                           <Text
-                            numberOfLines={1}
+                            numberOfLines={2}
                             style={{
                               marginTop: 8,
                               maxWidth: 160,
                               textAlign: 'center',
+                              fontSize: 12,
+                              color: '#666',
                             }}
                           >
-                            {name}
+                            {title}
                           </Text>
+                          {/* Open icon overlay */}
+                          <View style={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            backgroundColor: '#0008',
+                            borderRadius: 12,
+                            width: 24,
+                            height: 24,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}>
+                            <Text style={{ color: 'white', fontSize: 12 }}>📂</Text>
+                          </View>
                         </View>
                       )}
                     </Pressable>
 
                     {/* ⓘ badge goes on top of everything */}
-                    <InfoBadge onPress={() => Alert.alert('Document', name)} />
+                    <InfoBadge onPress={() => Alert.alert('Document Info', `Name: ${title}\nType: ${doc.mime}`)} />
                   </View>
                 );
               })}
@@ -406,50 +574,58 @@ export default function TaskDetail() {
 
 
 
-        {/* Edit button */}
-        <Pressable
-          onPress={() => router.push(`../${id}/edit`)}
-          style={{
-            alignSelf: 'center',
-            marginTop: 15,
-            paddingHorizontal: 24,
-            paddingVertical: 10,
-            backgroundColor: '#FF9F0A',
-            borderRadius: 8,
-          }}
-        >
-          <Text style={{ color: 'white', fontWeight: '600' }}>Edit</Text>
-        </Pressable>
+        {/* Action buttons */}
+        <View style={{
+          flexDirection: 'row',
+          justifyContent: 'space-around',
+          marginTop: 20,
+          paddingHorizontal: 20,
+        }}>
+          {/* Edit button */}
+          <Pressable
+            onPress={() => router.push(`../${id}/edit`)}
+            style={{
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              backgroundColor: '#FF9F0A',
+              borderRadius: 8,
+              minWidth: 80,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: 'white', fontWeight: '600' }}>Edit</Text>
+          </Pressable>
 
-        {/* Delete button */}
-        <Pressable
-          onPress={deleteTask}
-          style={{
-            alignSelf: 'center',
-            marginTop: 15,
-            paddingHorizontal: 24,
-            paddingVertical: 10,
-            backgroundColor: '#FF3B30',
-            borderRadius: 8,
-          }}
-        >
-          <Text style={{ color: 'white', fontWeight: '600' }}>Delete</Text>
-        </Pressable>
+          {/* Delete button */}
+          <Pressable
+            onPress={deleteTask}
+            style={{
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              backgroundColor: '#FF3B30',
+              borderRadius: 8,
+              minWidth: 80,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: 'white', fontWeight: '600' }}>Delete</Text>
+          </Pressable>
 
-        {/* Back button */}
-        <Pressable
-          onPress={() => router.back()}
-          style={{
-            alignSelf: 'center',
-            marginTop: 15,
-            paddingHorizontal: 24,
-            paddingVertical: 10,
-            backgroundColor: '#0A84FF',
-            borderRadius: 8,
-          }}
-        >
-          <Text style={{ color: 'white', fontWeight: '600' }}>Back</Text>
-        </Pressable>
+          {/* Back button */}
+          <Pressable
+            onPress={() => router.back()}
+            style={{
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              backgroundColor: '#0A84FF',
+              borderRadius: 8,
+              minWidth: 80,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: 'white', fontWeight: '600' }}>Back</Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
 
