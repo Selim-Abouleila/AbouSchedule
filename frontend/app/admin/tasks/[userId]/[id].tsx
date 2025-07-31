@@ -308,7 +308,7 @@ export default function AdminTaskDetail() {
         alignItems: 'center',
       }}>
         <Pressable
-          onPress={() => router.push('/admin')}
+          onPress={() => router.push(`/admin/tasks/${userId}`)}
           style={{
             marginRight: 16,
             padding: 8,
@@ -320,7 +320,7 @@ export default function AdminTaskDetail() {
             Task for user:
           </Text>
           <Text style={{ fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>
-            {task.user?.username ? `${task.user.username} (${task.user.email})` : task.user?.email || `User ID: ${userId}`}
+            {task.user?.username || task.user?.email || `User ID: ${userId}`}
           </Text>
         </View>
       </View>

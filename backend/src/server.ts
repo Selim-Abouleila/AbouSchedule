@@ -595,6 +595,35 @@ app.register(async (f) => {
     return users;
   });
 
+  // Get single user by ID (admin only)
+  f.get('/users/:id', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+      },
+    });
+
+    if (!user) {
+      return rep.code(404).send({ error: 'User not found' });
+    }
+
+    return user;
+  });
+
   // Toggle user role (admin only)
   f.post('/users/:id/toggle-role', async (req: any, rep) => {
     const userRole = req.user.role;
@@ -1095,7 +1124,7 @@ app.register(async (f) => {
             },
           });
           
-          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+          const signedUrl = await getSignedUrl(presignerClient, command, { expiresIn: 3600 });
           
           return {
             ...doc,

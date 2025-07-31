@@ -22,6 +22,7 @@ type Task = {
   user?: {
     id: number;
     email: string;
+    username?: string;
     role: string;
   };
 };
@@ -83,6 +84,7 @@ export default function AdminUserTasks() {
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [sort, setSort] = useState<SortPreset>('priority');
   const [userEmail, setUserEmail] = useState<string>('');
+  const [userInfo, setUserInfo] = useState<{ username?: string; email: string } | null>(null);
   const nav = useNavigation();
 
   /* Sort MENU STUFF */
@@ -120,6 +122,26 @@ export default function AdminUserTasks() {
     });
   }, [nav, sort]);
 
+  /** Fetch user information */
+  const fetchUserInfo = useCallback(async () => {
+    if (!userId) return;
+    
+    try {
+      const jwt = await getToken();
+      const response = await fetch(`${API_BASE}/admin/users/${userId}`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUserInfo(userData);
+        setUserEmail(userData.username || userData.email);
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  }, [userId]);
+
   /** Hit the API with optional cursor → returns { tasks, nextCursor } */
   const fetchPage = useCallback(
     async (cursor: number | null, replace = false) => {
@@ -155,9 +177,10 @@ export default function AdminUserTasks() {
         setTasks(prev => (replace ? newTasks : [...prev, ...newTasks]));
         setNextCursor(payload.nextCursor);
 
-        // Get user email from first task if available
-        if (newTasks.length > 0 && newTasks[0].user?.email) {
-          setUserEmail(newTasks[0].user.email);
+        // Get user info from first task if available
+        if (newTasks.length > 0 && newTasks[0].user) {
+          const user = newTasks[0].user;
+          setUserEmail(user.username || user.email);
         }
       } catch (error) {
         console.error('Error fetching tasks:', error);
@@ -172,6 +195,13 @@ export default function AdminUserTasks() {
   useEffect(() => {
     fetchPage(null, true);
   }, [sort]);
+
+  // Fetch user info and clear userEmail when userId changes
+  useEffect(() => {
+    setUserEmail('');
+    setUserInfo(null);
+    fetchUserInfo();
+  }, [userId, fetchUserInfo]);
 
   /** initial load + refresh */
   const reload = useCallback(() => {
@@ -338,22 +368,32 @@ export default function AdminUserTasks() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
-      {/* User info header */}
-      {userEmail && (
-        <View style={{
-          backgroundColor: 'white',
-          padding: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: '#e9ecef',
-        }}>
-          <Text style={{ fontSize: 14, color: '#6c757d', marginBottom: 4 }}>
-            Viewing tasks for:
-          </Text>
-          <Text style={{ fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>
-            {userEmail}
-          </Text>
-        </View>
-      )}
+             {/* User info header with back button */}
+       <View style={{
+         backgroundColor: 'white',
+         padding: 16,
+         borderBottomWidth: 1,
+         borderBottomColor: '#e9ecef',
+         flexDirection: 'row',
+         alignItems: 'center',
+       }}>
+         <Pressable
+           onPress={() => router.push('/admin')}
+           style={{
+             marginRight: 16,
+             padding: 8,
+           }}>
+           <Ionicons name="arrow-back" size={24} color="#0A84FF" />
+         </Pressable>
+         <View style={{ flex: 1 }}>
+           <Text style={{ fontSize: 14, color: '#6c757d', marginBottom: 4 }}>
+             Viewing tasks for:
+           </Text>
+                       <Text style={{ fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>
+              {userEmail || (userInfo ? 'Loading...' : `User ID: ${userId}`)}
+            </Text>
+         </View>
+       </View>
 
       {/* Task list */}
       {loading && tasks.length === 0 ? (
