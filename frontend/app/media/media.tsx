@@ -1,6 +1,6 @@
 // src/screens/Media.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, Image, Text, Pressable, ActivityIndicator, StyleSheet, Share, Button, Platform, Alert} from 'react-native';
+import { View, FlatList, Image, Text, Pressable, ActivityIndicator, StyleSheet, Share, Button, Platform, Alert, ScrollView} from 'react-native';
 import ImageViewing from 'react-native-image-viewing';
 import { syncMedia, getLocalMediaUris, getLocalDocumentUris, clearMediaCache } from '../../src/mediaCache';
 import { Ionicons } from '@expo/vector-icons'
@@ -8,6 +8,8 @@ import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
+import { endpoints, API_BASE } from '../../src/api';
+import { getToken } from '../../src/auth';
 
 export default function MediaScreen() {
   const [mode, setMode] = useState<'images' | 'documents'>('images');
@@ -18,6 +20,13 @@ export default function MediaScreen() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex]     = useState(0);
 
+  // Admin functionality
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [users, setUsers] = useState<Array<{ id: number; email: string; username?: string; role: string }>>([]);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: number; email: string; username?: string; role: string } | null>(null);
+  const [showUserSelector, setShowUserSelector] = useState<boolean>(false);
+
   const loadMedia = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
@@ -25,7 +34,7 @@ export default function MediaScreen() {
       setLoading(true);
     }
     try {
-      await syncMedia();
+      await syncMedia(selectedUserId || undefined);
       const data = mode === 'images'
         ? await getLocalMediaUris()
         : await getLocalDocumentUris();
@@ -36,7 +45,7 @@ export default function MediaScreen() {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [mode]);
+  }, [mode, selectedUserId]);
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -67,6 +76,34 @@ export default function MediaScreen() {
       ]
     );
   };
+
+  // Check if user is admin and load users list
+  const checkAdminStatus = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`${API_BASE}/admin/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const usersData = await res.json();
+        setUsers(usersData);
+        setIsAdmin(true);
+      } else {
+        setIsAdmin(false);
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      setIsAdmin(false);
+    }
+  }, []);
+
+  // Load users when component mounts
+  useEffect(() => {
+    checkAdminStatus();
+  }, [checkAdminStatus]);
 
   useEffect(() => {
     loadMedia();
@@ -306,6 +343,67 @@ export default function MediaScreen() {
         </Pressable>
       </View>
 
+      {/* Admin User Selector */}
+      {isAdmin && (
+        <View style={styles.adminSection}>
+          <View style={styles.adminHeader}>
+            <Text style={styles.adminTitle}>Admin View</Text>
+            <Pressable
+              style={styles.userSelectorButton}
+              onPress={() => setShowUserSelector(!showUserSelector)}
+            >
+              <Ionicons name="people" size={18} color="#0A84FF" />
+              <Text style={styles.userSelectorText}>
+                {selectedUserId ? 
+                  users.find(u => u.id === selectedUserId)?.username || 
+                  users.find(u => u.id === selectedUserId)?.email || 
+                  `User ${selectedUserId}` : 
+                  'Select User'
+                }
+              </Text>
+              <Ionicons 
+                name={showUserSelector ? "chevron-up" : "chevron-down"} 
+                size={16} 
+                color="#0A84FF" 
+              />
+            </Pressable>
+          </View>
+
+          {showUserSelector && (
+            <ScrollView style={styles.userList} showsVerticalScrollIndicator={false}>
+              <Pressable
+                style={[styles.userItem, !selectedUserId && styles.selectedUserItem]}
+                onPress={() => {
+                  setSelectedUserId(null);
+                  setShowUserSelector(false);
+                }}
+              >
+                <Text style={[styles.userItemText, !selectedUserId && styles.selectedUserItemText]}>
+                  My Media
+                </Text>
+              </Pressable>
+              {users.map((user) => (
+                <Pressable
+                  key={user.id}
+                  style={[styles.userItem, selectedUserId === user.id && styles.selectedUserItem]}
+                  onPress={() => {
+                    setSelectedUserId(user.id);
+                    setShowUserSelector(false);
+                  }}
+                >
+                  <Text style={[styles.userItemText, selectedUserId === user.id && styles.selectedUserItemText]}>
+                    {user.username || user.email}
+                  </Text>
+                  <Text style={styles.userRoleText}>
+                    {user.role === 'EMPLOYEE' ? 'USER' : user.role}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
       {/* Content */}
       <FlatList
         key={mode} // force remount when mode changes
@@ -521,5 +619,70 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Admin styles
+  adminSection: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  adminHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  adminTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  userSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  userSelectorText: {
+    marginLeft: 8,
+    marginRight: 8,
+    fontSize: 14,
+    color: '#0A84FF',
+    fontWeight: '500',
+  },
+  userList: {
+    maxHeight: 200,
+    marginTop: 12,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+  },
+  userItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  selectedUserItem: {
+    backgroundColor: '#0A84FF',
+  },
+  userItemText: {
+    fontSize: 14,
+    color: '#1a1a1a',
+    fontWeight: '500',
+  },
+  selectedUserItemText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  userRoleText: {
+    fontSize: 12,
+    color: '#6c757d',
+    textTransform: 'uppercase',
   },
 });

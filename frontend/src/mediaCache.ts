@@ -80,13 +80,14 @@ export async function initUserDocsFolder(): Promise<string> {
 /**
  * Sync down images AND documents from the backend
  */
-export async function syncMedia(): Promise<void> {
+export async function syncMedia(targetUserId?: number): Promise<void> {
   const token = await getToken();
   if (!token) throw new Error('Not authenticated');
 
   try {
     // 1. Fetch the media manifest from your backend
-    const res = await fetch(endpoints.media, {
+    const endpoint = targetUserId ? `${endpoints.media}/admin/${targetUserId}` : endpoints.media;
+    const res = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -96,7 +97,7 @@ export async function syncMedia(): Promise<void> {
     // 2. Parse out the two arrays
     const { images, documents } = (await res.json()) as {
       images: Array<{ url: string }>;
-      documents: Array<{ url: string }>;
+      documents: Array<{ url: string; fileName?: string }>;
     };
 
     // 3. Download images (only if missing)
@@ -112,16 +113,17 @@ export async function syncMedia(): Promise<void> {
 
     // 4. Download documents (only if missing)
     const docDir = await initUserDocsFolder();
-    for (const { url } of documents) {
-      const name = getDocFileName(url);
+    for (const doc of documents) {
+      // Use fileName if available, otherwise extract from URL
+      const name = doc.fileName || getDocFileName(doc.url);
       const fileUri = `${docDir}/${name}`;
       const info = await FileSystem.getInfoAsync(fileUri);
       
       // Only download if file doesn't exist
       if (!info.exists) {
-        console.log('Downloading document:', url, 'to:', fileUri);
+        console.log('Downloading document:', doc.url, 'to:', fileUri);
         try {
-          await FileSystem.downloadAsync(url, fileUri);
+          await FileSystem.downloadAsync(doc.url, fileUri);
           // Verify the download
           const newInfo = await FileSystem.getInfoAsync(fileUri);
           console.log('Downloaded file size:', 'size' in newInfo ? newInfo.size : 'unknown');

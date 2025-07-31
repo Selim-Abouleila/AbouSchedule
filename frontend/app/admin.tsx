@@ -187,7 +187,7 @@ export default function AdminPanel() {
                            styles.userRole,
                            { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
                          ]}>
-                           {user.role === 'EMPLOYEE' ? 'USER' : user.role}
+                                                       {user.role === 'EMPLOYEE' ? 'USER' : user.role}
                          </Text>
                        </View>
                      </View>
@@ -232,7 +232,7 @@ export default function AdminPanel() {
                                          onPress={() => {
                        Alert.alert(
                          'Toggle User Role',
-                         `Are you sure you want to change ${user.username ? user.username : user.email}'s role from ${user.role === 'EMPLOYEE' ? 'USER' : user.role} to ${user.role === 'ADMIN' ? 'USER' : 'ADMIN'}?`,
+                                                   `Are you sure you want to change ${user.username ? user.username : user.email}'s role from ${user.role === 'EMPLOYEE' ? 'USER' : user.role} to ${user.role === 'ADMIN' ? 'USER' : 'ADMIN'}?`,
                          [
                            { text: 'Cancel', style: 'cancel' },
                            { 
