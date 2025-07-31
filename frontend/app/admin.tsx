@@ -21,23 +21,11 @@ interface User {
   role: 'ADMIN' | 'EMPLOYEE';
 }
 
-interface Task {
-  id: number;
-  title: string;
-  status: string;
-  priority: string;
-  user?: {
-    email: string;
-  };
-}
-
 export default function AdminPanel() {
   const [isUserAdmin, setIsUserAdmin] = useState<boolean | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'users' | 'tasks'>('users');
 
   useEffect(() => {
     checkAdminStatus();
@@ -80,18 +68,6 @@ export default function AdminPanel() {
         const usersData = await usersResponse.json();
         setUsers(usersData);
       }
-
-      // Load all tasks
-      const tasksResponse = await fetch(`${API_BASE}/admin/all-tasks`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (tasksResponse.ok) {
-        const tasksData = await tasksResponse.json();
-        setTasks(tasksData);
-      }
     } catch (error) {
       console.error('Error loading admin data:', error);
       Alert.alert('Error', 'Failed to load admin data');
@@ -130,6 +106,14 @@ export default function AdminPanel() {
     }
   };
 
+  const handleViewTasks = (userId: number, userEmail: string) => {
+    router.push(`/admin/tasks/${userId}`);
+  };
+
+  const handleAddTask = (userId: number, userEmail: string) => {
+    router.push(`/admin/tasks/${userId}/add`);
+  };
+
   if (isUserAdmin === null) {
     return (
       <View style={styles.loadingContainer}>
@@ -151,37 +135,7 @@ export default function AdminPanel() {
           <Ionicons name="shield-checkmark" size={32} color="#0A84FF" />
           <Text style={styles.headerTitle}>Admin Panel</Text>
         </View>
-        <Text style={styles.headerSubtitle}>Manage users and monitor tasks</Text>
-      </View>
-
-      {/* Tab Navigation */}
-      <View style={styles.tabContainer}>
-        <Pressable
-          style={[styles.tab, activeTab === 'users' && styles.activeTab]}
-          onPress={() => setActiveTab('users')}
-        >
-          <Ionicons 
-            name="people" 
-            size={20} 
-            color={activeTab === 'users' ? '#0A84FF' : '#6c757d'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'users' && styles.activeTabText]}>
-            Users ({users.length})
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, activeTab === 'tasks' && styles.activeTab]}
-          onPress={() => setActiveTab('tasks')}
-        >
-          <Ionicons 
-            name="list" 
-            size={20} 
-            color={activeTab === 'tasks' ? '#0A84FF' : '#6c757d'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'tasks' && styles.activeTabText]}>
-            Tasks ({tasks.length})
-          </Text>
-        </Pressable>
+        <Text style={styles.headerSubtitle}>Manage users and their tasks</Text>
       </View>
 
       {/* Content */}
@@ -197,100 +151,76 @@ export default function AdminPanel() {
             <Text style={styles.loadingText}>Loading...</Text>
           </View>
         ) : (
-          <>
-            {activeTab === 'users' && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>User Management</Text>
-                {users.map((user) => (
-                  <View key={user.id} style={styles.userCard}>
-                    <View style={styles.userInfo}>
-                      <Ionicons 
-                        name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                        size={24} 
-                        color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
-                      />
-                      <View style={styles.userDetails}>
-                        <Text style={styles.userEmail}>{user.email}</Text>
-                        <Text style={[styles.userRole, { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }]}>
-                          {user.role}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.userActions}>
-                      <Pressable
-                        style={styles.actionButton}
-                        onPress={() => handleUserAction(user.id, 'toggle-role')}
-                      >
-                        <Ionicons name="swap-horizontal" size={16} color="#0A84FF" />
-                        <Text style={styles.actionButtonText}>Toggle Role</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.actionButton, styles.deleteButton]}
-                        onPress={() => {
-                          Alert.alert(
-                            'Delete User',
-                            `Are you sure you want to delete ${user.email}?`,
-                            [
-                              { text: 'Cancel', style: 'cancel' },
-                              { text: 'Delete', style: 'destructive', onPress: () => handleUserAction(user.id, 'delete') }
-                            ]
-                          );
-                        }}
-                      >
-                        <Ionicons name="trash" size={16} color="#dc3545" />
-                        <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
-                      </Pressable>
-                    </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>User Management</Text>
+            {users.map((user) => (
+              <View key={user.id} style={styles.userCard}>
+                <View style={styles.userInfo}>
+                  <Ionicons 
+                    name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
+                    size={24} 
+                    color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
+                  />
+                  <View style={styles.userDetails}>
+                    <Text style={styles.userEmail}>{user.email}</Text>
+                    <Text style={[styles.userRole, { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }]}>
+                      {user.role}
+                    </Text>
                   </View>
-                ))}
-              </View>
-            )}
+                </View>
+                
+                {/* Task Management Buttons */}
+                <View style={styles.taskButtons}>
+                  <Pressable
+                    style={styles.taskButton}
+                    onPress={() => handleViewTasks(user.id, user.email)}
+                  >
+                    <Ionicons name="eye" size={16} color="#0A84FF" />
+                    <Text style={styles.taskButtonText}>View Tasks</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.taskButton}
+                    onPress={() => handleAddTask(user.id, user.email)}
+                  >
+                    <Ionicons name="add" size={16} color="#28a745" />
+                    <Text style={[styles.taskButtonText, { color: '#28a745' }]}>Add Task</Text>
+                  </Pressable>
+                </View>
 
-            {activeTab === 'tasks' && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Task Overview</Text>
-                {tasks.map((task) => (
-                  <View key={task.id} style={styles.taskCard}>
-                    <View style={styles.taskInfo}>
-                      <Text style={styles.taskTitle}>{task.title}</Text>
-                      <Text style={styles.taskUser}>{task.user?.email || 'No user assigned'}</Text>
-                    </View>
-                    <View style={styles.taskStatus}>
-                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(task.status) }]}>
-                        <Text style={styles.statusText}>{task.status}</Text>
-                      </View>
-                      <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(task.priority) }]}>
-                        <Text style={styles.priorityText}>{task.priority}</Text>
-                      </View>
-                    </View>
-                  </View>
-                ))}
+                {/* User Management Buttons */}
+                <View style={styles.userActions}>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() => handleUserAction(user.id, 'toggle-role')}
+                  >
+                    <Ionicons name="swap-horizontal" size={16} color="#0A84FF" />
+                    <Text style={styles.actionButtonText}>Toggle Role</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete User',
+                        `Are you sure you want to delete ${user.email}?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => handleUserAction(user.id, 'delete') }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash" size={16} color="#dc3545" />
+                    <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
+                  </Pressable>
+                </View>
               </View>
-            )}
-          </>
+            ))}
+          </View>
         )}
       </ScrollView>
     </View>
   );
 }
-
-const getStatusColor = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'pending': return '#ffc107';
-    case 'in_progress': return '#0A84FF';
-    case 'completed': return '#28a745';
-    default: return '#6c757d';
-  }
-};
-
-const getPriorityColor = (priority: string) => {
-  switch (priority.toLowerCase()) {
-    case 'immediate': return '#dc3545';
-    case 'recurrent': return '#fd7e14';
-    case 'one': return '#28a745';
-    default: return '#6c757d';
-  }
-};
 
 const styles = StyleSheet.create({
   container: {
@@ -327,36 +257,6 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16,
     color: '#6c757d',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginHorizontal: 4,
-  },
-  activeTab: {
-    backgroundColor: '#e3f2fd',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6c757d',
-    marginLeft: 8,
-  },
-  activeTabText: {
-    color: '#0A84FF',
   },
   content: {
     flex: 1,
@@ -400,6 +300,30 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
+  taskButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  taskButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    flex: 1,
+    marginHorizontal: 4,
+    justifyContent: 'center',
+  },
+  taskButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0A84FF',
+    marginLeft: 4,
+  },
   userActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -425,53 +349,5 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     color: '#dc3545',
-  },
-  taskCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  taskInfo: {
-    marginBottom: 12,
-  },
-  taskTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 4,
-  },
-  taskUser: {
-    fontSize: 14,
-    color: '#6c757d',
-  },
-  taskStatus: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'white',
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  priorityText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'white',
   },
 }); 

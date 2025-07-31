@@ -75,8 +75,12 @@ export default function AppDrawerLayout() {
 
       {/* Task Adder*/}
       <Drawer.Screen name="register" options={{ title: 'Register', drawerItemStyle: { display: 'none' }, }}  />
-  
-  
+
+      {/*Admin User Tasks*/}
+      <Drawer.Screen name="admin/tasks/[userId]/index" options={{ title: 'View Task for User', drawerItemStyle: { display: 'none' }, }}  />
+
+      {/*Admin User Tasks*/}
+        <Drawer.Screen name="admin/tasks/[userId]/[id]" options={{ title: 'View Task for User', drawerItemStyle: { display: 'none' }, }}  />
 
       <Drawer.Screen
         name="_necessary"

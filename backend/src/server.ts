@@ -56,6 +56,7 @@ app.register(multipart, {
 
 /* ───── Auth routes ───── */
 const RegisterBody = z.object({
+  username: z.string().min(3).max(30),
   email: z.string().email(),
   password: z.string().min(6),
   role: z.enum(['ADMIN', 'EMPLOYEE']).default('EMPLOYEE'),
@@ -66,14 +67,20 @@ app.post('/auth/register', async (req, rep) => {
   if (!parsed.success) {
     return rep.code(400).send({ error: parsed.error.flatten() });
   }
-  const { email, password, role } = parsed.data;
+  const { username, email, password, role } = parsed.data;
 
+  // Check if email is already in use
   if (await prisma.user.findUnique({ where: { email } })) {
     return rep.code(409).send({ error: 'Email already in use' });
   }
 
+  // Check if username is already in use
+  if (await prisma.user.findUnique({ where: { username } })) {
+    return rep.code(409).send({ error: 'Username already in use' });
+  }
+
   const hash = await argon2.hash(password);
-  await prisma.user.create({ data: { email, password: hash, role } });
+  await prisma.user.create({ data: { username, email, password: hash, role } });
   return rep.code(201).send({ ok: true });
 });
 
@@ -1039,7 +1046,17 @@ app.register(async (f) => {
 
     const task = await prisma.task.findFirst({
       where: { id: taskId, userId },
-      include: { images: true, documents: true },
+      include: { 
+        images: true, 
+        documents: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
     });
 
     if (!task) return rep.code(404).send({ error: 'Task not found' });
@@ -1078,10 +1095,11 @@ app.register(async (f) => {
       })
     );
 
-    /* return task with pre-signed document URLs */
+    /* return task with pre-signed document URLs and user data */
     return {
       ...task,
       documents: documentsWithSignedUrls,
+      user: task.user, // Ensure user data is explicitly included
     };
   });
 
