@@ -14,8 +14,7 @@ import { Recurrence } from '@prisma/client';
 // server.ts (top of the file, together with the other imports)
 import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 //helpers for sorting
 import { SORT_PRESETS } from './lib/helpers';
@@ -1104,6 +1103,18 @@ app.register(async (f) => {
     if (!task) return rep.code(404).send({ error: 'Task not found' });
 
     /* Generate pre-signed URLs for documents */
+    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+    const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+    
+    // Create a new S3 client instance for pre-signed URLs
+    const presignerClient = new S3Client({
+      region: process.env.AWS_REGION ?? 'eu-north-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    });
+    
     const documentsWithSignedUrls = await Promise.all(
       task.documents.map(async (doc) => {
         try {
@@ -1115,16 +1126,7 @@ app.register(async (f) => {
             Key: key,
           });
           
-          // Create a new S3 client instance for pre-signed URLs
-          const presignerClient = new S3Client({
-            region: process.env.AWS_REGION ?? 'eu-north-1',
-            credentials: {
-              accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-            },
-          });
-          
-          const signedUrl = await getSignedUrl(presignerClient, command, { expiresIn: 3600 });
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
           
           return {
             ...doc,
