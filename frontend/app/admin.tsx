@@ -18,6 +18,7 @@ import { getToken } from '../src/auth';
 interface User {
   id: number;
   email: string;
+  username?: string;
   role: 'ADMIN' | 'EMPLOYEE';
 }
 
@@ -162,7 +163,9 @@ export default function AdminPanel() {
                     color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
                   />
                   <View style={styles.userDetails}>
-                    <Text style={styles.userEmail}>{user.email}</Text>
+                    <Text style={styles.userEmail}>
+                      {user.username ? `${user.username} (${user.email})` : user.email}
+                    </Text>
                     <Text style={[styles.userRole, { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }]}>
                       {user.role}
                     </Text>
@@ -201,7 +204,7 @@ export default function AdminPanel() {
                     onPress={() => {
                       Alert.alert(
                         'Delete User',
-                        `Are you sure you want to delete ${user.email}?`,
+                        `Are you sure you want to delete ${user.username ? user.username : user.email}?`,
                         [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Delete', style: 'destructive', onPress: () => handleUserAction(user.id, 'delete') }

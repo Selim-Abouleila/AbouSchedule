@@ -588,6 +588,7 @@ app.register(async (f) => {
       select: {
         id: true,
         email: true,
+        username: true,
         role: true,
       },
     });
@@ -694,7 +695,18 @@ app.register(async (f) => {
       skip: cursor ? 1 : 0,
       ...(cursor && { cursor: { id: cursor } }),
       orderBy,                               // ✅ now valid
-      include: { images: true, documents: true },
+      include: { 
+        images: true, 
+        documents: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            role: true,
+          },
+        },
+      },
     });
 
     const nextCursor =
