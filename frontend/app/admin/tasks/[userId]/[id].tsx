@@ -64,7 +64,7 @@ type Task = {
   lastOccurrence: string | null;
   nextOccurrence: string | null;
   images: { id: number; url: string; mime: string }[];
-  documents: { id: number; url: string; mime: string; name?: string }[];
+  documents: { id: number; url: string; mime: string; fileName?: string }[];
   user?: {
     id: number;
     email: string;
@@ -94,15 +94,15 @@ export default function AdminTaskDetail() {
     setViewerOpen(true);
   };
 
-  const openDocument = async (url: string) => {
+  const openDocument = async (doc: { url: string; fileName?: string }) => {
     try {
       if (Platform.OS === 'ios') {
-        await Linking.openURL(url);
+        await Linking.openURL(doc.url);
       } else {
         // Android: download and open
-        const filename = url.split('/').pop() || 'document';
+        const filename = doc.fileName || doc.url.split('/').pop() || 'document';
         const downloadResumable = FileSystem.createDownloadResumable(
-          url,
+          doc.url,
           FileSystem.documentDirectory + filename,
           {},
           (downloadProgress) => {
@@ -125,15 +125,15 @@ export default function AdminTaskDetail() {
     }
   };
 
-  const shareDocument = async (url: string) => {
+  const shareDocument = async (doc: { url: string; fileName?: string }) => {
     try {
       if (Platform.OS === 'ios') {
-        await Sharing.shareAsync(url);
+        await Sharing.shareAsync(doc.url);
       } else {
         // Android: download first, then share
-        const filename = url.split('/').pop() || 'document';
+        const filename = doc.fileName || doc.url.split('/').pop() || 'document';
         const downloadResumable = FileSystem.createDownloadResumable(
-          url,
+          doc.url,
           FileSystem.documentDirectory + filename,
         );
         const result = await downloadResumable.downloadAsync();
@@ -147,8 +147,12 @@ export default function AdminTaskDetail() {
     }
   };
 
-  const getDocFileName = (url: string): string => {
-    const filename = url.split('/').pop() || 'document';
+  const getDocFileName = (doc: { url: string; fileName?: string }): string => {
+    // Use fileName if available, otherwise extract from URL
+    if (doc.fileName) {
+      return getCleanFileName(doc.fileName);
+    }
+    const filename = doc.url.split('/').pop() || 'document';
     return getCleanFileName(filename);
   };
 
@@ -506,7 +510,7 @@ export default function AdminTaskDetail() {
                 <Ionicons name="document" size={24} color="#6c757d" style={{ marginRight: 12 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontWeight: '600', color: '#1a1a1a' }}>
-                    {getDocFileName(doc.url)}
+                    {getDocFileName(doc)}
                   </Text>
                   <Text style={{ fontSize: 12, color: '#6c757d' }}>
                     {getReadableFileType(doc.mime)}
@@ -514,7 +518,7 @@ export default function AdminTaskDetail() {
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Pressable
-                    onPress={() => openDocument(doc.url)}
+                    onPress={() => openDocument(doc)}
                     style={{
                       paddingHorizontal: 8,
                       paddingVertical: 4,
@@ -524,7 +528,7 @@ export default function AdminTaskDetail() {
                     <Text style={{ color: 'white', fontSize: 12 }}>Open</Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => shareDocument(doc.url)}
+                    onPress={() => shareDocument(doc)}
                     style={{
                       paddingHorizontal: 8,
                       paddingVertical: 4,

@@ -435,7 +435,12 @@ f.get('/:id', async (req: any, rep) => {
         if (part.type === "file") {
           const url = await uploadToS3(part, `tasks/tmp/`);   // helper
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
-          (isDoc ? newDocs : newImgs).push({ taskId: id, url, mime: part.mimetype });
+          (isDoc ? newDocs : newImgs).push({ 
+            taskId: id, 
+            url, 
+            mime: part.mimetype,
+            ...(isDoc && { fileName: part.filename }), // Include fileName for documents
+          });
         } else if (part.type === "field") {
           fields[part.fieldname] = part.value;
         }
@@ -779,6 +784,7 @@ app.register(async (f) => {
             taskId: 0,                 // patched after .create()
             url,
             mime: part.mimetype,
+            ...(isDoc && { fileName: part.filename }), // Include fileName for documents
           });
 
         } else if (part.type === 'field') {
@@ -915,7 +921,12 @@ app.register(async (f) => {
         if (part.type === "file") {
           const url = await uploadToS3(part, `tasks/tmp/`);   // helper
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
-          (isDoc ? newDocs : newImgs).push({ taskId, url, mime: part.mimetype });
+          (isDoc ? newDocs : newImgs).push({ 
+            taskId, 
+            url, 
+            mime: part.mimetype,
+            ...(isDoc && { fileName: part.filename }), // Include fileName for documents
+          });
         } else if (part.type === "field") {
           fields[part.fieldname] = part.value;
         }
