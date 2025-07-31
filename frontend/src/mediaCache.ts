@@ -98,8 +98,27 @@ export async function syncMedia(): Promise<void> {
       const name = getDocFileName(url);
       const fileUri = `${docDir}/${name}`;
       const info = await FileSystem.getInfoAsync(fileUri);
+      
+      // Only download if file doesn't exist
       if (!info.exists) {
-        await FileSystem.downloadAsync(url, fileUri);
+        console.log('Downloading document:', url, 'to:', fileUri);
+        try {
+          await FileSystem.downloadAsync(url, fileUri);
+          // Verify the download
+          const newInfo = await FileSystem.getInfoAsync(fileUri);
+          console.log('Downloaded file size:', 'size' in newInfo ? newInfo.size : 'unknown');
+          if ('size' in newInfo && newInfo.size && newInfo.size < 1000) {
+            console.warn('Downloaded file is suspiciously small:', newInfo.size);
+            console.error('Server is serving corrupted documents. File size:', newInfo.size);
+          }
+        } catch (error) {
+          console.error('Failed to download document:', error);
+        }
+      } else {
+        // File exists, check if it's corrupted
+        if ('size' in info && info.size && info.size < 1000) {
+          console.warn('Existing file is corrupted (small size):', info.size, 'bytes');
+        }
       }
     }
 

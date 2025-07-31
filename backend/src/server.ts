@@ -13,6 +13,7 @@ import { Recurrence } from '@prisma/client';
 
 // server.ts (top of the file, together with the other imports)
 import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
+
 //helpers for sorting
 import { SORT_PRESETS } from './lib/helpers';
 import { nextDate } from "./lib/recur";
@@ -281,7 +282,47 @@ f.get('/', async (req: any, rep) => {
       // thumbUrl: await prisma.imageThumb.findUnique({ where: { id: img.id } }).url,
     }));
 
-    return { images: thumbImages, documents: docs };
+    /* generate pre-signed URLs for documents */
+    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+    const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+    
+    // Create a new S3 client instance for pre-signed URLs
+    const presignerClient = new S3Client({
+      region: process.env.AWS_REGION ?? 'eu-north-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    });
+    
+    const documentsWithSignedUrls = await Promise.all(
+      docs.map(async (doc) => {
+        try {
+          // Extract the key from the S3 URL
+          const url = new URL(doc.url);
+          const key = url.pathname.substring(1); // Remove leading slash
+          
+          // Generate pre-signed URL (valid for 1 hour)
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+          
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+          
+          return {
+            ...doc,
+            url: signedUrl, // Replace with pre-signed URL
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for document:', error);
+          // Return original URL if signing fails
+          return doc;
+        }
+      })
+    );
+
+    return { images: thumbImages, documents: documentsWithSignedUrls };
 });
 
 
