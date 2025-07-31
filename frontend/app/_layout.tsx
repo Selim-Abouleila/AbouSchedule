@@ -8,9 +8,10 @@ import { Drawer } from 'expo-router/drawer';
 import { DrawerToggleButton } from '@react-navigation/drawer';
 import { useEffect, useState } from 'react';
 import { isAdmin } from '../src/auth';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function AppDrawerLayout() {
-  const [showAdminPanel, setShowAdminPanel] = useState<boolean | null>(null);
+  const [showAdminPanel, setShowAdminPanel] = useState<boolean>(false);
 
   useEffect(() => {
     checkAdminStatus();
@@ -37,25 +38,25 @@ export default function AppDrawerLayout() {
       
       {/* TASK list (and nested add / detail) */}
       <Drawer.Screen name="tasks/index" options={{ title: 'Tasks' }} />
+      
 
-      {/* Settings page */}
-      <Drawer.Screen name="settings" options={{ title: 'Settings' }} />
-
-      {/* Admin Panel - only visible to admins */}
-      {showAdminPanel && (
-        <Drawer.Screen 
-          name="admin" 
-          options={{ 
-            title: 'Admin Panel',
-            drawerIcon: ({ color, size }) => (
-              <DrawerToggleButton />
-            ),
-          }} 
-        />
-      )}
+      {/* Admin Panel - always included but conditionally visible */}
+      <Drawer.Screen 
+        name="admin" 
+        options={{ 
+          title: 'Admin Panel',
+          drawerItemStyle: showAdminPanel ? undefined : { display: 'none' },
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="shield-checkmark" size={size} color={color} />
+          ),
+        }} 
+      />
 
       {/* Media page */}
       <Drawer.Screen name="media/media" options={{ title: 'Media' }} />
+
+      {/* Settings page */}
+      <Drawer.Screen name="settings" options={{ title: 'Settings' }} />
 
       {/* Login lives one level up (app/login.tsx) */}
       <Drawer.Screen name="auth/login" options={{ title: 'Login' }} />

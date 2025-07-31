@@ -659,27 +659,430 @@ app.register(async (f) => {
     return { message: 'User deleted successfully' };
   });
 
-  // Get all tasks (admin only)
-  f.get('/all-tasks', async (req: any, rep) => {
+
+
+  // Get tasks for a specific user (admin only) - similar to regular user endpoint
+  f.get('/users/:id/tasks', async (req: any, rep) => {
     const userRole = req.user.role;
     if (userRole !== 'ADMIN') {
       return rep.code(403).send({ error: 'Admin access required' });
     }
 
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    /* paging */
+    const take   = Math.min(Number(req.query.take) || 50, 100);
+    const cursor = req.query.cursor ? Number(req.query.cursor) : null;
+
+    /* pick preset from query or default */
+    const preset  = String(req.query.sort || 'priority');
+    const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;  // ← array
+
     const tasks = await prisma.task.findMany({
-      include: {
-        user: {
-          select: {
-            email: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where: { userId },
+      take,
+      skip: cursor ? 1 : 0,
+      ...(cursor && { cursor: { id: cursor } }),
+      orderBy,                               // ✅ now valid
+      include: { images: true, documents: true },
     });
 
-    return tasks;
+    const nextCursor =
+      tasks.length === take ? tasks[tasks.length - 1].id : null;
+
+    return { tasks, nextCursor };
+  });
+
+  // Create task for a specific user (admin only)
+  f.post('/users/:id/tasks', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return rep.code(404).send({ error: 'User not found' });
+    }
+
+    /* --- ❶  Collect parts in ONE pass ----------------------------- */
+    const fields: Record<string, string> = {};
+    const images: { taskId: number; url: string; mime: string }[] = [];
+    const documents: { taskId: number; url: string; mime: string }[] = [];
+
+    /* same loop, just decide where to push */
+    if (req.isMultipart()) {
+      for await (const part of req.parts()) {
+        if (part.type === 'file') {
+          const url = await uploadToS3(part, 'tasks/tmp');
+
+          /* heuristics: treat PDFs, DOCX, etc. as documents */
+          const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
+
+          (isDoc ? documents : images).push({
+            taskId: 0,                 // patched after .create()
+            url,
+            mime: part.mimetype,
+          });
+
+        } else if (part.type === 'field') {
+          fields[part.fieldname] = part.value;
+        }
+      }
+    } else {
+      Object.assign(fields, req.body);
+    }
+
+    /* --- ❷  Create the Task -------------------------------------- */
+    const {
+      title,
+      description,
+      priority,
+      status = 'ACTIVE',
+      size,
+      dueAt,
+      timeCapMinutes,
+      recurrence,        // DAILY | WEEKLY | … (string)
+      recurrenceEvery,   // "1" | "2" | …
+      recurrenceDow,
+      recurrenceDom,
+      recurrenceMonth, 
+      recurrenceEnd,
+      labelDone,
+      lastOccurrence,
+      nextOccurrence
+    } = fields as {
+      title: string;
+      description?: string;
+      priority: string;
+      status?: string;
+      size?: string;
+      dueAt?: string;
+      timeCapMinutes?: string;   // numbers come in as strings from multipart
+      recurrence?: string;       // can be undefined
+      recurrenceEvery?: string;
+      recurrenceDow?: string;
+      recurrenceDom?: string;
+      recurrenceMonth?: string;
+      recurrenceEnd?: string;
+      labelDone?: string;
+      lastOccurrence?: string;
+      nextOccurrence?: string;
+    };
+
+    const anchor = dueAt ? new Date(dueAt)              // user‑supplied
+      : new Date();
+
+    /* ── 2. work out the first "next" occurrence ───────── */
+    const firstNextOccurrence  = nextDate(
+  /* last  */ null,                                 // never run yet
+  /* start */ anchor,                               // template start
+      recurrenceEvery ? Number(recurrenceEvery) : 1,
+      recurrence ? (recurrence as Recurrence) : Recurrence.NONE,
+      recurrenceDow ? Number(recurrenceDow) : null,
+      recurrenceDom ? Number(recurrenceDom) : null,
+      recurrenceMonth ? Number(recurrenceMonth) : null,
+      recurrenceDom ? Number(recurrenceDom) : null
+    );
+
+    const done = labelDone ? labelDone === 'true' : undefined;
+
+    /* Set Previous Status */
+
+    const initStatus = status as Status;               // value that came from UI
+    const prevStatus = initStatus !== 'DONE' ? initStatus : null;
+
+    const task = await prisma.task.create({
+      data: {
+        title,
+        description,
+        priority: priority as Priority,
+        status: initStatus,
+        previousStatus: prevStatus,
+        size: size as Size,
+        dueAt: dueAt ? new Date(dueAt) : undefined,
+        timeCapMinutes: timeCapMinutes ? Number(timeCapMinutes) : undefined,
+        recurrence: recurrence ? recurrence as Recurrence : Recurrence.NONE,
+        recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
+        recurrenceDow:  recurrenceDow  ? Number(recurrenceDow)  : null,
+        recurrenceDom:  recurrenceDom  ? Number(recurrenceDom)  : null,
+        recurrenceMonth: recurrenceMonth ? Number(recurrenceMonth) : null,
+        recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
+        labelDone: done,
+        lastOccurrence: null,
+        nextOccurrence: firstNextOccurrence,
+        userId
+      }
+    });
+
+    /* --- ❸  Persist image metadata (if any) ---------------------- */
+    if (images.length) {
+      for (const img of images) img.taskId = task.id;        // patch IDs
+      await prisma.image.createMany({ data: images });
+    }
+
+    /* --- ❸b  Persist document metadata ------------------------------- */
+    if (documents.length) {
+      for (const doc of documents) doc.taskId = task.id;
+      await prisma.document.createMany({ data: documents });
+    }
+
+    const full = await prisma.task.findUnique({
+      where: { id: task.id },
+      include: { images: true, documents: true }
+    });
+
+    return rep.code(201).send(full);
+  });
+
+  // Update task for a specific user (admin only)
+  f.patch('/users/:userId/tasks/:taskId', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const userId = parseInt(req.params.userId);
+    const taskId = parseInt(req.params.taskId);
+    
+    if (isNaN(userId) || isNaN(taskId)) {
+      return rep.code(400).send({ error: 'Invalid user ID or task ID' });
+    }
+
+    /* ❶ Read multipart (or JSON) */
+    const fields: Record<string, string> = {};
+    const newImgs: { taskId: number; url: string; mime: string }[] = [];
+    const newDocs: { taskId: number; url: string; mime: string }[] = [];
+
+    if (req.isMultipart()) {
+      for await (const part of req.parts()) {
+        if (part.type === "file") {
+          const url = await uploadToS3(part, `tasks/tmp/`);   // helper
+          const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
+          (isDoc ? newDocs : newImgs).push({ taskId, url, mime: part.mimetype });
+        } else if (part.type === "field") {
+          fields[part.fieldname] = part.value;
+        }
+      }
+    } else {
+      Object.assign(fields, req.body);                         // JSON / url‑encoded
+    }
+
+    /* ❷ Extract scalars */
+    const {
+      title, description, priority, status, size,
+      dueAt, timeCapMinutes, recurrence, recurrenceDow, recurrenceDom, recurrenceMonth, recurrenceEvery,
+      recurrenceEnd, labelDone, keep, keepDocs
+    } = fields as Partial<{
+      title: string; description: string; priority: Priority; status: Status; size: Size;
+      dueAt: string; timeCapMinutes: string; recurrence: Recurrence; recurrenceDow: string; recurrenceDom: string; recurrenceMonth: string;
+      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string;
+    }>;
+
+    /* ❸ Build `data` dynamically */
+    const data: Record<string, any> = {};
+    if (title !== undefined) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (priority !== undefined) data.priority = priority;
+    if (status !== undefined) data.status = status;
+    if (size !== undefined) data.size = size;
+    if (dueAt !== undefined) data.dueAt = dueAt ? new Date(dueAt) : null;
+    if (timeCapMinutes !== undefined) data.timeCapMinutes = Number(timeCapMinutes);
+    if (recurrence !== undefined) data.recurrence = recurrence;
+    if (recurrenceEvery !== undefined) data.recurrenceEvery = Number(recurrenceEvery);
+    if (recurrenceDow !== undefined) data.recurrenceDow = Number(recurrenceDow);
+    if (recurrenceMonth !== undefined) data.recurrenceMonth = Number(recurrenceMonth);
+    if (recurrenceDom !== undefined) data.recurrenceDom = Number(recurrenceDom);
+    if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
+    if (labelDone !== undefined) data.labelDone = labelDone === "true";
+
+    // set previous status
+    /* ── previousStatus logic ─────────────────────────── */
+    if (status !== undefined && status !== 'DONE') {
+      // only copy when the new status is NOT 'DONE'
+      data.previousStatus = status;
+    }
+
+    /// ❸b · If the user changed any recurrence field, recompute nextOccurrence
+    const existing = await prisma.task.findUnique({
+      where: { id: taskId, userId },
+      select: {
+        dueAt: true,
+        recurrence: true,
+        recurrenceEvery: true,
+        recurrenceDow: true,
+        recurrenceDom: true,
+        recurrenceMonth: true,
+        recurrenceEnd: true,
+      },
+    });
+    if (!existing) return rep.code(404).send({ error: "Task not found" });
+
+    const recFieldsChanged =
+      recurrence !== undefined ||
+      recurrenceEvery !== undefined ||
+      recurrenceDow !== undefined ||
+      recurrenceDom !== undefined ||
+      recurrenceMonth !== undefined;
+
+    if (recFieldsChanged) {
+      // pick up either the new dueAt or fall back to the old one or now
+      const anchor = data.dueAt ?? existing.dueAt ?? new Date();
+
+      // merge in new or existing recurrence settings
+      const everyVal = data.recurrenceEvery ?? existing.recurrenceEvery ?? 1;
+      const typeVal = (data.recurrence as Recurrence) ?? existing.recurrence;
+      const dowVal = data.recurrenceDow ?? existing.recurrenceDow ?? null;
+      const domVal = data.recurrenceDom ?? existing.recurrenceDom ?? null;
+      const monthVal = data.recurrenceMonth ?? existing.recurrenceMonth ?? null;
+
+      // re‑run your nextDate helper
+      data.nextOccurrence = nextDate(
+    /* last */ null,
+    /* start */ anchor,
+    /* every */ everyVal,
+    /* type  */ typeVal,
+    /* dow   */ dowVal,
+    /* dom   */ domVal,
+    /* month */ monthVal,
+    /* recDom*/ domVal
+      );
+
+      // clear lastOccurrence so it truly restarts
+      data.lastOccurrence = null;
+    }
+
+    /* ❹ Update row only if it belongs to the user */
+    const upd = await prisma.task.updateMany({ where: { id: taskId, userId }, data });
+    if (upd.count === 0) return rep.code(404).send({ error: "Task not found" });
+    
+    /* ❺ Images – delete removed, then add new */
+    if (keep !== undefined) {
+      const keepIds = keep.split(',').map(Number).filter(Boolean);
+
+      await prisma.image.deleteMany({
+        where: { taskId, id: { notIn: keepIds } }
+      });
+    }
+
+    if (newImgs.length) {
+      await prisma.image.createMany({ data: newImgs });
+    }
+
+    if (keepDocs !== undefined) {
+      const ids = keepDocs.split(',').map(Number).filter(Boolean);
+      await prisma.document.deleteMany({
+        where: { taskId, id: { notIn: ids } }
+      });
+    }
+
+    if (newDocs.length) {
+      await prisma.document.createMany({ data: newDocs });
+    }
+    
+    /* ❻ Return fresh record */
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: { images: true, documents: true }
+    });
+    return task;
+  });
+
+  // Delete task for a specific user (admin only)
+  f.delete('/users/:userId/tasks/:taskId', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const userId = parseInt(req.params.userId);
+    const taskId = parseInt(req.params.taskId);
+    
+    if (isNaN(userId) || isNaN(taskId)) {
+      return rep.code(400).send({ error: 'Invalid user ID or task ID' });
+    }
+
+    /* delete and make sure it belonged to this user */
+    const deleted = await prisma.task.deleteMany({
+      where: { id: taskId, userId },
+    });
+
+    if (deleted.count === 0) {
+      return rep.code(404).send({ error: 'Task not found' });
+    }
+    // Images go automatically because Image.task has onDelete: Cascade
+    return { ok: true };
+  });
+
+  // Get a specific task for a user (admin only)
+  f.get('/users/:userId/tasks/:taskId', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const userId = parseInt(req.params.userId);
+    const taskId = parseInt(req.params.taskId);
+    
+    if (isNaN(userId) || isNaN(taskId)) {
+      return rep.code(400).send({ error: 'Invalid user ID or task ID' });
+    }
+
+    const task = await prisma.task.findFirst({
+      where: { id: taskId, userId },
+      include: { images: true, documents: true },
+    });
+
+    if (!task) return rep.code(404).send({ error: 'Task not found' });
+
+    /* Generate pre-signed URLs for documents */
+    const documentsWithSignedUrls = await Promise.all(
+      task.documents.map(async (doc) => {
+        try {
+          const url = new URL(doc.url);
+          const key = url.pathname.substring(1);
+          
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+          
+          // Create a new S3 client instance for pre-signed URLs
+          const presignerClient = new S3Client({
+            region: process.env.AWS_REGION ?? 'eu-north-1',
+            credentials: {
+              accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+            },
+          });
+          
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+          
+          return {
+            ...doc,
+            url: signedUrl,
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for document:', error);
+          return doc;
+        }
+      })
+    );
+
+    /* return task with pre-signed document URLs */
+    return {
+      ...task,
+      documents: documentsWithSignedUrls,
+    };
   });
 
 }, { prefix: '/admin' });
