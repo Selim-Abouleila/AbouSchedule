@@ -7,6 +7,7 @@ import { getToken }  from '../../src/auth';
 import { Platform } from 'react-native';
 import { ActionSheetIOS } from 'react-native';   // iOS native sheet
 import { Modal } from 'react-native';
+import { startTaskChecking, manualCheckForNewTasks } from '../../src/notificationHelper';
 
 /** Page size we request from the API */
 const PAGE_SIZE = 50;
@@ -168,8 +169,20 @@ useEffect(() => {
   fetchPage(null, true);        // first page with new preset
 }, [sort]); 
 
+// Start notification checking when component mounts
+useEffect(() => {
+  const cleanup = startTaskChecking();
+  return cleanup;
+}, []);
 
-  /** initial load + refresh */
+// Check for new tasks when screen comes into focus
+useFocusEffect(
+  useCallback(() => {
+    manualCheckForNewTasks();
+  }, [])
+);
+
+/** initial load + refresh */
   // reload now returns void
   // ⬇️ replace your current `reload` definition with this
   // ✅ NEW reload – always sees the current fetchPage / sort
@@ -395,6 +408,30 @@ useEffect(() => {
       })}
     >
       <Ionicons name="add" size={24} color="white" />
+    </Pressable>
+
+    {/* ───── Test notification button (temporary) ───── */}
+    <Pressable
+      onPress={() => manualCheckForNewTasks()}
+      style={({ pressed }) => ({
+        position: 'absolute',
+        right: 20,
+        bottom: 90,
+        backgroundColor: '#FF6B35',
+        borderRadius: 28,
+        width: 56,
+        height: 56,
+        justifyContent: 'center',
+        alignItems: 'center',
+        opacity: pressed ? 0.8 : 1,
+        shadowColor: '#FF6B35',
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 8,
+      })}
+    >
+      <Ionicons name="notifications" size={24} color="white" />
     </Pressable>
 
     {/* ───── Android / fallback sort‑menu modal (new) ───── */}

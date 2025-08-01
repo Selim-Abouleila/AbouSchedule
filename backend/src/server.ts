@@ -248,13 +248,17 @@ f.get('/', async (req: any, rep) => {
   /* paging */
   const take   = Math.min(Number(req.query.take) || 50, 100);
   const cursor = req.query.cursor ? Number(req.query.cursor) : null;
+  const since  = req.query.since ? new Date(req.query.since) : null;
 
   /* pick preset from query or default */
   const preset  = String(req.query.sort || 'priority');
   const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;  // ← array
 
   const tasks = await prisma.task.findMany({
-    where: { userId },
+    where: { 
+      userId,
+      ...(since && { createdAt: { gt: since } })
+    },
     take,
     skip: cursor ? 1 : 0,
     ...(cursor && { cursor: { id: cursor } }),

@@ -14,7 +14,7 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { endpoints } from '../../src/api';
-import { saveToken } from '../../src/auth';
+import { saveTokenAndNotify } from '../../src/auth';
 
 export default function Login() {
   const [email, setEmail]     = useState('');
@@ -35,7 +35,7 @@ export default function Login() {
       });
       if (!res.ok) throw new Error('Bad credentials');
       const { token } = await res.json();
-      await saveToken(token);
+      await saveTokenAndNotify(token);
       router.replace('/tasks');           // go to tasks
     } catch (e: any) {
       Alert.alert('Login failed', e.message);

@@ -1,6 +1,6 @@
 // src/logoutHelper.ts  (new location)
-import { clearToken } from '../src/auth';
+import { clearTokenAndNotify } from '../src/auth';
 
 export async function logoutHelper() {
-  await clearToken();          // wipe SecureStore JWT
+  await clearTokenAndNotify();          // wipe SecureStore JWT
 }

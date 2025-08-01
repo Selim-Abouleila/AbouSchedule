@@ -1,6 +1,6 @@
 // src/helpers/mediaHelper.ts
 import * as FileSystem from 'expo-file-system'
-import { endpoints }        from './api'
+import { endpoints, API_BASE }        from './api'
 import { getToken }         from './auth'
 import { jwtDecode }        from 'jwt-decode'
 import * as Crypto          from 'expo-crypto'
@@ -65,14 +65,14 @@ async function ensureFolder(path: string): Promise<string> {
 /**
  * Creates user-specific folders for images and documents
  */
-export async function initUserMediaFolder(): Promise<string> {
-  const userId = await getUserId()
+export async function initUserMediaFolder(targetUserId?: number): Promise<string> {
+  const userId = targetUserId ? targetUserId.toString() : await getUserId()
   const imgDir = `${MEDIA_BASE}/${userId}/images`
   return ensureFolder(imgDir)
 }
 
-export async function initUserDocsFolder(): Promise<string> {
-  const userId = await getUserId()
+export async function initUserDocsFolder(targetUserId?: number): Promise<string> {
+  const userId = targetUserId ? targetUserId.toString() : await getUserId()
   const docDir = `${MEDIA_BASE}/${userId}/documents`
   return ensureFolder(docDir)
 }
@@ -86,7 +86,7 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
 
   try {
     // 1. Fetch the media manifest from your backend
-    const endpoint = targetUserId ? `${endpoints.media}/admin/${targetUserId}` : endpoints.media;
+    const endpoint = targetUserId ? `${API_BASE}/admin/media/${targetUserId}` : endpoints.media;
     const res = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -101,7 +101,7 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
     };
 
     // 3. Download images (only if missing)
-    const imgDir = await initUserMediaFolder();
+    const imgDir = await initUserMediaFolder(targetUserId);
     for (const { url } of images) {
       const name = await makeFileName(url);
       const fileUri = `${imgDir}/${name}`;
@@ -112,7 +112,7 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
     }
 
     // 4. Download documents (only if missing)
-    const docDir = await initUserDocsFolder();
+    const docDir = await initUserDocsFolder(targetUserId);
     for (const doc of documents) {
       // Use fileName if available, otherwise extract from URL
       const name = doc.fileName || getDocFileName(doc.url);
@@ -153,8 +153,8 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
 /**
  * List local image URIs
  */
-export async function getLocalMediaUris(): Promise<string[]> {
-  const imgDir = await initUserMediaFolder()
+export async function getLocalMediaUris(targetUserId?: number): Promise<string[]> {
+  const imgDir = await initUserMediaFolder(targetUserId)
   const files = await FileSystem.readDirectoryAsync(imgDir)
   return files.map(name => `${imgDir}/${name}`)
 }
@@ -162,8 +162,8 @@ export async function getLocalMediaUris(): Promise<string[]> {
 /**
  * List local document URIs
  */
-export async function getLocalDocumentUris(): Promise<string[]> {
-  const docDir = await initUserDocsFolder()
+export async function getLocalDocumentUris(targetUserId?: number): Promise<string[]> {
+  const docDir = await initUserDocsFolder(targetUserId)
   const files = await FileSystem.readDirectoryAsync(docDir)
   return files.map(name => `${docDir}/${name}`)
 }

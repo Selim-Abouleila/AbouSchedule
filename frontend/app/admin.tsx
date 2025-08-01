@@ -263,7 +263,21 @@ export default function AdminPanel() {
                           { 
                             text: 'Delete', 
                             style: 'destructive', 
-                            onPress: () => handleUserAction(user.id, 'delete') 
+                            onPress: () => {
+                              // Second confirmation dialog
+                              Alert.alert(
+                                'Final Confirmation',
+                                `This is your final warning. Are you absolutely sure you want to permanently delete ${user.username ? user.username : user.email}? This action cannot be undone and all their data will be lost.`,
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { 
+                                    text: 'Yes, Delete Permanently', 
+                                    style: 'destructive', 
+                                    onPress: () => handleUserAction(user.id, 'delete') 
+                                  }
+                                ]
+                              );
+                            }
                           }
                         ]
                       );

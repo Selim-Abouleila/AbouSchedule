@@ -9,7 +9,8 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
 import { endpoints, API_BASE } from '../../src/api';
-import { getToken } from '../../src/auth';
+import { getToken, addAuthListener, removeAuthListener } from '../../src/auth';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function MediaScreen() {
   const [mode, setMode] = useState<'images' | 'documents'>('images');
@@ -34,10 +35,12 @@ export default function MediaScreen() {
       setLoading(true);
     }
     try {
+      console.log('Loading media for selectedUserId:', selectedUserId);
       await syncMedia(selectedUserId || undefined);
       const data = mode === 'images'
-        ? await getLocalMediaUris()
-        : await getLocalDocumentUris();
+        ? await getLocalMediaUris(selectedUserId || undefined)
+        : await getLocalDocumentUris(selectedUserId || undefined);
+      console.log('Loaded media URIs:', data.length);
       setUris(data);
     } catch (err) {
       console.error('Failed to load media:', err);
@@ -100,10 +103,37 @@ export default function MediaScreen() {
     }
   }, []);
 
-  // Load users when component mounts
+  // Load users when component mounts and when auth changes
   useEffect(() => {
     checkAdminStatus();
+    
+    // Add auth listener
+    const authListener = async (isAuthenticated: boolean) => {
+      if (!isAuthenticated) {
+        // User logged out, clear admin state
+        setIsAdmin(false);
+        setUsers([]);
+        setSelectedUserId(null);
+      } else {
+        // User logged in, check admin status
+        await checkAdminStatus();
+      }
+    };
+    
+    addAuthListener(authListener);
+    
+    // Cleanup
+    return () => {
+      removeAuthListener(authListener);
+    };
   }, [checkAdminStatus]);
+
+  // Check admin status when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      checkAdminStatus();
+    }, [checkAdminStatus])
+  );
 
   useEffect(() => {
     loadMedia();

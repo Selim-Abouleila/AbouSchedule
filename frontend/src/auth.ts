@@ -29,3 +29,35 @@ export const isAdmin = async (): Promise<boolean> => {
   const role = await getUserRole();
   return role === 'ADMIN';
 };
+
+// Auth state management
+type AuthListener = (isAuthenticated: boolean) => void;
+const authListeners: AuthListener[] = [];
+
+export const addAuthListener = (listener: AuthListener) => {
+  authListeners.push(listener);
+};
+
+export const removeAuthListener = (listener: AuthListener) => {
+  const index = authListeners.indexOf(listener);
+  if (index > -1) {
+    authListeners.splice(index, 1);
+  }
+};
+
+export const notifyAuthListeners = async () => {
+  const token = await getToken();
+  const isAuthenticated = !!token;
+  authListeners.forEach(listener => listener(isAuthenticated));
+};
+
+// Enhanced token functions that notify listeners
+export const saveTokenAndNotify = async (token: string) => {
+  await saveToken(token);
+  await notifyAuthListeners();
+};
+
+export const clearTokenAndNotify = async () => {
+  await clearToken();
+  await notifyAuthListeners();
+};
