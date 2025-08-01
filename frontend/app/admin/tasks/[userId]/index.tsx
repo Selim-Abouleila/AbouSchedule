@@ -433,7 +433,18 @@ export default function AdminUserTasks() {
 
       {/* Floating "add task" button */}
       <Pressable
-        onPress={() => router.push(`/admin/tasks/${userId}/new`)}
+        onPress={() => {
+          if (userInfo) {
+            const userDisplayName = userInfo.username || userInfo.email;
+            router.push({
+              pathname: '/admin/tasks/add',
+              params: { 
+                userId: userId, 
+                userDisplayName: userDisplayName 
+              }
+            });
+          }
+        }}
         style={({ pressed }) => ({
           position: 'absolute',
           right: 20,

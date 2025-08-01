@@ -85,6 +85,10 @@ export default function AppDrawerLayout() {
       {/*Admin Add Tasks*/}
         <Drawer.Screen name="admin/tasks/add" options={{ title: 'Add Task for User', drawerItemStyle: { display: 'none' }, }}  />
 
+      {/*Admin Edit Tasks*/}
+        <Drawer.Screen name="admin/tasks/[userId]/edit" options={{ title: 'Edit Task for User', drawerItemStyle: { display: 'none' }, }}  />
+
+
 
       <Drawer.Screen
         name="_necessary"

@@ -219,14 +219,7 @@ const navigation = useNavigation();
 
 
 
-useEffect(() => {
-  const sub = navigation.addListener("beforeRemove", (e) => {
-    // stop the default behaviour
-    e.preventDefault();
-    handleBack();
-  });
-  return sub;
-}, [navigation, hasUnsavedChanges]);   // keep it up‑to‑date
+
 
 /* Recurrence reset */
 useEffect(() => {
@@ -512,12 +505,12 @@ const scrollRef = useRef<ScrollView>(null);
       return Alert.alert("Failed", await res.text());
     }
     resetForm();
-    router.back();
+    router.push('/admin');
   };
 
   const handleBack = useCallback(() => {
     if (!hasUnsavedChanges) {           // ⬅️  let React Navigation do its thing
-      router.back();
+      router.push('/admin');
       return;
     }
 
@@ -539,7 +532,7 @@ const scrollRef = useRef<ScrollView>(null);
                   style: "destructive",
                   onPress: () => {
                     resetForm();
-                    router.back();
+                    router.push('/admin');
                   },
                 },
               ],
@@ -550,6 +543,16 @@ const scrollRef = useRef<ScrollView>(null);
       ],
     );
   }, [hasUnsavedChanges, save, resetForm]);
+
+  // Navigation listener for back button/gesture
+  useEffect(() => {
+    const sub = navigation.addListener("beforeRemove", (e) => {
+      // stop the default behaviour
+      e.preventDefault();
+      handleBack();
+    });
+    return sub;
+  }, [navigation, handleBack]);
 
 
   /* UI */
@@ -577,7 +580,7 @@ const scrollRef = useRef<ScrollView>(null);
             borderRadius: 8,
           }}>
             <Pressable
-              onPress={() => router.push('/admin')}
+              onPress={handleBack}
               style={{
                 marginRight: 16,
                 padding: 8,
@@ -1001,7 +1004,6 @@ const scrollRef = useRef<ScrollView>(null);
 
           {/* Action buttons */}
           <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
-          <Button title="← Back" onPress={handleBack} />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

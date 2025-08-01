@@ -95,7 +95,6 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
       headers: { Authorization: `Bearer ${token}` }
     });
     console.log('Response status:', res.status);
-    console.log('Response headers:', res.headers);
     
     if (!res.ok) {
       const errorText = await res.text();
@@ -160,13 +159,26 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
 
 
 /**
- * List local image URIs
+ * List local image URIs sorted by modification time (newest first)
  */
 export async function getLocalMediaUris(targetUserId?: number): Promise<string[]> {
   try {
     const imgDir = await initUserMediaFolder(targetUserId)
     const files = await FileSystem.readDirectoryAsync(imgDir)
-    return files.map(name => `${imgDir}/${name}`)
+    
+    // Get file info for each file to sort by modification time
+    const fileInfos = await Promise.all(
+      files.map(async (name) => {
+        const fileUri = `${imgDir}/${name}`;
+        const info = await FileSystem.getInfoAsync(fileUri);
+        return { uri: fileUri, modificationTime: info.modificationTime || 0 };
+      })
+    );
+    
+    // Sort by modification time (newest first)
+    fileInfos.sort((a, b) => b.modificationTime - a.modificationTime);
+    
+    return fileInfos.map(info => info.uri);
   } catch (error) {
     console.warn('Failed to read local media URIs:', error)
     return []
@@ -174,13 +186,26 @@ export async function getLocalMediaUris(targetUserId?: number): Promise<string[]
 }
 
 /**
- * List local document URIs
+ * List local document URIs sorted by modification time (newest first)
  */
 export async function getLocalDocumentUris(targetUserId?: number): Promise<string[]> {
   try {
     const docDir = await initUserDocsFolder(targetUserId)
     const files = await FileSystem.readDirectoryAsync(docDir)
-    return files.map(name => `${docDir}/${name}`)
+    
+    // Get file info for each file to sort by modification time
+    const fileInfos = await Promise.all(
+      files.map(async (name) => {
+        const fileUri = `${docDir}/${name}`;
+        const info = await FileSystem.getInfoAsync(fileUri);
+        return { uri: fileUri, modificationTime: info.modificationTime || 0 };
+      })
+    );
+    
+    // Sort by modification time (newest first)
+    fileInfos.sort((a, b) => b.modificationTime - a.modificationTime);
+    
+    return fileInfos.map(info => info.uri);
   } catch (error) {
     console.warn('Failed to read local document URIs:', error)
     return []

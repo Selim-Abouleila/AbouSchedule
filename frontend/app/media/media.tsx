@@ -17,6 +17,7 @@ export default function MediaScreen() {
   const [uris, setUris] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [switchingMode, setSwitchingMode] = useState<boolean>(false);
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex]     = useState(0);
@@ -135,16 +136,33 @@ export default function MediaScreen() {
   useFocusEffect(
     useCallback(() => {
       checkAdminStatus();
-      // Also refresh media when screen comes into focus
-      if (!loading) {
-        loadMedia(true);
-      }
-    }, [checkAdminStatus, loadMedia, loading])
+      // Always refresh media when screen comes into focus
+      loadMedia(true);
+    }, [checkAdminStatus, loadMedia])
   );
 
   useEffect(() => {
     loadMedia();
-  }, [loadMedia, mode, selectedUserId]);
+  }, [loadMedia, selectedUserId]);
+
+  // Handle mode changes separately to avoid loading flash
+  useEffect(() => {
+    const switchMode = async () => {
+      setSwitchingMode(true);
+      try {
+        const data = mode === 'images'
+          ? await getLocalMediaUris(selectedUserId || undefined)
+          : await getLocalDocumentUris(selectedUserId || undefined);
+        setUris(data);
+      } catch (err) {
+        console.error('Failed to switch mode:', err);
+      } finally {
+        setSwitchingMode(false);
+      }
+    };
+    
+    switchMode();
+  }, [mode, selectedUserId]);
 
   /* TO be able to share*/
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -170,7 +188,7 @@ export default function MediaScreen() {
     }
   };
 
-  if (loading && !refreshing) {
+  if (loading && !refreshing && !switchingMode) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#0A84FF" />

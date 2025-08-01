@@ -84,6 +84,8 @@ export default function AdminTaskDetail() {
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  console.log('Admin task view: Component rendered with params:', { userId, id });
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerNonce, setViewerNonce] = useState(0);
@@ -207,21 +209,36 @@ export default function AdminTaskDetail() {
       const loadTask = async () => {
         if (!id || !userId) return;
         
+        console.log('Admin task view: Loading task data...', { id, userId });
         setLoad(true);
-        try {
-          const jwt = await getToken();
-          const res = await fetch(`${API_BASE}/admin/users/${userId}/tasks/${id}`, {
-            headers: { Authorization: `Bearer ${jwt}` },
-          });
-          if (cancelled) return;
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                     const taskData = await res.json();
+                 try {
+           const jwt = await getToken();
+           const endpoint = endpoints.admin.userTask(parseInt(userId), parseInt(id));
+           console.log('Fetching task from endpoint:', endpoint);
+           console.log('User ID:', userId, 'Task ID:', id);
+           const res = await fetch(endpoint, {
+             headers: { Authorization: `Bearer ${jwt}` },
+           });
+           if (cancelled) return;
+           console.log('Response status:', res.status);
+           if (!res.ok) {
+             const errorText = await res.text();
+             console.error('Error response:', errorText);
+             throw new Error(`HTTP ${res.status}: ${errorText}`);
+           }
+           const taskData = await res.json();
            console.log('Task data received:', taskData); // Debug log
            console.log('User data:', taskData.user); // Debug user data specifically
            console.log('User email:', taskData.user?.email); // Debug user email
+           console.log('Recurrence data:', {
+             recurrence: taskData.recurrence,
+             recurrenceEvery: taskData.recurrenceEvery,
+             nextOccurrence: taskData.nextOccurrence,
+             lastOccurrence: taskData.lastOccurrence
+           });
            setTask(taskData);
-          setError(null);
-        } catch (e: any) {
+           setError(null);
+         } catch (e: any) {
           if (!cancelled) setError(e.message ?? 'Unknown error');
         } finally {
           if (!cancelled) setLoad(false);
@@ -243,6 +260,25 @@ export default function AdminTaskDetail() {
     }
   }, [task]);
 
+  /* Debug recurrence data */
+  useEffect(() => {
+    if (task) {
+      console.log('Recurrence check:', { 
+        recurrence: task.recurrence, 
+        isNotNone: task.recurrence !== 'NONE',
+        recurrenceEvery: task.recurrenceEvery,
+        nextOccurrence: task.nextOccurrence
+      });
+    }
+  }, [task]);
+
+  /* Clear task data on mount to ensure fresh load */
+  useEffect(() => {
+    console.log('Admin task view: Clearing task data on mount');
+    setTask(null);
+    setError(null);
+  }, []);
+
   const deleteTask = () => {
     Alert.alert(
       "Delete task",
@@ -255,7 +291,7 @@ export default function AdminTaskDetail() {
           onPress: async () => {
             try {
               const jwt = await getToken();
-              const res = await fetch(`${API_BASE}/admin/users/${userId}/tasks/${id}`, {
+              const res = await fetch(endpoints.admin.userTask(parseInt(userId), parseInt(id)), {
                 method: "DELETE",
                 headers: { Authorization: `Bearer ${jwt}` },
               });
@@ -546,7 +582,7 @@ export default function AdminTaskDetail() {
         {/* Action Buttons */}
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
           <Pressable
-            onPress={() => router.push(`/admin/tasks/${userId}/${id}/edit`)}
+            onPress={() => router.push(`/admin/tasks/${userId}/edit?id=${id}`)}
             style={{
               flex: 1,
               backgroundColor: '#0A84FF',

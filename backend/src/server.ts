@@ -967,9 +967,27 @@ app.register(async (f) => {
     if (timeCapMinutes !== undefined) data.timeCapMinutes = Number(timeCapMinutes);
     if (recurrence !== undefined) data.recurrence = recurrence;
     if (recurrenceEvery !== undefined) data.recurrenceEvery = Number(recurrenceEvery);
-    if (recurrenceDow !== undefined) data.recurrenceDow = Number(recurrenceDow);
-    if (recurrenceMonth !== undefined) data.recurrenceMonth = Number(recurrenceMonth);
-    if (recurrenceDom !== undefined) data.recurrenceDom = Number(recurrenceDom);
+    if (recurrenceDow !== undefined) {
+      if (recurrenceDow === null || recurrenceDow === "null" || recurrenceDow === "") {
+        data.recurrenceDow = null;
+      } else {
+        data.recurrenceDow = Number(recurrenceDow);
+      }
+    }
+    if (recurrenceMonth !== undefined) {
+      if (recurrenceMonth === null || recurrenceMonth === "null" || recurrenceMonth === "") {
+        data.recurrenceMonth = null;
+      } else {
+        data.recurrenceMonth = Number(recurrenceMonth);
+      }
+    }
+    if (recurrenceDom !== undefined) {
+      if (recurrenceDom === null || recurrenceDom === "null" || recurrenceDom === "") {
+        data.recurrenceDom = null;
+      } else {
+        data.recurrenceDom = Number(recurrenceDom);
+      }
+    }
     if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
     if (labelDone !== undefined) data.labelDone = labelDone === "true";
 
