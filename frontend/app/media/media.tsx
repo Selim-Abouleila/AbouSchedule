@@ -36,6 +36,9 @@ export default function MediaScreen() {
     }
     try {
       console.log('Loading media for selectedUserId:', selectedUserId);
+      console.log('Is admin:', isAdmin);
+      console.log('Mode:', mode);
+      
       await syncMedia(selectedUserId || undefined);
       const data = mode === 'images'
         ? await getLocalMediaUris(selectedUserId || undefined)
@@ -48,7 +51,7 @@ export default function MediaScreen() {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [mode, selectedUserId]);
+  }, [mode, selectedUserId, isAdmin]);
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -128,16 +131,20 @@ export default function MediaScreen() {
     };
   }, [checkAdminStatus]);
 
-  // Check admin status when screen comes into focus
+  // Check admin status and refresh media when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       checkAdminStatus();
-    }, [checkAdminStatus])
+      // Also refresh media when screen comes into focus
+      if (!loading) {
+        loadMedia(true);
+      }
+    }, [checkAdminStatus, loadMedia, loading])
   );
 
   useEffect(() => {
     loadMedia();
-  }, [loadMedia, mode]);
+  }, [loadMedia, mode, selectedUserId]);
 
   /* TO be able to share*/
   const [selected, setSelected] = useState<Set<number>>(new Set());

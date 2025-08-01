@@ -339,94 +339,7 @@ f.get('/', async (req: any, rep) => {
     return { images: thumbImages, documents: documentsWithSignedUrls };
   });
 
-  // GET /admin/media/:userId - Get media for a specific user (admin only)
-  f.get('/admin/media/:userId', async (req: any, rep) => {
-    const userRole = req.user.role;
-    if (userRole !== 'ADMIN') {
-      return rep.code(403).send({ error: 'Admin access required' });
-    }
 
-    const targetUserId = parseInt(req.params.userId);
-    if (isNaN(targetUserId)) {
-      return rep.code(400).send({ error: 'Invalid user ID' });
-    }
-
-    // Check if target user exists
-    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
-    if (!targetUser) {
-      return rep.code(404).send({ error: 'User not found' });
-    }
-
-    /* fetch original DB rows for the target user */
-    const [images, docs] = await Promise.all([
-      prisma.image.findMany({ where: { task: { userId: targetUserId } } }),
-      prisma.document.findMany({ where: { task: { userId: targetUserId } } }),
-    ]);
-
-    /* add thumbUrl for each image row */
-    const thumbImages = images.map(img => ({
-      ...img,
-      /*  ❶  If your files are on S3 + CloudFront/Cloudflare: */
-      thumbUrl: `${img.url}?w=200&h=200&fit=cover`,   // query string resize
-
-      /*  ❷  Or if you store resized copies side‑by‑side:           */
-      // thumbUrl: img.url.replace('/original/', '/thumbs/'),
-
-      /*  ❸  Or if you have a dedicated thumbnails table:            */
-      // thumbUrl: await prisma.imageThumb.findUnique({ where: { id: img.id } }).url,
-    }));
-
-    /* generate pre-signed URLs for documents */
-    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-    const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-    
-    // Create a new S3 client instance for pre-signed URLs
-    const presignerClient = new S3Client({
-      region: process.env.AWS_REGION ?? 'eu-north-1',
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-      },
-    });
-    
-    const documentsWithSignedUrls = await Promise.all(
-      docs.map(async (doc) => {
-        try {
-          // Extract the key from the S3 URL
-          const url = new URL(doc.url);
-          const key = url.pathname.substring(1); // Remove leading slash
-          
-          // Generate pre-signed URL (valid for 1 hour)
-          const command = new GetObjectCommand({
-            Bucket: process.env.AWS_BUCKET!,
-            Key: key,
-          });
-          
-          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-          
-          return {
-            ...doc,
-            url: signedUrl, // Replace with pre-signed URL
-          };
-        } catch (error) {
-          console.error('Error generating signed URL for document:', error);
-          // Return original URL if signing fails
-          return doc;
-        }
-      })
-    );
-
-    return { 
-      images: thumbImages, 
-      documents: documentsWithSignedUrls,
-      user: {
-        id: targetUser.id,
-        email: targetUser.email,
-        username: targetUser.username,
-        role: targetUser.role,
-      }
-    };
-  });
 
 
 
@@ -1176,6 +1089,95 @@ app.register(async (f) => {
     }
     // Images go automatically because Image.task has onDelete: Cascade
     return { ok: true };
+  });
+
+  // GET /media/:userId - Get media for a specific user (admin only)
+  f.get('/media/:userId', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const targetUserId = parseInt(req.params.userId);
+    if (isNaN(targetUserId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    // Check if target user exists
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) {
+      return rep.code(404).send({ error: 'User not found' });
+    }
+
+    /* fetch original DB rows for the target user */
+    const [images, docs] = await Promise.all([
+      prisma.image.findMany({ where: { task: { userId: targetUserId } } }),
+      prisma.document.findMany({ where: { task: { userId: targetUserId } } }),
+    ]);
+
+    /* add thumbUrl for each image row */
+    const thumbImages = images.map(img => ({
+      ...img,
+      /*  ❶  If your files are on S3 + CloudFront/Cloudflare: */
+      thumbUrl: `${img.url}?w=200&h=200&fit=cover`,   // query string resize
+
+      /*  ❷  Or if you store resized copies side‑by‑side:           */
+      // thumbUrl: img.url.replace('/original/', '/thumbs/'),
+
+      /*  ❸  Or if you have a dedicated thumbnails table:            */
+      // thumbUrl: await prisma.imageThumb.findUnique({ where: { id: img.id } }).url,
+    }));
+
+    /* generate pre-signed URLs for documents */
+    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+    const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+    
+    // Create a new S3 client instance for pre-signed URLs
+    const presignerClient = new S3Client({
+      region: process.env.AWS_REGION ?? 'eu-north-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    });
+    
+    const documentsWithSignedUrls = await Promise.all(
+      docs.map(async (doc) => {
+        try {
+          // Extract the key from the S3 URL
+          const url = new URL(doc.url);
+          const key = url.pathname.substring(1); // Remove leading slash
+          
+          // Generate pre-signed URL (valid for 1 hour)
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+          
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+          
+          return {
+            ...doc,
+            url: signedUrl, // Replace with pre-signed URL
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for document:', error);
+          // Return original URL if signing fails
+          return doc;
+        }
+      })
+    );
+
+    return { 
+      images: thumbImages, 
+      documents: documentsWithSignedUrls,
+      user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        username: targetUser.username,
+        role: targetUser.role,
+      }
+    };
   });
 
   // Get a specific task for a user (admin only)

@@ -7,7 +7,7 @@ import { getToken }  from '../../src/auth';
 import { Platform } from 'react-native';
 import { ActionSheetIOS } from 'react-native';   // iOS native sheet
 import { Modal } from 'react-native';
-import { startTaskChecking, manualCheckForNewTasks } from '../../src/notificationHelper';
+import { startTaskChecking, requestNotificationPermissions } from '../../src/notificationHelper';
 
 /** Page size we request from the API */
 const PAGE_SIZE = 50;
@@ -171,16 +171,15 @@ useEffect(() => {
 
 // Start notification checking when component mounts
 useEffect(() => {
+  // Request notification permissions
+  requestNotificationPermissions();
+  
+  // Start periodic checking
   const cleanup = startTaskChecking();
   return cleanup;
 }, []);
 
-// Check for new tasks when screen comes into focus
-useFocusEffect(
-  useCallback(() => {
-    manualCheckForNewTasks();
-  }, [])
-);
+
 
 /** initial load + refresh */
   // reload now returns void
@@ -410,29 +409,7 @@ useFocusEffect(
       <Ionicons name="add" size={24} color="white" />
     </Pressable>
 
-    {/* ───── Test notification button (temporary) ───── */}
-    <Pressable
-      onPress={() => manualCheckForNewTasks()}
-      style={({ pressed }) => ({
-        position: 'absolute',
-        right: 20,
-        bottom: 90,
-        backgroundColor: '#FF6B35',
-        borderRadius: 28,
-        width: 56,
-        height: 56,
-        justifyContent: 'center',
-        alignItems: 'center',
-        opacity: pressed ? 0.8 : 1,
-        shadowColor: '#FF6B35',
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 8,
-      })}
-    >
-      <Ionicons name="notifications" size={24} color="white" />
-    </Pressable>
+
 
     {/* ───── Android / fallback sort‑menu modal (new) ───── */}
     <Modal transparent visible={menuVisible} animationType="fade">

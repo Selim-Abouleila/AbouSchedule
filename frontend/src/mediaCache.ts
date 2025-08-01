@@ -87,11 +87,20 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
   try {
     // 1. Fetch the media manifest from your backend
     const endpoint = targetUserId ? `${API_BASE}/admin/media/${targetUserId}` : endpoints.media;
+    console.log('Fetching media from endpoint:', endpoint);
+    console.log('Target user ID:', targetUserId);
+    console.log('Token exists:', !!token);
+    
     const res = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${token}` }
     });
+    console.log('Response status:', res.status);
+    console.log('Response headers:', res.headers);
+    
     if (!res.ok) {
-      throw new Error(`Failed to fetch media: ${res.status}`);
+      const errorText = await res.text();
+      console.error('Error response:', errorText);
+      throw new Error(`Failed to fetch media: ${res.status} - ${errorText}`);
     }
 
     // 2. Parse out the two arrays
@@ -154,18 +163,28 @@ export async function syncMedia(targetUserId?: number): Promise<void> {
  * List local image URIs
  */
 export async function getLocalMediaUris(targetUserId?: number): Promise<string[]> {
-  const imgDir = await initUserMediaFolder(targetUserId)
-  const files = await FileSystem.readDirectoryAsync(imgDir)
-  return files.map(name => `${imgDir}/${name}`)
+  try {
+    const imgDir = await initUserMediaFolder(targetUserId)
+    const files = await FileSystem.readDirectoryAsync(imgDir)
+    return files.map(name => `${imgDir}/${name}`)
+  } catch (error) {
+    console.warn('Failed to read local media URIs:', error)
+    return []
+  }
 }
 
 /**
  * List local document URIs
  */
 export async function getLocalDocumentUris(targetUserId?: number): Promise<string[]> {
-  const docDir = await initUserDocsFolder(targetUserId)
-  const files = await FileSystem.readDirectoryAsync(docDir)
-  return files.map(name => `${docDir}/${name}`)
+  try {
+    const docDir = await initUserDocsFolder(targetUserId)
+    const files = await FileSystem.readDirectoryAsync(docDir)
+    return files.map(name => `${docDir}/${name}`)
+  } catch (error) {
+    console.warn('Failed to read local document URIs:', error)
+    return []
+  }
 }
 
 /**

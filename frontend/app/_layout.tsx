@@ -70,7 +70,7 @@ export default function AppDrawerLayout() {
       {/* Task Viewer*/}
       <Drawer.Screen name="tasks/[id]" options={{ title: 'View Task', drawerItemStyle: { display: 'none' }, }}  />
 
-      {/* Task Adder*/}
+      {/*Register Pager*/}
       <Drawer.Screen name="tasks/add" options={{ title: 'Add Task', drawerItemStyle: { display: 'none' }, }}  />
 
       {/* Task Adder*/}
@@ -81,6 +81,10 @@ export default function AppDrawerLayout() {
 
       {/*Admin User Tasks*/}
         <Drawer.Screen name="admin/tasks/[userId]/[id]" options={{ title: 'View Task for User', drawerItemStyle: { display: 'none' }, }}  />
+
+      {/*Admin Add Tasks*/}
+        <Drawer.Screen name="admin/tasks/add" options={{ title: 'Add Task for User', drawerItemStyle: { display: 'none' }, }}  />
+
 
       <Drawer.Screen
         name="_necessary"

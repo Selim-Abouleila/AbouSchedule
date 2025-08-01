@@ -111,8 +111,12 @@ export default function AdminPanel() {
     router.push(`/admin/tasks/${userId}`);
   };
 
-  const handleAddTask = (userId: number, userEmail: string) => {
-    router.push(`/admin/tasks/${userId}/add`);
+  const handleAddTask = (userId: number, userEmail: string, username?: string) => {
+    const userDisplayName = username || userEmail;
+    router.push({
+      pathname: `/admin/tasks/add`,
+      params: { userId: userId.toString(), userDisplayName }
+    });
   };
 
   if (isUserAdmin === null) {
@@ -214,7 +218,7 @@ export default function AdminPanel() {
                       styles.addTaskButton,
                       pressed && styles.buttonPressed
                     ]}
-                    onPress={() => handleAddTask(user.id, user.email)}
+                    onPress={() => handleAddTask(user.id, user.email, user.username)}
                   >
                     <Ionicons name="add-circle-outline" size={18} color="#28a745" />
                     <Text style={styles.addTaskButtonText}>Add Task</Text>
