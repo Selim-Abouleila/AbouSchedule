@@ -1279,42 +1279,49 @@ app.register(async (f) => {
 
 // GET /media/all - Get all media for all users (admin only)
 app.get('/media/all', async (req: any, rep) => {
-  const userRole = req.user.role;
-  if (userRole !== 'ADMIN') {
-    return rep.code(403).send({ error: 'Admin access required' });
-  }
+  try {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
 
-  /* fetch all media from all users */
-  const [images, docs] = await Promise.all([
-    prisma.image.findMany({ 
-      include: { 
-        task: { 
-          include: { 
-            user: { 
-              select: { id: true, email: true, username: true, role: true } 
+    console.log('Fetching all media for admin user');
+
+    /* fetch all media from all users */
+    const [images, docs] = await Promise.all([
+      prisma.image.findMany({ 
+        include: { 
+          task: { 
+            include: { 
+              user: { 
+                select: { id: true, email: true, username: true, role: true } 
+              } 
             } 
           } 
         } 
-      } 
-    }),
-    prisma.document.findMany({ 
-      include: { 
-        task: { 
-          include: { 
-            user: { 
-              select: { id: true, email: true, username: true, role: true } 
+      }),
+      prisma.document.findMany({ 
+        include: { 
+          task: { 
+            include: { 
+              user: { 
+                select: { id: true, email: true, username: true, role: true } 
+              } 
             } 
           } 
         } 
-      } 
-    }),
-  ]);
+      }),
+    ]);
 
-  /* add thumbUrl for each image row */
-  const thumbImages = images.map(img => ({
-    ...img,
-    thumbUrl: `${img.url}?w=200&h=200&fit=cover`,
-  }));
+        console.log(`Found ${images.length} images and ${docs.length} documents`);
+
+    /* add thumbUrl for each image row */
+    const thumbImages = images.map(img => ({
+      ...img,
+      thumbUrl: `${img.url}?w=200&h=200&fit=cover`,
+    }));
+
+    console.log('Processing images and documents...');
 
   /* generate pre-signed URLs for documents */
   const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
@@ -1364,6 +1371,10 @@ app.get('/media/all', async (req: any, rep) => {
       ...docs.map(doc => doc.task?.user?.id).filter(Boolean)
     ]).size
   };
+  } catch (error) {
+    console.error('Error in /media/all endpoint:', error);
+    return rep.code(500).send({ error: 'Internal server error' });
+  }
 });
 
 startRecurrenceRoller();
