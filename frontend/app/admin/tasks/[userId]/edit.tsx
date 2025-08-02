@@ -523,14 +523,18 @@ export default function EditTask() {
                 );
 
                 /* ④ documents from the server */
+                console.log('Admin edit: Loading documents from server:', t.documents);
                 setDocs(
                     (Array.isArray(t.documents) ? t.documents : []).map(
-                        (d: { id: number; url: string; mime: string; name?: string }) => ({
-                            id: d.id,
-                            uri: d.url,
-                            name: d.name ?? `doc-${d.id}`,
-                            mimeType: d.mime,
-                        }) as TaskDoc
+                        (d: { id: number; url: string; mime: string; name?: string }) => {
+                            console.log('Admin edit: Processing document:', d);
+                            return {
+                                id: d.id,
+                                uri: d.url,  // This is fine for display purposes
+                                name: d.name ?? `doc-${d.id}`,
+                                mimeType: d.mime,
+                            } as TaskDoc;
+                        }
                     )
                 );
 
@@ -629,30 +633,18 @@ const save = async () => {
       };
 
       if (recurring) {
-          // Always include recurrenceEvery when recurring
-          body.recurrenceEvery = Number(recEvery);
-          
+          if (recurrence === "DAILY") {
+            // DAILY doesn't need any specific fields, just recurrence and recurrenceEvery
+          }
           if (recurrence === "WEEKLY") {
             body.recurrenceDow = Number(recurrenceDow);
-            body.recurrenceDom = null;
-            body.recurrenceMonth = null;
           }
           if (recurrence === "MONTHLY") {
             body.recurrenceDom = Number(recurrenceDom);
-            body.recurrenceDow = null;
-            body.recurrenceMonth = null;
           }
           if (recurrence === "YEARLY") {
             body.recurrenceMonth = Number(recurrenceMonth);
             body.recurrenceDom   = Number(recurrenceDom);
-            body.recurrenceDow = null;
-          }
-          
-          // For DAILY tasks, explicitly set other fields to null
-          if (recurrence === "DAILY") {
-            body.recurrenceDom = null;
-            body.recurrenceDow = null;
-            body.recurrenceMonth = null;
           }
         }
 
@@ -694,26 +686,18 @@ const save = async () => {
     if (recurring) {
       form.append('recurrenceEvery', recEvery);
 
+      if (recurrence === "DAILY") {
+        // DAILY doesn't need any specific fields, just recurrence and recurrenceEvery
+      }
       if (recurrence === "WEEKLY") {
         form.append("recurrenceDow", recurrenceDow);
-        form.append("recurrenceDom", "");
-        form.append("recurrenceMonth", "");
       }
       if (recurrence === "MONTHLY") {
         form.append("recurrenceDom", recurrenceDom);
-        form.append("recurrenceDow", "");
-        form.append("recurrenceMonth", "");
       }
       if (recurrence === "YEARLY") {
         form.append("recurrenceMonth", recurrenceMonth);
         form.append("recurrenceDom", recurrenceDom);
-        form.append("recurrenceDow", "");
-      }
-      // For DAILY tasks, explicitly set to empty string to clear existing values
-      if (recurrence === "DAILY") {
-        form.append("recurrenceDom", "");
-        form.append("recurrenceDow", "");
-        form.append("recurrenceMonth", "");
       }
 
       if (recEnd) form.append('recurrenceEnd', recEnd.toISOString());
@@ -734,6 +718,7 @@ const save = async () => {
       } as any)
     );
 
+    // Only append new documents (those without id)
     newDocs.forEach((d, idx) =>
       form.append(`doc${idx}`, {
         uri:  d.uri,
@@ -1204,7 +1189,7 @@ const handleBack = useCallback(() => {
                                 }
                                 style={{ position: 'relative' }}   // 🆕 makes absolute overlay work
                             >
-                                {d.mimeType?.startsWith('image/') ? (
+                                {d.mimeType?.startsWith('image/') && d.uri ? (
                                     <Image
                                         source={{ uri: d.uri }}
                                         style={[
@@ -1215,6 +1200,12 @@ const handleBack = useCallback(() => {
                                                 borderColor: '#0A84FF',
                                             },
                                         ]}
+                                        onError={(error) => {
+                                            console.log('Image load error for document:', d.name, error);
+                                        }}
+                                        onLoadStart={() => {
+                                            console.log('Loading document image:', d.name, d.uri);
+                                        }}
                                     />
                                 ) : (
                                     <View

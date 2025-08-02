@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, FlatList, Image, Text, Pressable, ActivityIndicator, StyleSheet, Share, Button, Platform, Alert, ScrollView} from 'react-native';
 import ImageViewing from 'react-native-image-viewing';
-import { syncMedia, getLocalMediaUris, getLocalDocumentUris, clearMediaCache } from '../../src/mediaCache';
+import { syncMedia, getLocalMediaUris, getLocalDocumentUris, clearMediaCache, syncAllMedia, getAllLocalMediaUris, getAllLocalDocumentUris } from '../../src/mediaCache';
 import { Ionicons } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -28,6 +28,7 @@ export default function MediaScreen() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState<{ id: number; email: string; username?: string; role: string } | null>(null);
   const [showUserSelector, setShowUserSelector] = useState<boolean>(false);
+  const [showAllMedia, setShowAllMedia] = useState<boolean>(true); // Default to All Media for admins
 
   const loadMedia = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -39,20 +40,32 @@ export default function MediaScreen() {
       console.log('Loading media for selectedUserId:', selectedUserId);
       console.log('Is admin:', isAdmin);
       console.log('Mode:', mode);
+      console.log('Show all media:', showAllMedia);
       
-      await syncMedia(selectedUserId || undefined);
-      const data = mode === 'images'
-        ? await getLocalMediaUris(selectedUserId || undefined)
-        : await getLocalDocumentUris(selectedUserId || undefined);
-      console.log('Loaded media URIs:', data.length);
-      setUris(data);
+      if (showAllMedia) {
+        // Load all media for admins
+        await syncAllMedia();
+        const data = mode === 'images'
+          ? await getAllLocalMediaUris()
+          : await getAllLocalDocumentUris();
+        console.log('Loaded all media URIs:', data.length);
+        setUris(data);
+      } else {
+        // Load media for specific user
+        await syncMedia(selectedUserId || undefined);
+        const data = mode === 'images'
+          ? await getLocalMediaUris(selectedUserId || undefined)
+          : await getLocalDocumentUris(selectedUserId || undefined);
+        console.log('Loaded media URIs:', data.length);
+        setUris(data);
+      }
     } catch (err) {
       console.error('Failed to load media:', err);
     } finally {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [mode, selectedUserId, isAdmin]);
+  }, [mode, selectedUserId, isAdmin, showAllMedia]);
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -409,11 +422,12 @@ export default function MediaScreen() {
             >
               <Ionicons name="people" size={18} color="#0A84FF" />
               <Text style={styles.userSelectorText}>
-                {selectedUserId ? 
-                  users.find(u => u.id === selectedUserId)?.username || 
-                  users.find(u => u.id === selectedUserId)?.email || 
-                  `User ${selectedUserId}` : 
-                  'Select User'
+                {showAllMedia ? 'All Media' :
+                  selectedUserId ? 
+                    users.find(u => u.id === selectedUserId)?.username || 
+                    users.find(u => u.id === selectedUserId)?.email || 
+                    `User ${selectedUserId}` : 
+                    'All Media'
                 }
               </Text>
               <Ionicons 
@@ -427,14 +441,15 @@ export default function MediaScreen() {
           {showUserSelector && (
             <ScrollView style={styles.userList} showsVerticalScrollIndicator={false}>
               <Pressable
-                style={[styles.userItem, !selectedUserId && styles.selectedUserItem]}
+                style={[styles.userItem, showAllMedia && styles.selectedUserItem]}
                 onPress={() => {
                   setSelectedUserId(null);
+                  setShowAllMedia(true);
                   setShowUserSelector(false);
                 }}
               >
-                <Text style={[styles.userItemText, !selectedUserId && styles.selectedUserItemText]}>
-                  My Media
+                <Text style={[styles.userItemText, showAllMedia && styles.selectedUserItemText]}>
+                  All Media
                 </Text>
               </Pressable>
               {users.map((user) => (
@@ -443,6 +458,7 @@ export default function MediaScreen() {
                   style={[styles.userItem, selectedUserId === user.id && styles.selectedUserItem]}
                   onPress={() => {
                     setSelectedUserId(user.id);
+                    setShowAllMedia(false);
                     setShowUserSelector(false);
                   }}
                 >

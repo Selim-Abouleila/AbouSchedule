@@ -231,3 +231,118 @@ export async function clearMediaCache(): Promise<void> {
     console.error('Error clearing media cache:', error)
   }
 }
+
+/**
+ * Sync down ALL media from all users (admin only)
+ */
+export async function syncAllMedia(): Promise<void> {
+  const token = await getToken();
+  if (!token) throw new Error('Not authenticated');
+
+  try {
+    // 1. Fetch all media from the backend
+    const res = await fetch(`${API_BASE}/media/all`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Failed to fetch all media:', res.status, errorText);
+      throw new Error(`HTTP ${res.status}: ${errorText}`);
+    }
+
+    const { images, documents } = await res.json();
+    console.log(`Fetched ${images.length} images and ${documents.length} documents from all users`);
+
+    // 2. Download images
+    for (const img of images) {
+      const fileName = await makeFileName(img.url);
+      const imgDir = `${MEDIA_BASE}/all/images`;
+      await ensureFolder(imgDir);
+      const fileUri = `${imgDir}/${fileName}`;
+      
+      const info = await FileSystem.getInfoAsync(fileUri);
+      if (!info.exists) {
+        console.log('Downloading image:', img.url);
+        await FileSystem.downloadAsync(img.url, fileUri);
+      }
+    }
+
+    // 3. Download documents
+    for (const doc of documents) {
+      const fileName = getDocFileName(doc.url);
+      const docDir = `${MEDIA_BASE}/all/documents`;
+      await ensureFolder(docDir);
+      const fileUri = `${docDir}/${fileName}`;
+      
+      const info = await FileSystem.getInfoAsync(fileUri);
+      if (!info.exists) {
+        console.log('Downloading document:', doc.url);
+        await FileSystem.downloadAsync(doc.url, fileUri);
+      }
+    }
+
+  } catch (e) {
+    console.warn('syncAllMedia failed (possibly offline); loading cache only:', e);
+  }
+}
+
+/**
+ * List all local image URIs (admin only)
+ */
+export async function getAllLocalMediaUris(): Promise<string[]> {
+  try {
+    const imgDir = `${MEDIA_BASE}/all/images`;
+    const info = await FileSystem.getInfoAsync(imgDir);
+    if (!info.exists) return [];
+    
+    const files = await FileSystem.readDirectoryAsync(imgDir);
+    
+    // Get file info for each file to sort by modification time
+    const fileInfos = await Promise.all(
+      files.map(async (name) => {
+        const fileUri = `${imgDir}/${name}`;
+        const info = await FileSystem.getInfoAsync(fileUri);
+        return { uri: fileUri, modificationTime: info.modificationTime || 0 };
+      })
+    );
+    
+    // Sort by modification time (newest first)
+    fileInfos.sort((a, b) => b.modificationTime - a.modificationTime);
+    
+    return fileInfos.map(info => info.uri);
+  } catch (error) {
+    console.warn('Failed to read all local media URIs:', error);
+    return [];
+  }
+}
+
+/**
+ * List all local document URIs (admin only)
+ */
+export async function getAllLocalDocumentUris(): Promise<string[]> {
+  try {
+    const docDir = `${MEDIA_BASE}/all/documents`;
+    const info = await FileSystem.getInfoAsync(docDir);
+    if (!info.exists) return [];
+    
+    const files = await FileSystem.readDirectoryAsync(docDir);
+    
+    // Get file info for each file to sort by modification time
+    const fileInfos = await Promise.all(
+      files.map(async (name) => {
+        const fileUri = `${docDir}/${name}`;
+        const info = await FileSystem.getInfoAsync(fileUri);
+        return { uri: fileUri, modificationTime: info.modificationTime || 0 };
+      })
+    );
+    
+    // Sort by modification time (newest first)
+    fileInfos.sort((a, b) => b.modificationTime - a.modificationTime);
+    
+    return fileInfos.map(info => info.uri);
+  } catch (error) {
+    console.warn('Failed to read all local document URIs:', error);
+    return [];
+  }
+}

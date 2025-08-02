@@ -74,6 +74,7 @@ type Task = {
   recurrenceMonth?: number | null;   // 1–12
   lastOccurrence: string | null;
   nextOccurrence: string | null;
+  recurrenceEnd: string | null;
 
   images:    { id: number; url: string; mime: string }[];
   documents: { id: number; url: string; mime: string; name?: string }[];
@@ -537,7 +538,7 @@ export default function TaskDetail() {
                   : '—'}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Next occurrence</Text>
               <Text style={{ color: '#1a1a1a' }}>
                 {task.nextOccurrence
@@ -545,6 +546,14 @@ export default function TaskDetail() {
                   : '—'}
               </Text>
             </View>
+            {task.recurrenceEnd && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontWeight: '600', color: '#666' }}>Ends</Text>
+                <Text style={{ color: '#1a1a1a' }}>
+                  {new Date(task.recurrenceEnd).toLocaleDateString()}
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -840,28 +849,9 @@ export default function TaskDetail() {
               <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Edit</Text>
             </Pressable>
 
-            {/* Delete button */}
-            <Pressable
-              onPress={deleteTask}
-              style={{
-                flex: 1,
-                paddingVertical: 16,
-                backgroundColor: '#FF3B30',
-                borderRadius: 12,
-                alignItems: 'center',
-                shadowColor: '#FF3B30',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 8,
-                elevation: 6,
-              }}
-            >
-              <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Delete</Text>
-            </Pressable>
-
             {/* Back button */}
             <Pressable
-              onPress={() => router.back()}
+              onPress={() => router.push('/tasks')}
               style={{
                 flex: 1,
                 paddingVertical: 16,

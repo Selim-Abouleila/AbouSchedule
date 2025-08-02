@@ -63,6 +63,7 @@ type Task = {
   recurrenceMonth?: number | null;
   lastOccurrence: string | null;
   nextOccurrence: string | null;
+  recurrenceEnd: string | null;
   images: { id: number; url: string; mime: string }[];
   documents: { id: number; url: string; mime: string; fileName?: string }[];
   user?: {
@@ -476,9 +477,16 @@ export default function AdminTaskDetail() {
 
             {/* next occurrence */}
             {task.nextOccurrence && (
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                 <Text style={{ fontWeight: '600', color: '#666' }}>Next</Text>
                 <Text style={{ color: '#1a1a1a' }}>{new Date(task.nextOccurrence).toLocaleDateString()}</Text>
+              </View>
+            )}
+            {/* recurrence end */}
+            {task.recurrenceEnd && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontWeight: '600', color: '#666' }}>Ends</Text>
+                <Text style={{ color: '#1a1a1a' }}>{new Date(task.recurrenceEnd).toLocaleDateString()}</Text>
               </View>
             )}
           </View>

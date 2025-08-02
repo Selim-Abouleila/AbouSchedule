@@ -22,6 +22,10 @@ export function startRecurrenceRoller() {
         where: {
           recurrence: { not: Recurrence.NONE },
           nextOccurrence: { lte: now },
+          OR: [
+            { recurrenceEnd: null },  // No end date
+            { recurrenceEnd: { gt: now } }  // End date is in the future
+          ],
         },
       });
 
@@ -40,6 +44,12 @@ export function startRecurrenceRoller() {
 
         /* 2. if we missed multiple periods (server was down) loop until future */
         while (next <= now) {
+          // Check if we've reached the recurrence end date
+          if (t.recurrenceEnd && next > t.recurrenceEnd) {
+            // Stop rolling - we've reached the end date
+            break;
+          }
+          
           last = next;
           next = nextDate(
             last,
@@ -58,24 +68,28 @@ export function startRecurrenceRoller() {
           }
         }
 
-        /* 3. update row in one DB write */
+        /* 3. Check if task has reached its end date */
+        const hasReachedEndDate = t.recurrenceEnd && next > t.recurrenceEnd;
+        
+        /* 4. update row in one DB write */
         await prisma.task.update({
           where: { id: t.id },
           data: {
             lastOccurrence: last,
-            nextOccurrence: next,
-            status:
-              t.status === 'DONE'
-                ? t.previousStatus ?? 'ACTIVE'
-                : t.status,
-            isDone: false,
+            nextOccurrence: hasReachedEndDate ? null : next,
+            status: hasReachedEndDate 
+              ? 'DONE'  // Mark as done when end date is reached
+              : (t.status === 'DONE'
+                  ? t.previousStatus ?? 'ACTIVE'
+                  : t.status),
+            isDone: hasReachedEndDate ? true : false,
           },
         });
       }
 
       console.log(
-        `[recurrence] rolled ${dueTasks.length} task(s) at`,
-        now.toISOString()
+        `[recurrence] rolled ${dueTasks.length} task(s) at ${now.toISOString()}`,
+        dueTasks.length > 0 ? `(checked for end dates)` : ''
       );
     },
     { timezone: 'Africa/Cairo' }

@@ -35,11 +35,6 @@ export default function AppDrawerLayout() {
       }}
     >
 
-      
-      {/* TASK list (and nested add / detail) */}
-      <Drawer.Screen name="tasks/index" options={{ title: 'Tasks' }} />
-      
-
       {/* Admin Panel - always included but conditionally visible */}
       <Drawer.Screen 
         name="admin" 
@@ -51,6 +46,11 @@ export default function AppDrawerLayout() {
           ),
         }} 
       />
+
+      
+      {/* TASK list (and nested add / detail) */}
+      <Drawer.Screen name="tasks/index" options={{ title: 'Tasks' }} />
+      
 
       {/* Media page */}
       <Drawer.Screen name="media/media" options={{ title: 'Media' }} />
