@@ -1275,107 +1275,107 @@ app.register(async (f) => {
     };
   });
 
-}, { prefix: '/admin' });
-
-// GET /media/all - Get all media for all users (admin only)
-app.get('/media/all', async (req: any, rep) => {
-  try {
-    const userRole = req.user.role;
-    if (userRole !== 'ADMIN') {
-      return rep.code(403).send({ error: 'Admin access required' });
-    }
-
-    console.log('Fetching all media for admin user');
-
-    /* fetch all media from all users */
-    const [images, docs] = await Promise.all([
-      prisma.image.findMany({ 
-        include: { 
-          task: { 
-            include: { 
-              user: { 
-                select: { id: true, email: true, username: true, role: true } 
-              } 
-            } 
-          } 
-        } 
-      }),
-      prisma.document.findMany({ 
-        include: { 
-          task: { 
-            include: { 
-              user: { 
-                select: { id: true, email: true, username: true, role: true } 
-              } 
-            } 
-          } 
-        } 
-      }),
-    ]);
-
-        console.log(`Found ${images.length} images and ${docs.length} documents`);
-
-    /* add thumbUrl for each image row */
-    const thumbImages = images.map(img => ({
-      ...img,
-      thumbUrl: `${img.url}?w=200&h=200&fit=cover`,
-    }));
-
-    console.log('Processing images and documents...');
-
-  /* generate pre-signed URLs for documents */
-  const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-  const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-  
-  // Create a new S3 client instance for pre-signed URLs
-  const presignerClient = new S3Client({
-    region: process.env.AWS_REGION ?? 'eu-north-1',
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    },
-  });
-  
-  const documentsWithSignedUrls = await Promise.all(
-    docs.map(async (doc) => {
-      try {
-        // Extract the key from the S3 URL
-        const url = new URL(doc.url);
-        const key = url.pathname.substring(1); // Remove leading slash
-        
-        // Generate pre-signed URL (valid for 1 hour)
-        const command = new GetObjectCommand({
-          Bucket: process.env.AWS_BUCKET!,
-          Key: key,
-        });
-        
-        const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-        
-        return {
-          ...doc,
-          url: signedUrl, // Replace with pre-signed URL
-        };
-      } catch (error) {
-        console.error('Error generating signed URL for document:', error);
-        // Return original URL if signing fails
-        return doc;
+  // GET /media/all - Get all media for all users (admin only)
+  f.get('/media/all', async (req: any, rep) => {
+    try {
+      const userRole = req.user.role;
+      if (userRole !== 'ADMIN') {
+        return rep.code(403).send({ error: 'Admin access required' });
       }
-    })
-  );
 
-  return { 
-    images: thumbImages, 
-    documents: documentsWithSignedUrls,
-    totalUsers: new Set([
-      ...images.map(img => img.task?.user?.id).filter(Boolean), 
-      ...docs.map(doc => doc.task?.user?.id).filter(Boolean)
-    ]).size
-  };
-  } catch (error) {
-    console.error('Error in /media/all endpoint:', error);
-    return rep.code(500).send({ error: 'Internal server error' });
-  }
-});
+      console.log('Fetching all media for admin user');
+
+      /* fetch all media from all users */
+      const [images, docs] = await Promise.all([
+        prisma.image.findMany({ 
+          include: { 
+            task: { 
+              include: { 
+                user: { 
+                  select: { id: true, email: true, username: true, role: true } 
+                } 
+              } 
+            } 
+          } 
+        }),
+        prisma.document.findMany({ 
+          include: { 
+            task: { 
+              include: { 
+                user: { 
+                  select: { id: true, email: true, username: true, role: true } 
+                } 
+              } 
+            } 
+          } 
+        }),
+      ]);
+
+          console.log(`Found ${images.length} images and ${docs.length} documents`);
+
+      /* add thumbUrl for each image row */
+      const thumbImages = images.map(img => ({
+        ...img,
+        thumbUrl: `${img.url}?w=200&h=200&fit=cover`,
+      }));
+
+      console.log('Processing images and documents...');
+
+    /* generate pre-signed URLs for documents */
+    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+    const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
+    
+    // Create a new S3 client instance for pre-signed URLs
+    const presignerClient = new S3Client({
+      region: process.env.AWS_REGION ?? 'eu-north-1',
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    });
+    
+    const documentsWithSignedUrls = await Promise.all(
+      docs.map(async (doc) => {
+        try {
+          // Extract the key from the S3 URL
+          const url = new URL(doc.url);
+          const key = url.pathname.substring(1); // Remove leading slash
+          
+          // Generate pre-signed URL (valid for 1 hour)
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+          
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+          
+          return {
+            ...doc,
+            url: signedUrl, // Replace with pre-signed URL
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for document:', error);
+          // Return original URL if signing fails
+          return doc;
+        }
+      })
+    );
+
+    return { 
+      images: thumbImages, 
+      documents: documentsWithSignedUrls,
+      totalUsers: new Set([
+        ...images.map(img => img.task?.user?.id).filter(Boolean), 
+        ...docs.map(doc => doc.task?.user?.id).filter(Boolean)
+      ]).size
+    };
+    } catch (error) {
+      console.error('Error in /media/all endpoint:', error);
+      return rep.code(500).send({ error: 'Internal server error' });
+    }
+  });
+
+}, { prefix: '/admin' });
 
 startRecurrenceRoller();
 
