@@ -579,10 +579,7 @@ export default function EditTask() {
     }, [id]);            // ← runs every time you navigate to /tasks/[other‑id]/edit
 
 
-    useEffect(() => {
-        if (recurring) setPriority("RECURRENT");
-        else if (priority === "RECURRENT") setPriority("NONE");
-    }, [recurring, priority]);
+
 
     function isPositiveInt(value: string) {
         return /^\d+$/.test(value) && Number(value) > 0;
@@ -852,17 +849,13 @@ const handleBack = useCallback(() => {
                         style={{ borderWidth: 1, borderRadius: 6, padding: 10, minHeight: 120, textAlignVertical: "top" }}
                     />
 
-                    {/* Priority (hidden if recurring) */}
-                    {!recurring && (
-                        <>
-                            <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
-                            <Picker selectedValue={priority} onValueChange={setPriority} enabled={!recurring}>
-                                {PRIORITIES
-                                    .filter(p => p !== "RECURRENT")   // ← exclude it from the menu
-                                    .map(p => <Picker.Item key={p} label={p} value={p} />)}
-                            </Picker>
-                        </>
-                    )}
+                    {/* Priority */}
+                    <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
+                    <Picker selectedValue={priority} onValueChange={setPriority}>
+                        {PRIORITIES
+                            .filter(p => p !== "RECURRENT")   // ← exclude it from the menu
+                            .map(p => <Picker.Item key={p} label={p} value={p} />)}
+                    </Picker>
 
                     {/* Status */}
                     <Text style={{ fontWeight: "bold", marginTop: 8 }}>STATUS</Text>

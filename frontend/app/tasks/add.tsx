@@ -264,11 +264,7 @@ const abortDelete = () => {
 const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0;
 const scrollRef = useRef<ScrollView>(null);
 
-  /* keep priority in sync with the recurring toggle */
-  useEffect(() => {
-    if (recurring) setPrio("RECURRENT");
-    else if (priority === "RECURRENT") setPrio("NONE");
-  }, [recurring, priority]);  
+  
 
   const [removedSomething, setRemovedSomething] = useState(false);
 
@@ -574,17 +570,13 @@ const scrollRef = useRef<ScrollView>(null);
             style={{ borderWidth: 1, borderRadius: 6, padding: 10, minHeight: 120, textAlignVertical: "top" }}
           />
 
-          {/* Priority (hidden if recurring) */}
-          {!recurring && (
-            <>
-              <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
-              <Picker selectedValue={priority} onValueChange={setPrio}>
-                {PRIORITIES
-                  .filter(p => p !== "RECURRENT")
-                  .map(p => <Picker.Item key={p} label={p} value={p} />)}
-              </Picker>
-            </>
-          )}
+          {/* Priority */}
+          <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
+          <Picker selectedValue={priority} onValueChange={setPrio}>
+            {PRIORITIES
+              .filter(p => p !== "RECURRENT")
+              .map(p => <Picker.Item key={p} label={p} value={p} />)}
+          </Picker>
 
           {/* Status */}
           <Text style={{ fontWeight: "bold", marginTop: 8 }}>STATUS</Text>

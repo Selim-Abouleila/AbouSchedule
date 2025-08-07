@@ -1,8 +1,33 @@
 import { Alert } from 'react-native';
 import { getToken } from './auth';
 import { API_BASE } from './api';
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+
+// Conditionally import notifications to avoid warnings in Expo Go
+let Notifications: any = null;
+let notificationsSupported = false;
+
+try {
+  // Only import and configure notifications if they're supported
+  Notifications = require('expo-notifications');
+  notificationsSupported = true;
+  
+  // Configure notification behavior only if supported
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+  
+  console.log('Notifications are supported and configured');
+} catch (error) {
+  console.log('Notifications not supported in this environment (likely Expo Go)');
+  notificationsSupported = false;
+}
 
 interface Task {
   id: number;
@@ -15,34 +40,33 @@ interface Task {
 let lastCheckTime: string | null = null;
 let isChecking = false;
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
 // Request notification permissions
 export const requestNotificationPermissions = async () => {
+  if (!notificationsSupported) {
+    console.log('Notifications not supported in this environment - skipping permission request');
+    return false;
+  }
+
   if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    
-    if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.log('Failed to get push token for push notification!');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.log('Error requesting notification permissions:', error);
       return false;
     }
-    
-    return true;
   } else {
     console.log('Must use physical device for Push Notifications');
     return false;
@@ -88,16 +112,25 @@ export const checkForNewImmediateTasks = async (): Promise<void> => {
 
       // Send push notifications for new immediate tasks
       for (const task of newImmediateTasks) {
-        console.log('Sending push notification for task:', task.title);
+        console.log('Found new immediate task:', task.title);
         
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'New Immediate Task',
-            body: `You have a new immediate task: "${task.title}"${task.description ? `\n\n${task.description}` : ''}`,
-            data: { taskId: task.id },
-          },
-          trigger: null, // Send immediately
-        });
+        if (notificationsSupported) {
+          try {
+            console.log('Sending push notification for task:', task.title);
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'New Immediate Task',
+                body: `You have a new immediate task: "${task.title}"${task.description ? `\n\n${task.description}` : ''}`,
+                data: { taskId: task.id },
+              },
+              trigger: null, // Send immediately
+            });
+          } catch (error) {
+            console.log('Failed to send notification:', error);
+          }
+        } else {
+          console.log('Notifications not supported - would have notified about:', task.title);
+        }
       }
     } else {
       console.log('API request failed with status:', response.status);

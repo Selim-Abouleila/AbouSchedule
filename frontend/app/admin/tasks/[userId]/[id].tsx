@@ -29,23 +29,7 @@ import * as Linking from 'expo-linking';
   This component will be shown when an admin taps on a task in the admin task list.
 */
 
-/* Info Badge */
-const InfoBadge = ({ onPress }: { onPress: () => void }) => (
-  <Pressable
-    onPress={onPress}
-    style={{
-      position: 'absolute',
-      top: 6,
-      left: 6,
-      backgroundColor: '#0008',
-      paddingHorizontal: 4,
-      paddingVertical: 1,
-      borderRadius: 6,
-      zIndex: 10,
-    }}>
-    <Text style={{ color: '#fff', fontSize: 12 }}>ⓘ</Text>
-  </Pressable>
-);
+
 
 type Task = {
   id: number;
@@ -150,6 +134,27 @@ export default function AdminTaskDetail() {
     }
   };
 
+  const shareImage = async (image: { url: string; mime: string }) => {
+    try {
+      // Extract a clean filename from the URL
+      const filename = getImageFileName(image);
+      const downloadResumable = FileSystem.createDownloadResumable(
+        image.url,
+        FileSystem.documentDirectory + filename,
+      );
+      const result = await downloadResumable.downloadAsync();
+      
+      if (result) {
+        await Sharing.shareAsync(result.uri);
+      } else {
+        throw new Error('Failed to download image');
+      }
+    } catch (error) {
+      console.error('Error sharing image:', error);
+      Alert.alert('Error', 'Could not share image');
+    }
+  };
+
   const getDocFileName = (doc: { url: string; fileName?: string }): string => {
     // Use fileName if available, otherwise extract from URL
     if (doc.fileName) {
@@ -163,6 +168,11 @@ export default function AdminTaskDetail() {
     // Remove query parameters and decode URL
     const cleanName = decodeURIComponent(filename.split('?')[0]);
     return cleanName.length > 30 ? cleanName.substring(0, 30) + '...' : cleanName;
+  };
+
+  const getImageFileName = (image: { url: string; mime: string }): string => {
+    const filename = image.url.split('/').pop() || 'image';
+    return getCleanFileName(filename);
   };
 
   const getUTIForExtension = (extension: string): string => {
@@ -510,17 +520,31 @@ export default function AdminTaskDetail() {
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {task.images.map((image, index) => (
-                <Pressable
-                  key={image.id}
-                  onPress={() => openViewer(index)}
-                  style={{ marginRight: 12, position: 'relative' }}>
-                  <ExpoImage
-                    source={{ uri: image.url }}
-                    style={{ width: 120, height: 120, borderRadius: 8 }}
-                    contentFit="cover"
-                  />
-                  <InfoBadge onPress={() => openViewer(index)} />
-                </Pressable>
+                <View key={image.id} style={{ marginRight: 12, position: 'relative' }}>
+                  <Pressable
+                    onPress={() => openViewer(index)}
+                    style={{ position: 'relative' }}>
+                    <ExpoImage
+                      source={{ uri: image.url }}
+                      style={{ width: 120, height: 120, borderRadius: 8 }}
+                      contentFit="cover"
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => shareImage(image)}
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      backgroundColor: '#0008',
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                      zIndex: 10,
+                    }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>Share</Text>
+                  </Pressable>
+                </View>
               ))}
             </ScrollView>
           </View>

@@ -29,6 +29,7 @@ interface User {
 export default function AdminPanel() {
   const [isUserAdmin, setIsUserAdmin] = useState<boolean | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -76,10 +77,28 @@ export default function AdminPanel() {
 
       if (usersResponse.ok) {
         const usersData = await usersResponse.json();
-        setUsers(usersData);
-        // Set the first user as selected by default
-        if (usersData.length > 0) {
-          setSelectedUserId(usersData[0].id);
+        
+        // Identify current user from JWT token
+        const decoded = jwtDecode<{ sub: number; role: string }>(token);
+        const currentUser = usersData.find((user: any) => user.id === decoded.sub);
+        
+        if (currentUser) {
+          setCurrentUserId(currentUser.id);
+          
+          // Filter out current user from the list
+          const otherUsers = usersData.filter((user: any) => user.id !== currentUser.id);
+          setUsers(otherUsers);
+          
+          // Set the first other user as selected by default
+          if (otherUsers.length > 0) {
+            setSelectedUserId(otherUsers[0].id);
+          }
+        } else {
+          // Fallback: if current user not found, show all users
+          setUsers(usersData);
+          if (usersData.length > 0) {
+            setSelectedUserId(usersData[0].id);
+          }
         }
       }
     } catch (error) {
@@ -324,47 +343,57 @@ export default function AdminPanel() {
 
                 {/* Quick Dropdown List */}
                 {showUserModal && (
-                  <View style={styles.quickDropdownList}>
-                    <ScrollView 
-                      style={styles.quickDropdownScrollView}
-                      showsVerticalScrollIndicator={false}
-                      nestedScrollEnabled={true}
-                    >
-                      {sortedUsers.map((user) => (
-                        <Pressable
-                          key={user.id}
-                          style={({ pressed }) => [
-                            styles.quickDropdownItem,
-                            selectedUserId === user.id && styles.selectedQuickDropdownItem,
-                            pressed && styles.quickDropdownItemPressed
-                          ]}
-                          onPress={() => handleUserSelect(user.id)}
-                        >
-                          <View style={styles.quickDropdownItemContent}>
-                            <View style={styles.quickDropdownAvatar}>
-                              <Ionicons 
-                                name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                                size={14} 
-                                color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
-                              />
+                  <>
+                    {/* Backdrop to close dropdown when tapping outside */}
+                    <Pressable
+                      style={styles.dropdownBackdrop}
+                      onPress={() => setShowUserModal(false)}
+                    />
+                    <View style={styles.quickDropdownList}>
+                      <ScrollView 
+                        style={styles.quickDropdownScrollView}
+                        showsVerticalScrollIndicator={false}
+                        nestedScrollEnabled={true}
+                      >
+                        {sortedUsers.map((user) => (
+                          <Pressable
+                            key={user.id}
+                            style={({ pressed }) => [
+                              styles.quickDropdownItem,
+                              selectedUserId === user.id && styles.selectedQuickDropdownItem,
+                              pressed && styles.quickDropdownItemPressed
+                            ]}
+                            onPress={() => {
+                              handleUserSelect(user.id);
+                              setShowUserModal(false);
+                            }}
+                          >
+                            <View style={styles.quickDropdownItemContent}>
+                              <View style={styles.quickDropdownAvatar}>
+                                <Ionicons 
+                                  name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
+                                  size={14} 
+                                  color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
+                                />
+                              </View>
+                              <Text style={styles.quickDropdownName}>
+                                {user.username || user.email}
+                              </Text>
+                              {selectedUserId === user.id && (
+                                <Ionicons name="checkmark" size={16} color="#0A84FF" />
+                              )}
                             </View>
-                            <Text style={styles.quickDropdownName}>
-                              {user.username || user.email}
-                            </Text>
-                            {selectedUserId === user.id && (
-                              <Ionicons name="checkmark" size={16} color="#0A84FF" />
-                            )}
-                          </View>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </>
                 )}
               </View>
             </View>
             
             {/* Selected User Actions */}
-            {selectedUser && (
+            {selectedUser && selectedUser.id !== currentUserId ? (
               <View style={styles.selectedUserSection}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>User Actions</Text>
@@ -445,7 +474,16 @@ export default function AdminPanel() {
                   </View>
                 </View>
               </View>
-            )}
+            ) : selectedUser && selectedUser.id === currentUserId ? (
+              <View style={styles.selectedUserSection}>
+                <View style={styles.userCard}>
+                  <View style={styles.userInfoSection}>
+                    <Ionicons name="warning-outline" size={24} color="#ffc107" />
+                    <Text style={styles.userEmail}>You cannot manage yourself</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
             
             {users.length === 0 && (
               <View style={styles.emptyState}>
@@ -580,10 +618,26 @@ const styles = StyleSheet.create({
       fontSize: 16,
       fontWeight: '600',
       color: '#1a1a1a',
+      marginBottom: 12,
+    },
+    dropdownSubtitle: {
+      fontSize: 12,
+      color: '#6c757d',
       marginBottom: 8,
+      fontStyle: 'italic',
     },
     dropdownContainer: {
       position: 'relative',
+      zIndex: 1000, // Ensure the dropdown container has proper stacking context
+    },
+    dropdownBackdrop: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'transparent',
+      zIndex: 999, // Just below the dropdown
     },
     dropdownButton: {
       backgroundColor: 'white',
@@ -644,26 +698,32 @@ const styles = StyleSheet.create({
       borderWidth: 1,
       borderColor: '#e9ecef',
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 3,
-      zIndex: 1, // Ensure it's above other content
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 8,
+      zIndex: 1000, // Ensure it's above other content
+      marginTop: 4, // Add some space from the button
     },
     quickDropdownScrollView: {
-      maxHeight: 200, // Limit the height of the scrollable list
+      maxHeight: 300, // Increase the height for better scrolling
+      borderRadius: 12,
     },
     quickDropdownItem: {
       paddingHorizontal: 20,
       paddingVertical: 16,
       borderBottomWidth: 1,
       borderBottomColor: '#f8f9fa',
+      minHeight: 56, // Ensure consistent touch target size
     },
     selectedQuickDropdownItem: {
-      backgroundColor: '#0A84FF10',
+      backgroundColor: '#0A84FF15',
+      borderLeftWidth: 3,
+      borderLeftColor: '#0A84FF',
     },
     quickDropdownItemPressed: {
       backgroundColor: '#f8f9fa',
+      opacity: 0.8,
     },
     quickDropdownItemContent: {
       flexDirection: 'row',
@@ -679,12 +739,14 @@ const styles = StyleSheet.create({
       marginRight: 12,
     },
     quickDropdownName: {
-      fontSize: 18,
-      fontWeight: '700',
+      fontSize: 16,
+      fontWeight: '600',
       color: '#1a1a1a',
+      flex: 1,
+      marginLeft: 8, // Add some space from the avatar
     },
     selectedUserSection: {
-      marginTop: 8,
+      marginTop: 15,
     },
     sectionHeader: {
       marginBottom: 20,

@@ -241,7 +241,7 @@ export async function syncAllMedia(): Promise<void> {
 
   try {
     // 1. Fetch all media from the backend
-    const res = await fetch(`${API_BASE}/media/all`, {
+    const res = await fetch(`${API_BASE}/admin/media/all`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     

@@ -357,13 +357,22 @@ f.get('/:id', async (req: any, rep) => {
     return rep.code(400).send({ error: 'Bad task id' });
   }
 
-  /* 2. fetch exactly what’s in the DB */
+  /* 2. fetch exactly what's in the DB */
   const task = await prisma.task.findFirst({
     where: { id: dbId, userId },
     include: { images: true, documents: true },
   });
 
   if (!task) return rep.code(404).send({ error: 'Task not found' });
+
+  /* 2.5. Mark task as read by the user */
+  await prisma.task.update({
+    where: { id: dbId },
+    data: {
+      readByUser: true,
+      readAt: new Date(),
+    },
+  });
 
   /* 3. Generate pre-signed URLs for documents */
   const documentsWithSignedUrls = await Promise.all(
