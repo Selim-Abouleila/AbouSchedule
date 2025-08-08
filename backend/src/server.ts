@@ -17,7 +17,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 //helpers for sorting
-import { SORT_PRESETS, customSortTasks } from './lib/helpers';
+import { SORT_PRESETS } from './lib/helpers';
 import { nextDate } from "./lib/recur";
 import { startRecurrenceRoller } from "./lib/roll-recurrence"
 
@@ -270,13 +270,10 @@ f.get('/', async (req: any, rep) => {
     include: { images: true, documents: true },
   });
 
-  // Apply comprehensive custom sorting
-  const sortedTasks = tasks.sort(customSortTasks(orderBy));
-
   const nextCursor =
-    sortedTasks.length === take ? sortedTasks[sortedTasks.length - 1].id : null;
+    tasks.length === take ? tasks[tasks.length - 1].id : null;
 
-  return { tasks: sortedTasks, nextCursor };
+  return { tasks, nextCursor };
 });
 
 
@@ -808,13 +805,10 @@ app.register(async (f) => {
       },
     });
 
-    // Apply comprehensive custom sorting
-    const sortedTasks = tasks.sort(customSortTasks(orderBy));
-
     const nextCursor =
-      sortedTasks.length === take ? sortedTasks[sortedTasks.length - 1].id : null;
+      tasks.length === take ? tasks[tasks.length - 1].id : null;
 
-    return { tasks: sortedTasks, nextCursor };
+    return { tasks, nextCursor };
   });
 
   // Create task for a specific user (admin only)
