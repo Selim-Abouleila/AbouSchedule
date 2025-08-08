@@ -116,6 +116,7 @@ enum Status {
 
 enum Size {
   SMALL
+  NORMAL
   LARGE
 }
 

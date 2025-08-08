@@ -1,4 +1,17 @@
 /* helpers.ts ---------------------------------------------------- */
+
+// Custom size ordering: SMALL -> NORMAL -> LARGE
+const SIZE_ORDER = {
+  'SMALL': 1,
+  'NORMAL': 2, 
+  'LARGE': 3
+} as const;
+
+// Custom sorting function for size
+export const sortBySize = (a: any, b: any) => {
+  return SIZE_ORDER[a.size as keyof typeof SIZE_ORDER] - SIZE_ORDER[b.size as keyof typeof SIZE_ORDER];
+};
+
 export const SORT_PRESETS: Record<string, any[]> = {
   // ① priority → status → size
     'priority': [
@@ -20,7 +33,7 @@ export const SORT_PRESETS: Record<string, any[]> = {
     { size    : 'asc' },
   ],
   
-  // If your Prisma enum was declared PENDING, ACTIVE, DONE you’re done:
+  // If your Prisma enum was declared PENDING, ACTIVE, DONE you're done:
    'status‑active': [
     { isDone: 'asc' },
     { status  : 'desc' },

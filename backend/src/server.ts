@@ -17,7 +17,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 //helpers for sorting
-import { SORT_PRESETS } from './lib/helpers';
+import { SORT_PRESETS, sortBySize } from './lib/helpers';
 import { nextDate } from "./lib/recur";
 import { startRecurrenceRoller } from "./lib/roll-recurrence"
 
@@ -270,10 +270,16 @@ f.get('/', async (req: any, rep) => {
     include: { images: true, documents: true },
   });
 
-  const nextCursor =
-    tasks.length === take ? tasks[tasks.length - 1].id : null;
+  // Apply custom size sorting if size is part of the sort criteria
+  let sortedTasks = tasks;
+  if (orderBy.some(item => 'size' in item)) {
+    sortedTasks = tasks.sort(sortBySize);
+  }
 
-  return { tasks, nextCursor };
+  const nextCursor =
+    sortedTasks.length === take ? sortedTasks[sortedTasks.length - 1].id : null;
+
+  return { tasks: sortedTasks, nextCursor };
 });
 
 
@@ -805,10 +811,16 @@ app.register(async (f) => {
       },
     });
 
-    const nextCursor =
-      tasks.length === take ? tasks[tasks.length - 1].id : null;
+    // Apply custom size sorting if size is part of the sort criteria
+    let sortedTasks = tasks;
+    if (orderBy.some(item => 'size' in item)) {
+      sortedTasks = tasks.sort(sortBySize);
+    }
 
-    return { tasks, nextCursor };
+    const nextCursor =
+      sortedTasks.length === take ? sortedTasks[sortedTasks.length - 1].id : null;
+
+    return { tasks: sortedTasks, nextCursor };
   });
 
   // Create task for a specific user (admin only)
