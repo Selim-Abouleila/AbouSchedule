@@ -1386,6 +1386,43 @@ app.register(async (f) => {
 
 }, { prefix: '/admin' });
 
+/* ───── Firebase Test Endpoint ───── */
+app.get('/test-firebase', async (req, rep) => {
+  try {
+    // Import Firebase admin
+    const admin = (await import('./firebase-admin.js')).default;
+    
+    // Test Firebase connection by trying to send a test message
+    const message = {
+      notification: {
+        title: 'Firebase Test',
+        body: 'This is a test notification from your backend!'
+      },
+      token: 'test-token', // This will fail, but we just want to test the connection
+    };
+
+    // Try to validate the message (this will fail with invalid token, but proves Firebase is working)
+    await admin.messaging().send(message);
+    
+    return { success: true, message: 'Firebase is properly configured!' };
+  } catch (error: any) {
+    // We expect this to fail due to invalid token, but it proves Firebase is initialized
+    if (error.code === 'messaging/invalid-registration-token') {
+      return { 
+        success: true, 
+        message: 'Firebase is working! (Expected error for invalid token)',
+        error: error.message 
+      };
+    }
+    
+    return { 
+      success: false, 
+      message: 'Firebase configuration error',
+      error: error.message 
+    };
+  }
+});
+
 startRecurrenceRoller();
 
 /* ───── Start server ───── */
