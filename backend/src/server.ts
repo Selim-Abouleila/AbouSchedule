@@ -1413,7 +1413,7 @@ app.get('/test-firebase', async (req, rep) => {
     if (error.code === 'messaging/invalid-registration-token') {
       return { 
         success: true, 
-        message: 'Firebase is working! (Expected error for invalid token)',
+        message: '🎉 Firebase is working perfectly! The error is expected because we used a fake token.',
         error: error.message 
       };
     }
