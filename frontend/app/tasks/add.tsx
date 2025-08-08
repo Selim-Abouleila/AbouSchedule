@@ -26,6 +26,8 @@ import { useFocusEffect } from 'expo-router';
 import { StyleSheet } from 'react-native';
 import { useMemo, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
+import { getDefaultLabelDone } from "../../src/settings";
+import { getCurrentUserId } from "../../src/auth";
 
 
 const PRIORITIES = [
@@ -349,27 +351,41 @@ const scrollRef = useRef<ScrollView>(null);
 
   useFocusEffect(
   useCallback(() => {
-    setPhotos([]);
-    setDocs([]);
-    setTitle('');
-    setDescription('');
-    setPrio('NONE');
-    setStat('ACTIVE');
-    setSize('LARGE');
-    setDueAt(null);
-    setTimeCapH(0);
-    setTimeCapM(0);
-    setShowCapIOS(false);
-    setRecurring(false);
-    setRecurrence('DAILY');
-    setRecurrenceEvery('1');
-    setRecurrenceEnd(null);
-    setLabelDone(true);
-    setSelectedPhotos(new Set());
-    setSelectedDocs(new Set());
-    setShowIOS(false);
-    setShowIOSRecEnd(false); 
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    const resetForm = async () => {
+      setPhotos([]);
+      setDocs([]);
+      setTitle('');
+      setDescription('');
+      setPrio('NONE');
+      setStat('ACTIVE');
+      setSize('LARGE');
+      setDueAt(null);
+      setTimeCapH(0);
+      setTimeCapM(0);
+      setShowCapIOS(false);
+      setRecurring(false);
+      setRecurrence('DAILY');
+      setRecurrenceEvery('1');
+      setRecurrenceEnd(null);
+      
+      // Load the default label done setting
+      try {
+        const currentUserId = await getCurrentUserId();
+        const defaultLabelDone = await getDefaultLabelDone(currentUserId || undefined);
+        setLabelDone(defaultLabelDone);
+      } catch (error) {
+        console.error('Error loading default label done setting:', error);
+        setLabelDone(true); // fallback to true
+      }
+      
+      setSelectedPhotos(new Set());
+      setSelectedDocs(new Set());
+      setShowIOS(false);
+      setShowIOSRecEnd(false); 
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    };
+    
+    resetForm();
   }, [])
 );
 
@@ -418,7 +434,7 @@ const scrollRef = useRef<ScrollView>(null);
   };
 
 
-  const resetForm = () => {
+  const resetForm = async () => {
     setTitle("");
     setDescription("");
     setPrio("NONE");
@@ -429,7 +445,17 @@ const scrollRef = useRef<ScrollView>(null);
     setRecurrence("DAILY");
     setRecurrenceEvery("1");
     setRecurrenceEnd(null);
-    setLabelDone(true);
+    
+    // Load the default label done setting
+    try {
+      const currentUserId = await getCurrentUserId();
+      const defaultLabelDone = await getDefaultLabelDone(currentUserId || undefined);
+      setLabelDone(defaultLabelDone);
+    } catch (error) {
+      console.error('Error loading default label done setting:', error);
+      setLabelDone(true); // fallback to true
+    }
+    
     setShowIOS(false);
     setShowIOSRecEnd(false);
   };
@@ -498,13 +524,13 @@ const scrollRef = useRef<ScrollView>(null);
     if (!res.ok) {
       return Alert.alert("Failed", await res.text());
     }
-    resetForm();
-    router.back();
+    await resetForm();
+    router.push('/tasks');
   };
 
   const handleBack = useCallback(() => {
-    if (!hasUnsavedChanges) {           // ⬅️  let React Navigation do its thing
-      router.back();
+    if (!hasUnsavedChanges) {           // If no changes, go back to tasks list
+      router.push('/tasks');
       return;
     }
 
@@ -524,9 +550,9 @@ const scrollRef = useRef<ScrollView>(null);
                 {
                   text: "Delete",
                   style: "destructive",
-                  onPress: () => {
-                    resetForm();
-                    router.back();
+                  onPress: async () => {
+                    await resetForm();
+                    router.push('/tasks');
                   },
                 },
               ],

@@ -832,7 +832,7 @@ export default function TaskDetail() {
           }}>
             {/* Edit button */}
             <Pressable
-              onPress={() => router.push(`../${id}/edit`)}
+              onPress={() => router.push(`/${id}/edit`)}
               style={{
                 flex: 1,
                 paddingVertical: 16,

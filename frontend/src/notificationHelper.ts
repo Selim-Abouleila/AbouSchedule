@@ -15,7 +15,6 @@ try {
   // Configure notification behavior only if supported
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
       shouldShowBanner: true,
@@ -34,11 +33,13 @@ interface Task {
   title: string;
   description?: string;
   priority: 'NONE' | 'ONE' | 'TWO' | 'THREE' | 'IMMEDIATE' | 'RECURRENT';
+  status: 'PENDING' | 'ACTIVE' | 'DONE';
   createdAt: string;
 }
 
 let lastCheckTime: string | null = null;
 let isChecking = false;
+let notifiedTaskIds: Set<number> = new Set();
 
 // Request notification permissions
 export const requestNotificationPermissions = async () => {
@@ -102,10 +103,12 @@ export const checkForNewImmediateTasks = async (): Promise<void> => {
       const tasks: Task[] = data.tasks || [];
       console.log('Found', tasks.length, 'total tasks');
       
-      // Filter for immediate tasks created since last check
+      // Filter for immediate tasks that haven't been notified about yet
       const newImmediateTasks = tasks.filter(task => 
         task.priority === 'IMMEDIATE' && 
-        (!lastCheckTime || new Date(task.createdAt) > new Date(lastCheckTime))
+        !notifiedTaskIds.has(task.id) &&
+        (!lastCheckTime || new Date(task.createdAt) > new Date(lastCheckTime)) &&
+        task.status !== 'DONE' // Exclude DONE tasks
       );
 
       console.log('Found', newImmediateTasks.length, 'new immediate tasks');
@@ -125,11 +128,15 @@ export const checkForNewImmediateTasks = async (): Promise<void> => {
               },
               trigger: null, // Send immediately
             });
+            // Mark this task as notified
+            notifiedTaskIds.add(task.id);
           } catch (error) {
             console.log('Failed to send notification:', error);
           }
         } else {
           console.log('Notifications not supported - would have notified about:', task.title);
+          // Still mark as "notified" to prevent spam in logs
+          notifiedTaskIds.add(task.id);
         }
       }
     } else {

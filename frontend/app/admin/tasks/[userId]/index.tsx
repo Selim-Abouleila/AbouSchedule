@@ -19,6 +19,8 @@ type Task = {
   recurrence: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
   images: { id: number; url: string }[];
   documents: { id: number; url: string }[];
+  readByUser?: boolean;
+  readAt?: string;
   user?: {
     id: number;
     email: string;
@@ -266,8 +268,46 @@ export default function AdminUserTasks() {
           }}
         />
 
+        {/* Read status indicator */}
+        <View
+          style={{
+            position: 'absolute',
+            right: 16,
+            top: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 6,
+            backgroundColor: item.readByUser ? '#32D74B20' : '#FF453A20',
+            borderWidth: 1,
+            borderColor: item.readByUser ? '#32D74B' : '#FF453A',
+          }}
+        >
+          <View
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: item.readByUser ? '#32D74B' : '#FF453A',
+              marginRight: 6,
+            }}
+          />
+          <Text
+            style={{
+              fontSize: 10,
+              fontWeight: '700',
+              color: item.readByUser ? '#32D74B' : '#FF453A',
+              textTransform: 'uppercase',
+              letterSpacing: 0.3,
+            }}
+          >
+            {item.readByUser ? 'READ' : 'NOT READ'}
+          </Text>
+        </View>
+
         {/* content column */}
-        <View style={{ flex: 1, marginLeft: 12, marginRight: 4 }}>
+        <View style={{ flex: 1, marginLeft: 12, marginRight: 32 }}>
           {/* line 1: badges */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
             {/* status badge */}

@@ -6,7 +6,7 @@ export const endpoints = {
   login:    `${API_BASE}/auth/login`,
   register: `${API_BASE}/auth/register`,
   tasks:    `${API_BASE}/tasks`,
-  media:    `${API_BASE}/tasks/media`,   // ← same base
+  media:    `${API_BASE}/tasks/media`,   // ← endpoint under /tasks prefix
   admin: {
     users: `${API_BASE}/admin/users`,
     allTasks: `${API_BASE}/admin/all-tasks`,

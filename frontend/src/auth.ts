@@ -25,6 +25,19 @@ export const getUserRole = async (): Promise<'ADMIN' | 'EMPLOYEE' | null> => {
   }
 };
 
+export const getCurrentUserId = async (): Promise<number | null> => {
+  try {
+    const token = await getToken();
+    if (!token) return null;
+    
+    const decoded = jwtDecode<JwtPayload>(token);
+    return decoded.sub;
+  } catch (error) {
+    console.error('Error decoding JWT:', error);
+    return null;
+  }
+};
+
 export const isAdmin = async (): Promise<boolean> => {
   const role = await getUserRole();
   return role === 'ADMIN';

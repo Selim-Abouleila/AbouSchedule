@@ -27,6 +27,7 @@ import { StyleSheet } from 'react-native';
 import { useMemo, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { getDefaultLabelDone } from "../../../src/settings";
 
 
 const PRIORITIES = [
@@ -350,28 +351,45 @@ const scrollRef = useRef<ScrollView>(null);
 
   useFocusEffect(
   useCallback(() => {
-    setPhotos([]);
-    setDocs([]);
-    setTitle('');
-    setDescription('');
-    setPrio('NONE');
-    setStat('ACTIVE');
-    setSize('LARGE');
-    setDueAt(null);
-    setTimeCapH(0);
-    setTimeCapM(0);
-    setShowCapIOS(false);
-    setRecurring(false);
-    setRecurrence('DAILY');
-    setRecurrenceEvery('1');
-    setRecurrenceEnd(null);
-    setLabelDone(true);
-    setSelectedPhotos(new Set());
-    setSelectedDocs(new Set());
-    setShowIOS(false);
-    setShowIOSRecEnd(false); 
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
-  }, [])
+    const resetForm = async () => {
+      setPhotos([]);
+      setDocs([]);
+      setTitle('');
+      setDescription('');
+      setPrio('NONE');
+      setStat('ACTIVE');
+      setSize('LARGE');
+      setDueAt(null);
+      setTimeCapH(0);
+      setTimeCapM(0);
+      setShowCapIOS(false);
+      setRecurring(false);
+      setRecurrence('DAILY');
+      setRecurrenceEvery('1');
+      setRecurrenceEnd(null);
+      
+      // Load the user-specific default label done setting
+      try {
+        if (userId) {
+          const defaultLabelDone = await getDefaultLabelDone(userId);
+          setLabelDone(defaultLabelDone);
+        } else {
+          setLabelDone(true); // fallback to true if no user ID
+        }
+      } catch (error) {
+        console.error('Error loading user default label done setting:', error);
+        setLabelDone(true); // fallback to true
+      }
+      
+      setSelectedPhotos(new Set());
+      setSelectedDocs(new Set());
+      setShowIOS(false);
+      setShowIOSRecEnd(false); 
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    };
+    
+    resetForm();
+  }, [userId])
 );
 
   /* pick date */
@@ -419,7 +437,7 @@ const scrollRef = useRef<ScrollView>(null);
   };
 
 
-  const resetForm = () => {
+  const resetForm = async () => {
     setTitle("");
     setDescription("");
     setPrio("NONE");
@@ -430,7 +448,20 @@ const scrollRef = useRef<ScrollView>(null);
     setRecurrence("DAILY");
     setRecurrenceEvery("1");
     setRecurrenceEnd(null);
-    setLabelDone(true);
+    
+    // Load the user-specific default label done setting
+    try {
+      if (userId) {
+        const defaultLabelDone = await getDefaultLabelDone(userId);
+        setLabelDone(defaultLabelDone);
+      } else {
+        setLabelDone(true); // fallback to true if no user ID
+      }
+    } catch (error) {
+      console.error('Error loading user default label done setting:', error);
+      setLabelDone(true); // fallback to true
+    }
+    
     setShowIOS(false);
     setShowIOSRecEnd(false);
   };
@@ -500,7 +531,7 @@ const scrollRef = useRef<ScrollView>(null);
     if (!res.ok) {
       return Alert.alert("Failed", await res.text());
     }
-    resetForm();
+    await resetForm();
     router.push('/admin');
   };
 
@@ -526,8 +557,8 @@ const scrollRef = useRef<ScrollView>(null);
                 {
                   text: "Delete",
                   style: "destructive",
-                  onPress: () => {
-                    resetForm();
+                  onPress: async () => {
+                    await resetForm();
                     router.push('/admin');
                   },
                 },

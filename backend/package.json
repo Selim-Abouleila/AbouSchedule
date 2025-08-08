@@ -28,6 +28,7 @@
     "fastify": "^5.4.0",
     "fastify-jwt": "^4.2.0",
     "fastify-plugin": "^5.0.1",
+    "firebase-admin": "^13.4.0",
     "node-cron": "^4.2.1",
     "zod": "^3.25.76"
   },

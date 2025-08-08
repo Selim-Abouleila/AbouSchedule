@@ -48,6 +48,8 @@ type Task = {
   lastOccurrence: string | null;
   nextOccurrence: string | null;
   recurrenceEnd: string | null;
+  readByUser?: boolean;
+  readAt?: string;
   images: { id: number; url: string; mime: string }[];
   documents: { id: number; url: string; mime: string; fileName?: string }[];
   user?: {
@@ -453,6 +455,62 @@ export default function AdminTaskDetail() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Due</Text>
               <Text style={{ color: '#1a1a1a' }}>{new Date(task.dueAt).toLocaleString()}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Read Status */}
+        <View style={{
+          backgroundColor: 'white',
+          padding: 16,
+          borderRadius: 12,
+          marginBottom: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 3,
+          elevation: 2,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Ionicons 
+              name={task.readByUser ? "checkmark-circle" : "time"} 
+              size={18} 
+              color={task.readByUser ? "#32D74B" : "#FF453A"} 
+              style={{ marginRight: 8 }} 
+            />
+            <Text style={{ fontWeight: '600', fontSize: 16, color: '#1a1a1a' }}>Read Status</Text>
+          </View>
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+            <Text style={{ fontWeight: '600', color: '#666' }}>Status</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: task.readByUser ? '#32D74B' : '#FF453A',
+                  marginRight: 8,
+                }}
+              />
+              <Text style={{ 
+                color: task.readByUser ? '#32D74B' : '#FF453A',
+                fontWeight: '600',
+                fontSize: 12,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+              }}>
+                {task.readByUser ? 'READ' : 'NOT READ'}
+              </Text>
+            </View>
+          </View>
+          
+          {task.readAt && (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Read At</Text>
+              <Text style={{ color: '#1a1a1a' }}>
+                {new Date(task.readAt).toLocaleString()}
+              </Text>
             </View>
           )}
         </View>

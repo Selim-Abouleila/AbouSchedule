@@ -1,5 +1,5 @@
 // src/screens/Media.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, FlatList, Image, Text, Pressable, ActivityIndicator, StyleSheet, Share, Button, Platform, Alert, ScrollView} from 'react-native';
 import ImageViewing from 'react-native-image-viewing';
 import { syncMedia, getLocalMediaUris, getLocalDocumentUris, clearMediaCache, syncAllMedia, getAllLocalMediaUris, getAllLocalDocumentUris } from '../../src/mediaCache';
@@ -7,10 +7,60 @@ import { Ionicons } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
-import * as Linking from 'expo-linking';
 import { endpoints, API_BASE } from '../../src/api';
 import { getToken, addAuthListener, removeAuthListener } from '../../src/auth';
 import { useFocusEffect } from '@react-navigation/native';
+
+// Smart image component with progressive loading
+const ProgressiveImage = ({ uri, style }: { uri: string, style: any }) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  // Generate a thumbnail URL by adding a size parameter
+  const thumbnailUri = uri.includes('?') 
+    ? `${uri}&size=thumbnail` 
+    : `${uri}?size=thumbnail`;
+
+  return (
+    <View style={[style, styles.imageContainer]}>
+      {/* Low quality thumbnail */}
+      <Image
+        source={{ uri: thumbnailUri }}
+        style={[style, styles.image, styles.thumbnailImage]}
+        resizeMode="cover"
+      />
+      
+      {/* High quality image */}
+      <Image
+        source={{ uri }}
+        style={[
+          style,
+          styles.image,
+          styles.fullImage,
+          { opacity: isLoading ? 0 : 1 }
+        ]}
+        onLoadStart={() => setIsLoading(true)}
+        onLoad={() => setIsLoading(false)}
+        onError={() => setHasError(true)}
+        resizeMode="cover"
+      />
+      
+      {/* Loading indicator */}
+      {isLoading && (
+        <View style={styles.imageLoadingOverlay}>
+          <ActivityIndicator size="small" color="#0A84FF" />
+        </View>
+      )}
+      
+      {/* Error indicator */}
+      {hasError && (
+        <View style={styles.imageErrorOverlay}>
+          <Ionicons name="alert-circle-outline" size={24} color="#FF3B30" />
+        </View>
+      )}
+    </View>
+  );
+};
 
 export default function MediaScreen() {
   const [mode, setMode] = useState<'images' | 'documents'>('images');
@@ -18,6 +68,32 @@ export default function MediaScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [switchingMode, setSwitchingMode] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [page, setPage] = useState<number>(1);
+  const PAGE_SIZE = 30; // Number of items to load per page
+  
+  // Track visible items for preloading
+  const [visibleItems, setVisibleItems] = useState<number[]>([]);
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
+  }).current;
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    const visibleIndices = viewableItems.map((item: any) => item.index);
+    setVisibleItems(visibleIndices);
+  }, []);
+
+  // Preload next batch of images
+  useEffect(() => {
+    if (visibleItems.length > 0) {
+      const lastVisibleIndex = Math.max(...visibleItems);
+      if (uris.length - lastVisibleIndex <= 10 && hasMore && !loadingMore) {
+        loadMore();
+      }
+    }
+  }, [visibleItems, uris.length, hasMore, loadingMore]);
 
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex]     = useState(0);
@@ -28,11 +104,51 @@ export default function MediaScreen() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState<{ id: number; email: string; username?: string; role: string } | null>(null);
   const [showUserSelector, setShowUserSelector] = useState<boolean>(false);
-  const [showAllMedia, setShowAllMedia] = useState<boolean>(true); // Default to All Media for admins
+  const [showAllMedia, setShowAllMedia] = useState<boolean>(false); // Default to user's own media
+
+  // Cache for all loaded data
+  const allDataRef = useRef<string[]>([]);
+
+  const loadMore = async () => {
+    if (!hasMore || loadingMore) return;
+    
+    setLoadingMore(true);
+    try {
+      const nextPageStart = page * PAGE_SIZE;
+      const nextPageEnd = nextPageStart + PAGE_SIZE;
+      
+      let allData: string[];
+      if (allDataRef.current.length > 0) {
+        // Use cached data if available
+        allData = allDataRef.current;
+      } else {
+        // Load all data if not cached
+        allData = (isAdmin && showAllMedia)
+          ? (mode === 'images' ? await getAllLocalMediaUris() : await getAllLocalDocumentUris())
+          : (mode === 'images' ? await getLocalMediaUris(selectedUserId || undefined) : await getLocalDocumentUris(selectedUserId || undefined));
+        allDataRef.current = allData;
+      }
+      
+      const newItems = allData.slice(nextPageStart, nextPageEnd);
+      if (newItems.length > 0) {
+        setUris(prev => [...prev, ...newItems]);
+        setPage(p => p + 1);
+        setHasMore(nextPageEnd < allData.length);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('Error loading more items:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const loadMedia = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
+      setPage(1); // Reset page on refresh
+      setHasMore(true);
     } else {
       setLoading(true);
     }
@@ -42,22 +158,30 @@ export default function MediaScreen() {
       console.log('Mode:', mode);
       console.log('Show all media:', showAllMedia);
       
-      if (showAllMedia) {
-        // Load all media for admins
+      if (isAdmin && showAllMedia) {
+        // Load all media for admins only
         await syncAllMedia();
-        const data = mode === 'images'
+        const allData = mode === 'images'
           ? await getAllLocalMediaUris()
           : await getAllLocalDocumentUris();
-        console.log('Loaded all media URIs:', data.length);
-        setUris(data);
+        console.log('Loaded all media URIs:', allData.length);
+        
+        // Apply pagination to the data
+        const paginatedData = allData.slice(0, PAGE_SIZE);
+        setHasMore(allData.length > PAGE_SIZE);
+        setUris(paginatedData);
       } else {
-        // Load media for specific user
+        // Load media for specific user (or current user for regular users)
         await syncMedia(selectedUserId || undefined);
-        const data = mode === 'images'
+        const allData = mode === 'images'
           ? await getLocalMediaUris(selectedUserId || undefined)
           : await getLocalDocumentUris(selectedUserId || undefined);
-        console.log('Loaded media URIs:', data.length);
-        setUris(data);
+        console.log('Loaded media URIs:', allData.length);
+        
+        // Apply pagination to the data
+        const paginatedData = allData.slice(0, PAGE_SIZE);
+        setHasMore(allData.length > PAGE_SIZE);
+        setUris(paginatedData);
       }
     } catch (err) {
       console.error('Failed to load media:', err);
@@ -65,7 +189,7 @@ export default function MediaScreen() {
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [mode, selectedUserId, isAdmin, showAllMedia]);
+  }, [mode, selectedUserId, isAdmin, showAllMedia, PAGE_SIZE]);
 
   const handleClearCache = async () => {
     Alert.alert(
@@ -111,14 +235,20 @@ export default function MediaScreen() {
         const usersData = await res.json();
         setUsers(usersData);
         setIsAdmin(true);
+        // Only set showAllMedia to true on first load, not during status checks
+        if (!isAdmin) {
+          setShowAllMedia(true);
+        }
       } else {
         setIsAdmin(false);
+        setShowAllMedia(false);
       }
     } catch (error) {
       console.error('Error checking admin status:', error);
       setIsAdmin(false);
+      setShowAllMedia(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   // Load users when component mounts and when auth changes
   useEffect(() => {
@@ -145,13 +275,15 @@ export default function MediaScreen() {
     };
   }, [checkAdminStatus]);
 
-  // Check admin status and refresh media when screen comes into focus
+  // Check admin status when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       checkAdminStatus();
-      // Always refresh media when screen comes into focus
-      loadMedia(true);
-    }, [checkAdminStatus, loadMedia])
+      // Only reload media if we don't have any loaded
+      if (uris.length === 0) {
+        loadMedia(true);
+      }
+    }, [checkAdminStatus, loadMedia, uris.length])
   );
 
   useEffect(() => {
@@ -213,6 +345,17 @@ export default function MediaScreen() {
     // Remove the UUID prefix if it exists (format: uuid_filename.pdf)
     const decodedName = decodeURIComponent(filename);
     return decodedName.includes('_') ? decodedName.split('_').slice(1).join('_') : decodedName;
+  };
+
+  // Get month/year from URI
+  const getMonthYear = (uri: string): string => {
+    // For now, return a simple date based on file creation time
+    // This will be replaced with proper date parsing once we know the file structure
+    const now = new Date();
+    return now.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long' 
+    });
   };
 
   const openDocument = async (fileUri: string) => {
@@ -311,7 +454,7 @@ export default function MediaScreen() {
             }
           }}
         >
-          <Image source={{ uri: item }} style={styles.image} />
+          <ProgressiveImage uri={item} style={styles.image} />
           {selected.has(index) && (
             <View style={styles.checkOverlay}>
               <Ionicons name="checkmark-circle" size={24} color="#0A84FF" />
@@ -427,7 +570,7 @@ export default function MediaScreen() {
                     users.find(u => u.id === selectedUserId)?.username || 
                     users.find(u => u.id === selectedUserId)?.email || 
                     `User ${selectedUserId}` : 
-                    'All Media'
+                    'Select User'
                 }
               </Text>
               <Ionicons 
@@ -455,14 +598,14 @@ export default function MediaScreen() {
               {users.map((user) => (
                 <Pressable
                   key={user.id}
-                  style={[styles.userItem, selectedUserId === user.id && styles.selectedUserItem]}
+                  style={[styles.userItem, selectedUserId === user.id && !showAllMedia && styles.selectedUserItem]}
                   onPress={() => {
                     setSelectedUserId(user.id);
                     setShowAllMedia(false);
                     setShowUserSelector(false);
                   }}
                 >
-                  <Text style={[styles.userItemText, selectedUserId === user.id && styles.selectedUserItemText]}>
+                  <Text style={[styles.userItemText, selectedUserId === user.id && !showAllMedia && styles.selectedUserItemText]}>
                     {user.username || user.email}
                   </Text>
                   <Text style={styles.userRoleText}>
@@ -478,24 +621,79 @@ export default function MediaScreen() {
       {/* Content */}
       <FlatList
         key={mode} // force remount when mode changes
+        ListHeaderComponent={() => (
+          uris.length > 0 ? (
+            <View style={styles.monthHeader}>
+              <Text style={styles.monthHeaderText}>{getMonthYear(uris[0])}</Text>
+            </View>
+          ) : null
+        )}
+        ListEmptyComponent={() => (
+          !loading && !refreshing && (
+            <View style={styles.emptyContainer}>
+              <Ionicons 
+                name={mode === 'images' ? "images-outline" : "document-outline"} 
+                size={48} 
+                color="#6c757d" 
+              />
+              <Text style={styles.emptyText}>
+                No {mode === 'images' ? 'images' : 'documents'} found
+              </Text>
+            </View>
+          )
+        )}
+        ListFooterComponent={() => (
+          loadingMore ? (
+            <View style={styles.footerLoader}>
+              <ActivityIndicator size="small" color="#0A84FF" />
+              <Text style={styles.footerText}>Loading more...</Text>
+            </View>
+          ) : hasMore ? (
+            <View style={styles.footerLoader}>
+              <Text style={styles.footerText}>Pull to load more</Text>
+            </View>
+          ) : uris.length > 0 ? (
+            <View style={styles.footerLoader}>
+              <Text style={styles.footerText}>No more items</Text>
+            </View>
+          ) : null
+        )}
         data={uris}
         keyExtractor={(uri) => uri}
         numColumns={mode === 'images' ? 3 : 1}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingTop: 0 } // Remove top padding since header will provide spacing
+        ]}
         columnWrapperStyle={mode === 'images' ? styles.columnWrapper : undefined}
         renderItem={renderItem}
         refreshing={refreshing}
         onRefresh={() => loadMedia(true)}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        updateCellsBatchingPeriod={100}
       />
 
       {/* Fullscreen viewer for images */}
       <ImageViewing
-        images={uris.map(u => ({ uri: u }))}
+        key={`viewer-${viewerIndex}`}
+        images={uris.map(u => ({ 
+          uri: u,
+          cache: 'force-cache'
+        }))}
         imageIndex={viewerIndex}
         visible={viewerVisible}
         onRequestClose={() => setViewerVisible(false)}
+        swipeToCloseEnabled
+        presentationStyle="overFullScreen"
+        doubleTapToZoomEnabled
       />
 
       {/* Bulk Actions Toolbar */}
@@ -527,6 +725,64 @@ export default function MediaScreen() {
 }
 
 const styles = StyleSheet.create({
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    margin: 16,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6c757d',
+    textAlign: 'center',
+  },
+  imageContainer: {
+    position: 'relative',
+    backgroundColor: '#f8f9fa',
+    overflow: 'hidden',
+  },
+  thumbnailImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    filter: 'blur(5px)',
+  },
+  fullImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerLoader: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  footerText: {
+    marginLeft: 8,
+    color: '#6c757d',
+    fontSize: 14,
+  },
   container: { 
     flex: 1, 
     backgroundColor: '#f8f9fa' 
@@ -755,5 +1011,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6c757d',
     textTransform: 'uppercase',
+  },
+  monthHeader: {
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    marginHorizontal: 8,
+    width: '100%',
+  },
+  monthHeaderText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    letterSpacing: 0.3,
   },
 });
