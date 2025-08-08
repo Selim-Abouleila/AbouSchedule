@@ -35,14 +35,24 @@ const requiredVars = [
 const missingVars = requiredVars.filter(varName => !process.env[varName]);
 if (missingVars.length > 0) {
   console.error('Missing Firebase environment variables:', missingVars);
-  throw new Error(`Missing Firebase environment variables: ${missingVars.join(', ')}`);
+  console.error('All environment variables:', Object.keys(process.env).filter(key => key.startsWith('FIREBASE')));
+  // Don't throw error for now, just log
+  console.log('Continuing without Firebase validation...');
 }
 
-// Initialize the app
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-  });
+// Initialize the app only if we have all required variables
+const hasAllVars = requiredVars.every(varName => process.env[varName]);
+if (hasAllVars && !admin.apps.length) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+    });
+    console.log('Firebase Admin SDK initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize Firebase Admin SDK:', error);
+  }
+} else {
+  console.log('Firebase Admin SDK not initialized - missing environment variables');
 }
 
 export default admin; 
