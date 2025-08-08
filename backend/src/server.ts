@@ -1445,7 +1445,7 @@ app.get('/settings', { preHandler: app.auth }, async (req, rep) => {
 
     // If no user-specific settings, get global settings
     if (!settings) {
-      settings = await prisma.settings.findUnique({
+      settings = await prisma.settings.findFirst({
         where: { userId: undefined },
       });
     }
@@ -1507,7 +1507,7 @@ app.get('/admin/settings/:userId', { preHandler: app.auth }, async (req: any, re
 
     // If no user-specific settings, get global settings
     if (!settings) {
-      settings = await prisma.settings.findUnique({
+      settings = await prisma.settings.findFirst({
         where: { userId: undefined },
       });
     }
@@ -1567,7 +1567,7 @@ app.get('/admin/settings/global', { preHandler: app.auth }, async (req, rep) => 
     }
 
     // Get global settings
-    let settings = await prisma.settings.findUnique({
+    let settings = await prisma.settings.findFirst({
       where: { userId: undefined },
     });
 

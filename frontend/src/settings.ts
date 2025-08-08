@@ -1,14 +1,8 @@
-import * as SecureStore from 'expo-secure-store';
-
-const SETTINGS_KEY = 'abouschedule_settings';
-const USER_SETTINGS_KEY = 'abouschedule_user_settings';
+import { endpoints } from './api';
+import { getToken } from './auth';
 
 interface AppSettings {
   defaultLabelDone: boolean;
-}
-
-interface UserSettings {
-  [userId: number]: AppSettings;
 }
 
 const defaultSettings: AppSettings = {
@@ -17,61 +11,107 @@ const defaultSettings: AppSettings = {
 
 export const saveSettings = async (settings: Partial<AppSettings>, userId?: number) => {
   try {
+    const token = await getToken();
+    if (!token) {
+      throw new Error('No authentication token');
+    }
+
     if (userId) {
-      // Save per-user settings
-      const currentUserSettings = await getUserSettings();
-      const currentUserSetting = currentUserSettings[userId] || {};
-      const newUserSetting = { ...currentUserSetting, ...settings };
-      currentUserSettings[userId] = newUserSetting;
-      await SecureStore.setItemAsync(USER_SETTINGS_KEY, JSON.stringify(currentUserSettings));
+      // Save per-user settings (admin only)
+      const response = await fetch(`${endpoints.admin.settings(userId)}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save user settings: ${response.status}`);
+      }
     } else {
-      // Save global settings
-      const currentSettings = await getSettings();
-      const newSettings = { ...currentSettings, ...settings };
-      await SecureStore.setItemAsync(SETTINGS_KEY, JSON.stringify(newSettings));
+      // Save current user's settings
+      const response = await fetch(`${endpoints.base}/settings`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save settings: ${response.status}`);
+      }
     }
   } catch (error) {
     console.error('Error saving settings:', error);
+    throw error;
   }
 };
 
 export const getSettings = async (): Promise<AppSettings> => {
   try {
-    const settingsJson = await SecureStore.getItemAsync(SETTINGS_KEY);
-    if (settingsJson) {
-      const settings = JSON.parse(settingsJson);
-      return { ...defaultSettings, ...settings };
+    const token = await getToken();
+    if (!token) {
+      throw new Error('No authentication token');
     }
+
+    const response = await fetch(`${endpoints.base}/settings`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get settings: ${response.status}`);
+    }
+
+    const settings = await response.json();
+    return { ...defaultSettings, ...settings };
   } catch (error) {
     console.error('Error loading settings:', error);
+    return defaultSettings;
   }
-  return defaultSettings;
 };
 
-export const getUserSettings = async (): Promise<UserSettings> => {
-  try {
-    const settingsJson = await SecureStore.getItemAsync(USER_SETTINGS_KEY);
-    if (settingsJson) {
-      return JSON.parse(settingsJson);
-    }
-  } catch (error) {
-    console.error('Error loading user settings:', error);
-  }
+export const getUserSettings = async (): Promise<{ [userId: number]: AppSettings }> => {
+  // This function is no longer needed as we use direct API calls
+  // Keeping for backward compatibility but it's deprecated
+  console.warn('getUserSettings is deprecated, use getSettingsForUser instead');
   return {};
 };
 
 export const getSettingsForUser = async (userId?: number): Promise<AppSettings> => {
-  if (userId) {
-    // Get per-user settings
-    const userSettings = await getUserSettings();
-    const userSetting = userSettings[userId];
-    if (userSetting && Object.keys(userSetting).length > 0) {
-      // User has specific settings, merge with defaults
-      return { ...defaultSettings, ...userSetting };
+  try {
+    const token = await getToken();
+    if (!token) {
+      throw new Error('No authentication token');
     }
+
+    if (userId) {
+      // Get per-user settings (admin only)
+      const response = await fetch(`${endpoints.admin.settings(userId)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get user settings: ${response.status}`);
+      }
+
+      const settings = await response.json();
+      return { ...defaultSettings, ...settings };
+    } else {
+      // Get current user's settings
+      return await getSettings();
+    }
+  } catch (error) {
+    console.error('Error loading user settings:', error);
+    return defaultSettings;
   }
-  // Fall back to global settings
-  return await getSettings();
 };
 
 export const getDefaultLabelDone = async (userId?: number): Promise<boolean> => {
@@ -81,11 +121,18 @@ export const getDefaultLabelDone = async (userId?: number): Promise<boolean> => 
 
 export const deleteUserSettings = async (userId: number) => {
   try {
-    const userSettings = await getUserSettings();
-    delete userSettings[userId];
-    await SecureStore.setItemAsync(USER_SETTINGS_KEY, JSON.stringify(userSettings));
+    const token = await getToken();
+    if (!token) {
+      throw new Error('No authentication token');
+    }
+
+    // For now, we'll set the user's settings back to global defaults
+    // In the future, we could add a DELETE endpoint to the backend
+    const globalSettings = await getSettings();
+    await saveSettings(globalSettings, userId);
   } catch (error) {
     console.error('Error deleting user settings:', error);
+    throw error;
   }
 };
 
