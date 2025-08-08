@@ -14,6 +14,7 @@ model User {
   password String
   role     Role
   tasks    Task[]
+  pushTokens PushToken[]
 }
 
 model Task {
@@ -124,4 +125,15 @@ enum Recurrence {
   WEEKLY
   MONTHLY
   YEARLY
+}
+
+model PushToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

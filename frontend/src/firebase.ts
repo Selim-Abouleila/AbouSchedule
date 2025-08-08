@@ -1,14 +1,15 @@
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
-// Your Firebase config - you'll need to replace this with your actual config
+// Your Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCSbHXaKndxWg_oiUsQz-f2oN_X1Sqlm-Y",
+  authDomain: "abouschedule.firebaseapp.com",
+  projectId: "abouschedule",
+  storageBucket: "abouschedule.firebasestorage.app",
+  messagingSenderId: "306741580359",
+  appId: "1:306741580359:web:db97a506b0ca7bef189762",
+  measurementId: "G-RM60EE50BL"
 };
 
 // Initialize Firebase
