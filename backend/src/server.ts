@@ -23,6 +23,7 @@ import { startRecurrenceRoller } from "./lib/roll-recurrence"
 
 // Import Firebase admin to initialize it
 import './firebase-admin.js';
+import admin from './firebase-admin.js';
 
 
 
@@ -915,6 +916,37 @@ app.register(async (f) => {
       where: { id: task.id },
       include: { images: true, documents: true }
     });
+
+    // Send notification for immediate tasks
+    if (full && full.status === 'ACTIVE' && !full.dueAt) {
+      try {
+        // Get all push tokens for the target user
+        const pushTokens = await prisma.pushToken.findMany({
+          where: { userId: userId }
+        });
+
+        if (pushTokens.length > 0) {
+          // Send notification to all user's devices
+          const message = {
+            notification: {
+              title: 'New Task Assigned',
+              body: `You have a new immediate task: ${full.title}`
+            },
+            data: {
+              taskId: full.id.toString(),
+              type: 'immediate_task'
+            },
+            tokens: pushTokens.map(pt => pt.token)
+          };
+
+          const response = await admin.messaging().sendEachForMulticast(message);
+          console.log('Notification sent:', response);
+        }
+      } catch (error) {
+        console.error('Failed to send notification:', error);
+        // Don't fail the task creation if notification fails
+      }
+    }
 
     return rep.code(201).send(full);
   });

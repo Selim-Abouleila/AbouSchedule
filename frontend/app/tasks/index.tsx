@@ -7,7 +7,7 @@ import { getToken }  from '../../src/auth';
 import { Platform } from 'react-native';
 import { ActionSheetIOS } from 'react-native';   // iOS native sheet
 import { Modal } from 'react-native';
-import { startTaskChecking, requestNotificationPermissions } from '../../src/notificationHelper';
+import { initializeNotifications, cleanupNotifications } from '../../src/firebaseNotifications';
 
 /** Page size we request from the API */
 const PAGE_SIZE = 50;
@@ -169,15 +169,15 @@ useEffect(() => {
   fetchPage(null, true);        // first page with new preset
 }, [sort]); 
 
-// Start notification checking when component mounts
-useEffect(() => {
-  // Request notification permissions
-  requestNotificationPermissions();
-  
-  // Start periodic checking
-  const cleanup = startTaskChecking();
-  return cleanup;
-}, []);
+  // Initialize Firebase notifications when component mounts
+  useEffect(() => {
+    initializeNotifications();
+    
+    // Cleanup on unmount
+    return () => {
+      cleanupNotifications();
+    };
+  }, []);
 
 
 
