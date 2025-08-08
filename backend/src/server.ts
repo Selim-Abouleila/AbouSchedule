@@ -21,6 +21,9 @@ import { SORT_PRESETS } from './lib/helpers';
 import { nextDate } from "./lib/recur";
 import { startRecurrenceRoller } from "./lib/roll-recurrence"
 
+// Import Firebase admin to initialize it
+import './firebase-admin.js';
+
 
 
 
