@@ -33,10 +33,17 @@ export default function AdminPanel() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showUserModal, setShowUserModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [password, setPassword] = useState('');
   const [pendingAction, setPendingAction] = useState<{ type: string; userId: number } | null>(null);
+  const [currentUserInfo, setCurrentUserInfo] = useState<{ username?: string; email: string } | null>(null);
+  
+  // Admin registration form state
+  const [showRegistrationForm, setShowRegistrationForm] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [registrationLoading, setRegistrationLoading] = useState(false);
 
   useEffect(() => {
     checkAdminStatus();
@@ -84,6 +91,10 @@ export default function AdminPanel() {
         
         if (currentUser) {
           setCurrentUserId(currentUser.id);
+          setCurrentUserInfo({
+            username: currentUser.username,
+            email: currentUser.email
+          });
           
           // Filter out current user from the list
           const otherUsers = usersData.filter((user: any) => user.id !== currentUser.id);
@@ -139,6 +150,59 @@ export default function AdminPanel() {
     }
   };
 
+  const handleChangePassword = async (userId: number, userDisplayName: string) => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      // Prompt for new password
+      Alert.prompt(
+        'Enter New Password',
+        `Enter a new password for ${userDisplayName}:`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Change Password', 
+            style: 'default', 
+            onPress: async (newPassword) => {
+              if (!newPassword || newPassword.trim().length < 6) {
+                Alert.alert('Error', 'Password must be at least 6 characters long');
+                return;
+              }
+
+              try {
+                const response = await fetch(`${API_BASE}/admin/users/${userId}/change-password`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({
+                    newPassword: newPassword.trim(),
+                  }),
+                });
+
+                if (response.ok) {
+                  Alert.alert('Success', `Password changed successfully for ${userDisplayName}`);
+                } else {
+                  const errorText = await response.text();
+                  Alert.alert('Error', errorText || 'Failed to change password');
+                }
+              } catch (error) {
+                console.error('Error changing password:', error);
+                Alert.alert('Error', 'Failed to change password');
+              }
+            }
+          }
+        ],
+        'secure-text'
+      );
+    } catch (error) {
+      console.error('Error in handleChangePassword:', error);
+      Alert.alert('Error', 'Failed to change password');
+    }
+  };
+
   const handleViewTasks = (userId: number, userEmail: string) => {
     router.push(`/admin/tasks/${userId}`);
   };
@@ -157,7 +221,6 @@ export default function AdminPanel() {
 
   const handleUserSelect = (userId: number) => {
     setSelectedUserId(userId);
-    setShowUserModal(false);
   };
 
   const verifyPassword = async (inputPassword: string) => {
@@ -220,10 +283,75 @@ export default function AdminPanel() {
       
       // Execute the pending action
       if (pendingAction) {
-        if (pendingAction.type === 'toggle-role') {
+        if (pendingAction.type === 'user-actions') {
+          const selectedUser = getSelectedUser();
+          if (!selectedUser) return;
+          
+          Alert.alert(
+            'User Actions',
+            `Choose an action for ${selectedUser.username ? selectedUser.username : selectedUser.email}:`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: `Toggle Role (${selectedUser.role === 'EMPLOYEE' ? 'Make Admin' : 'Make Tasker'})`, 
+                style: 'default', 
+                onPress: () => {
+                  Alert.alert(
+                    'Toggle User Role',
+                    `Are you sure you want to change ${selectedUser.username ? selectedUser.username : selectedUser.email}'s role from ${selectedUser.role === 'EMPLOYEE' ? 'tasker' : selectedUser.role} to ${selectedUser.role === 'ADMIN' ? 'tasker' : 'ADMIN'}?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Toggle', 
+                        style: 'default', 
+                        onPress: () => handleUserAction(pendingAction.userId, 'toggle-role') 
+                      }
+                    ]
+                  );
+                }
+              },
+              { 
+                text: 'Change Password', 
+                style: 'default', 
+                onPress: () => {
+                  Alert.alert(
+                    'Change User Password',
+                    `Are you sure you want to change the password for ${selectedUser.username ? selectedUser.username : selectedUser.email}?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Change Password', 
+                        style: 'default', 
+                        onPress: () => handleChangePassword(pendingAction.userId, selectedUser.username ? selectedUser.username : selectedUser.email) 
+                      }
+                    ]
+                  );
+                }
+              },
+              { 
+                text: 'Delete User', 
+                style: 'destructive', 
+                onPress: () => {
+                  Alert.alert(
+                    'Delete User',
+                    `Are you sure you want to delete ${selectedUser.username ? selectedUser.username : selectedUser.email}? This action cannot be undone and will also delete all their tasks.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { 
+                        text: 'Delete', 
+                        style: 'destructive', 
+                        onPress: () => handleUserAction(pendingAction.userId, 'delete') 
+                      }
+                    ]
+                  );
+                }
+              }
+            ]
+          );
+        } else if (pendingAction.type === 'toggle-role') {
           Alert.alert(
             'Toggle User Role',
-            `Are you sure you want to change ${selectedUser?.username ? selectedUser.username : selectedUser?.email}'s role from ${selectedUser?.role === 'EMPLOYEE' ? 'USER' : selectedUser?.role} to ${selectedUser?.role === 'ADMIN' ? 'USER' : 'ADMIN'}?`,
+            `Are you sure you want to change ${selectedUser?.username ? selectedUser.username : selectedUser?.email}'s role from ${selectedUser?.role === 'EMPLOYEE' ? 'tasker' : selectedUser?.role} to ${selectedUser?.role === 'ADMIN' ? 'tasker' : 'ADMIN'}?`,
             [
               { text: 'Cancel', style: 'cancel' },
               { 
@@ -240,6 +368,68 @@ export default function AdminPanel() {
       Alert.alert('Error', 'Incorrect password. Please try again.');
       setPassword('');
     }
+  };
+
+  const handleAdminRegister = async () => {
+    if (!newUsername || !newEmail || !newPassword) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
+    }
+
+    // Show confirmation dialog before creating account
+    Alert.alert(
+      'Create Tasker Account',
+      `Are you sure you want to create a new tasker account for ${newUsername} (${newEmail})?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Create Account', 
+          style: 'default', 
+          onPress: async () => {
+            setRegistrationLoading(true);
+            try {
+              const token = await getToken();
+              if (!token) {
+                Alert.alert('Error', 'Authentication required');
+                return;
+              }
+
+              const response = await fetch(endpoints.register, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  username: newUsername,
+                  email: newEmail,
+                  password: newPassword,
+                }),
+              });
+
+              if (response.ok) {
+                Alert.alert('Success', 'Tasker account created successfully');
+                // Clear form
+                setNewUsername('');
+                setNewEmail('');
+                setNewPassword('');
+                setShowRegistrationForm(false);
+                // Refresh the users list
+                loadData();
+              } else {
+                const errorText = await response.text();
+                Alert.alert('Error', errorText || 'Failed to create account');
+              }
+            } catch (error) {
+              console.error('Error creating account:', error);
+              Alert.alert('Error', 'Failed to create account');
+            } finally {
+              setRegistrationLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const sortedUsers = users.sort((a, b) => {
@@ -277,226 +467,260 @@ export default function AdminPanel() {
             <Ionicons name="shield-checkmark" size={28} color="#0A84FF" />
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Admin Panel</Text>
-            <Text style={styles.headerSubtitle}>Manage users and their tasks</Text>
+            <Text style={styles.headerTitle}>
+              User {currentUserInfo?.username || currentUserInfo?.email || 'Admin'}
+            </Text>
+            <Text style={styles.headerSubtitle}>Manage taskers and their tasks</Text>
           </View>
         </View>
       </View>
 
-      {/* Content */}
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0A84FF" />
-            <Text style={styles.loadingText}>Loading users...</Text>
-          </View>
-        ) : (
-          <View style={styles.section}>
-            {/* User Selection Dropdown */}
-            <View style={styles.dropdownSection}>
-              <Text style={styles.dropdownLabel}>Select User</Text>
-              <View style={styles.dropdownContainer}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.dropdownButton,
-                    pressed && styles.dropdownButtonPressed
-                  ]}
-                  onPress={() => setShowUserModal(!showUserModal)}
-                >
-                  <View style={styles.dropdownButtonContent}>
-                    {selectedUser ? (
-                      <>
-                        <View style={styles.dropdownUserInfo}>
-                          <View style={styles.dropdownUserAvatar}>
-                            <Ionicons 
-                              name={selectedUser.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                              size={20} 
-                              color={selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
-                            />
-                          </View>
-                          <View style={styles.dropdownUserDetails}>
-                            <Text style={styles.dropdownUserName}>
-                              {selectedUser.username || selectedUser.email}
+      {/* Scrollable Content Area */}
+      <View style={styles.scrollContainer}>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          showsVerticalScrollIndicator={true}
+        >
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#0A84FF" />
+              <Text style={styles.loadingText}>Loading users...</Text>
+            </View>
+          ) : (
+            <View style={styles.section}>
+              {/* User Selection Dropdown */}
+              <View style={styles.dropdownSection}>
+                <Text style={styles.dropdownLabel}>Select Tasker</Text>
+                <View style={styles.dropdownContainer}>
+                  {sortedUsers.map((user) => (
+                    <Pressable
+                      key={user.id}
+                      style={({ pressed }) => [
+                        styles.userListItem,
+                        selectedUserId === user.id && styles.selectedUserListItem,
+                        pressed && styles.userListItemPressed
+                      ]}
+                      onPress={() => handleUserSelect(user.id)}
+                    >
+                      <View style={styles.userListItemContent}>
+                        <View style={styles.userListItemAvatar}>
+                          <Ionicons 
+                            name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
+                            size={20} 
+                            color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
+                          />
+                        </View>
+                        <View style={styles.userListItemDetails}>
+                          <Text style={styles.userListItemName}>
+                            {user.username || user.email}
+                          </Text>
+                          <View style={styles.userListItemRole}>
+                            <View style={[
+                              styles.roleBadge,
+                              { backgroundColor: user.role === 'ADMIN' ? '#0A84FF20' : '#6c757d20' }
+                            ]}>
+                                                          <Text style={[
+                              styles.userRole,
+                              { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
+                            ]}>
+                              {user.role === 'EMPLOYEE' ? 'tasker' : user.role}
                             </Text>
+                            </View>
                           </View>
                         </View>
-                        <Ionicons 
-                          name={showUserModal ? "chevron-up" : "chevron-down"} 
-                          size={20} 
-                          color="#6c757d" 
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.dropdownPlaceholder}>Select a user...</Text>
-                        <Ionicons name="chevron-down" size={20} color="#6c757d" />
-                      </>
-                    )}
-                  </View>
-                </Pressable>
-
-                {/* Quick Dropdown List */}
-                {showUserModal && (
-                  <>
-                    {/* Backdrop to close dropdown when tapping outside */}
-                    <Pressable
-                      style={styles.dropdownBackdrop}
-                      onPress={() => setShowUserModal(false)}
-                    />
-                    <View style={styles.quickDropdownList}>
-                      <ScrollView 
-                        style={styles.quickDropdownScrollView}
-                        showsVerticalScrollIndicator={false}
-                        nestedScrollEnabled={true}
-                      >
-                        {sortedUsers.map((user) => (
-                          <Pressable
-                            key={user.id}
-                            style={({ pressed }) => [
-                              styles.quickDropdownItem,
-                              selectedUserId === user.id && styles.selectedQuickDropdownItem,
-                              pressed && styles.quickDropdownItemPressed
-                            ]}
-                            onPress={() => {
-                              handleUserSelect(user.id);
-                              setShowUserModal(false);
-                            }}
-                          >
-                            <View style={styles.quickDropdownItemContent}>
-                              <View style={styles.quickDropdownAvatar}>
-                                <Ionicons 
-                                  name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                                  size={14} 
-                                  color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
-                                />
-                              </View>
-                              <Text style={styles.quickDropdownName}>
-                                {user.username || user.email}
-                              </Text>
-                              {selectedUserId === user.id && (
-                                <Ionicons name="checkmark" size={16} color="#0A84FF" />
-                              )}
-                            </View>
-                          </Pressable>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  </>
-                )}
+                        {selectedUserId === user.id && (
+                          <Ionicons name="checkmark-circle" size={24} color="#0A84FF" />
+                        )}
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
-            </View>
-            
-            {/* Selected User Actions */}
-            {selectedUser && selectedUser.id !== currentUserId ? (
-              <View style={styles.selectedUserSection}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>User Actions</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    Managing: {selectedUser.username ? selectedUser.username : selectedUser.email}
-                  </Text>
+
+                          {/* Admin Registration Form */}
+            <Pressable
+              style={({ pressed }) => [
+                showRegistrationForm ? styles.registrationSection : styles.registrationSectionCollapsed,
+                pressed && styles.buttonPressed
+              ]}
+              onPress={() => setShowRegistrationForm(!showRegistrationForm)}
+            >
+                <View style={styles.registrationHeader}>
+                  <Text style={styles.registrationTitle}>Add New Tasker</Text>
+                  <View style={styles.toggleRegistrationButton}>
+                    <Text style={styles.toggleRegistrationText}>
+                      {showRegistrationForm ? '−' : '+'}
+                    </Text>
+                  </View>
                 </View>
 
-                {/* User Info Card */}
-                <View style={styles.userCard}>
-                  <View style={styles.userInfoSection}>
-                    <View style={styles.userAvatar}>
-                      <Ionicons 
-                        name={selectedUser.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                        size={20} 
-                        color={selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
-                      />
-                    </View>
-                    <View style={styles.userDetails}>
-                      <Text style={styles.userEmail}>
-                        {selectedUser.username || selectedUser.email}
-                      </Text>
-                      <View style={styles.roleContainer}>
-                        <View style={[
-                          styles.roleBadge,
-                          { backgroundColor: selectedUser.role === 'ADMIN' ? '#0A84FF20' : '#6c757d20' }
-                        ]}>
-                          <Text style={[
-                            styles.userRole,
-                            { color: selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
-                          ]}>
-                            {selectedUser.role === 'EMPLOYEE' ? 'USER' : selectedUser.role}
-                          </Text>
-                        </View>
+                {showRegistrationForm && (
+                  <View style={styles.registrationForm}>
+                    {/* Username Input */}
+                    <View style={styles.formField}>
+                      <Text style={styles.formLabel}>Username</Text>
+                      <View style={styles.inputContainer}>
+                        <Ionicons name="person-outline" size={20} color="#6c757d" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="Choose a username"
+                          placeholderTextColor="#adb5bd"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          value={newUsername}
+                          onChangeText={setNewUsername}
+                        />
                       </View>
                     </View>
-                    
-                    {/* Advanced Options Gear Icon */}
+
+                    {/* Email Input */}
+                    <View style={styles.formField}>
+                      <Text style={styles.formLabel}>Email Address</Text>
+                      <View style={styles.inputContainer}>
+                        <Ionicons name="mail-outline" size={20} color="#6c757d" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="Enter email address"
+                          placeholderTextColor="#adb5bd"
+                          autoCapitalize="none"
+                          keyboardType="email-address"
+                          value={newEmail}
+                          onChangeText={setNewEmail}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Password Input */}
+                    <View style={styles.formField}>
+                      <Text style={styles.formLabel}>Password</Text>
+                      <View style={styles.inputContainer}>
+                        <Ionicons name="lock-closed-outline" size={20} color="#6c757d" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="Create a password"
+                          placeholderTextColor="#adb5bd"
+                          secureTextEntry
+                          value={newPassword}
+                          onChangeText={setNewPassword}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Register Button */}
                     <Pressable
                       style={({ pressed }) => [
-                        styles.advancedOptionsGear,
-                        pressed && styles.advancedOptionsGearPressed
-                      ]}
-                      onPress={() => {
-                        setPendingAction({ type: 'toggle-role', userId: selectedUser.id });
-                        setShowPasswordModal(true);
-                      }}
-                    >
-                      <Ionicons name="settings-outline" size={16} color="#6c757d" />
-                    </Pressable>
-                  </View>
-                  
-                  {/* Task Management Buttons */}
-                  <View style={styles.taskButtonsContainer}>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.taskButton,
-                        styles.addTaskButton,
+                        styles.registerButton,
                         pressed && styles.buttonPressed
                       ]}
-                      onPress={() => handleAddTask(selectedUser.id, selectedUser.email, selectedUser.username)}
+                      onPress={handleAdminRegister}
+                      disabled={registrationLoading}
                     >
-                      <Ionicons name="add-circle-outline" size={18} color="#28a745" />
-                      <Text style={styles.addTaskButtonText}>Add Task</Text>
-                    </Pressable>
-                    
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.taskButton,
-                        styles.viewTasksButton,
-                        pressed && styles.buttonPressed
-                      ]}
-                      onPress={() => handleViewTasks(selectedUser.id, selectedUser.email)}
-                    >
-                      <Ionicons name="eye-outline" size={18} color="#0A84FF" />
-                      <Text style={styles.viewTasksButtonText}>View / Edit Tasks</Text>
+                      {registrationLoading ? (
+                        <ActivityIndicator color="white" size="small" />
+                      ) : (
+                        <>
+                          <Ionicons name="person-add" size={18} color="white" />
+                          <Text style={styles.registerButtonText}>Create Tasker Account</Text>
+                        </>
+                      )}
                     </Pressable>
                   </View>
+                )}
+            </Pressable>
+              
+              {users.length === 0 && (
+                <View style={styles.emptyState}>
+                  <Ionicons name="people-outline" size={48} color="#6c757d" />
+                  <Text style={styles.emptyStateTitle}>No Users Found</Text>
+                  <Text style={styles.emptyStateSubtitle}>Users will appear here once they register</Text>
                 </View>
-              </View>
-            ) : selectedUser && selectedUser.id === currentUserId ? (
-              <View style={styles.selectedUserSection}>
-                <View style={styles.userCard}>
-                  <View style={styles.userInfoSection}>
-                    <Ionicons name="warning-outline" size={24} color="#ffc107" />
-                    <Text style={styles.userEmail}>You cannot manage yourself</Text>
-                  </View>
-                </View>
-              </View>
-            ) : null}
-            
-            {users.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="people-outline" size={48} color="#6c757d" />
-                <Text style={styles.emptyStateTitle}>No Users Found</Text>
-                <Text style={styles.emptyStateSubtitle}>Users will appear here once they register</Text>
-              </View>
-            )}
+              )}
             </View>
           )}
         </ScrollView>
+      </View>
 
-              {/* Password Verification Modal */}
+      {/* Sticky User Actions Section */}
+      {selectedUser && selectedUser.id !== currentUserId && (
+        <View style={styles.stickyUserActions}>
+          <View style={styles.userCard}>
+            <View style={styles.userInfoSection}>
+              <View style={styles.userAvatar}>
+                <Ionicons 
+                  name={selectedUser.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
+                  size={20} 
+                  color={selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
+                />
+              </View>
+              <View style={styles.userDetails}>
+                <Text style={styles.userEmail}>
+                  {selectedUser.username || selectedUser.email}
+                </Text>
+                <View style={styles.roleContainer}>
+                  <View style={[
+                    styles.roleBadge,
+                    { backgroundColor: selectedUser.role === 'ADMIN' ? '#0A84FF20' : '#6c757d20' }
+                  ]}>
+                    <Text style={[
+                      styles.userRole,
+                      { color: selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
+                    ]}>
+                      {selectedUser.role === 'EMPLOYEE' ? 'tasker' : selectedUser.role}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              
+              {/* Advanced Options Gear Icon */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.advancedOptionsGear,
+                  pressed && styles.advancedOptionsGearPressed
+                ]}
+                onPress={() => {
+                  setPendingAction({ type: 'user-actions', userId: selectedUser.id });
+                  setShowPasswordModal(true);
+                }}
+              >
+                <Ionicons name="settings-outline" size={16} color="#6c757d" />
+              </Pressable>
+            </View>
+            
+            {/* Task Management Buttons */}
+            <View style={styles.taskButtonsContainer}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.taskButton,
+                  styles.addTaskButton,
+                  pressed && styles.buttonPressed
+                ]}
+                onPress={() => handleAddTask(selectedUser.id, selectedUser.email, selectedUser.username)}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#28a745" />
+                <Text style={styles.addTaskButtonText}>Add Task</Text>
+              </Pressable>
+              
+              <Pressable
+                style={({ pressed }) => [
+                  styles.taskButton,
+                  styles.viewTasksButton,
+                  pressed && styles.buttonPressed
+                ]}
+                onPress={() => handleViewTasks(selectedUser.id, selectedUser.email)}
+              >
+                <Ionicons name="eye-outline" size={18} color="#0A84FF" />
+                <Text style={styles.viewTasksButtonText}>View / Edit Tasks</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Password Verification Modal */}
       {showPasswordModal && (
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
@@ -550,7 +774,7 @@ export default function AdminPanel() {
           </KeyboardAvoidingView>
         </View>
       )}
-      </View>
+    </View>
   );
 }
 
@@ -605,8 +829,15 @@ const styles = StyleSheet.create({
       fontSize: 14,
       color: '#6c757d',
     },
+    scrollContainer: {
+      flex: 1,
+    },
     content: {
       flex: 1,
+    },
+    contentContainer: {
+      paddingBottom: 250, // Increased padding to ensure content doesn't get hidden behind sticky panel
+      minHeight: '120%', // Ensure content is always taller than screen to enable scrolling
     },
     section: {
       padding: 20,
@@ -620,152 +851,91 @@ const styles = StyleSheet.create({
       color: '#1a1a1a',
       marginBottom: 12,
     },
-    dropdownSubtitle: {
-      fontSize: 12,
-      color: '#6c757d',
-      marginBottom: 8,
-      fontStyle: 'italic',
-    },
     dropdownContainer: {
-      position: 'relative',
-      zIndex: 1000, // Ensure the dropdown container has proper stacking context
-    },
-    dropdownBackdrop: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'transparent',
-      zIndex: 999, // Just below the dropdown
-    },
-    dropdownButton: {
-      backgroundColor: 'white',
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: '#e9ecef',
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-    },
-    dropdownButtonPressed: {
-      opacity: 0.7,
-      backgroundColor: '#f8f9fa',
-    },
-    dropdownButtonContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    dropdownUserInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-    },
-    dropdownUserAvatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: '#f8f9fa',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: 12,
-    },
-    dropdownUserDetails: {
-      flex: 1,
-    },
-    dropdownUserName: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: '#1a1a1a',
-    },
-    dropdownUserEmail: {
-      fontSize: 14,
-      color: '#6c757d',
-      marginTop: 2,
-    },
-    dropdownPlaceholder: {
-      fontSize: 16,
-      color: '#6c757d',
-      flex: 1,
-    },
-    quickDropdownList: {
-      position: 'absolute',
-      top: '100%', // Position below the button
-      left: 0,
-      right: 0,
       backgroundColor: 'white',
       borderRadius: 12,
       borderWidth: 1,
       borderColor: '#e9ecef',
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 12,
-      elevation: 8,
-      zIndex: 1000, // Ensure it's above other content
-      marginTop: 4, // Add some space from the button
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 3,
     },
-    quickDropdownScrollView: {
-      maxHeight: 300, // Increase the height for better scrolling
-      borderRadius: 12,
-    },
-    quickDropdownItem: {
+    userListItem: {
       paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingVertical: 12,
       borderBottomWidth: 1,
       borderBottomColor: '#f8f9fa',
-      minHeight: 56, // Ensure consistent touch target size
+      minHeight: 64,
     },
-    selectedQuickDropdownItem: {
+    selectedUserListItem: {
       backgroundColor: '#0A84FF15',
       borderLeftWidth: 3,
       borderLeftColor: '#0A84FF',
     },
-    quickDropdownItemPressed: {
+    userListItemPressed: {
       backgroundColor: '#f8f9fa',
       opacity: 0.8,
     },
-    quickDropdownItemContent: {
+    userListItemContent: {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    quickDropdownAvatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+    userListItemAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       backgroundColor: '#f8f9fa',
       justifyContent: 'center',
       alignItems: 'center',
-      marginRight: 12,
+      marginRight: 16,
     },
-    quickDropdownName: {
+    userListItemDetails: {
+      flex: 1,
+    },
+    userListItemName: {
       fontSize: 16,
       fontWeight: '600',
       color: '#1a1a1a',
-      flex: 1,
-      marginLeft: 8, // Add some space from the avatar
-    },
-    selectedUserSection: {
-      marginTop: 15,
-    },
-    sectionHeader: {
-      marginBottom: 20,
-    },
-    sectionTitle: {
-      fontSize: 22,
-      fontWeight: '700',
-      color: '#1a1a1a',
       marginBottom: 4,
     },
-    sectionSubtitle: {
-      fontSize: 14,
-      color: '#6c757d',
+    userListItemRole: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    roleBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    userRole: {
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    stickyUserActions: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: 'white',
+      borderTopWidth: 1,
+      borderTopColor: '#e9ecef',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      paddingBottom: 80, // Increased padding to account for Android navigation buttons
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 8,
     },
     userCard: {
       backgroundColor: 'white',
       borderRadius: 16,
-      padding: 24,
-      marginBottom: 20,
+      padding: 20,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.08,
@@ -799,20 +969,9 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
     },
-    roleBadge: {
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 12,
-    },
-    userRole: {
-      fontSize: 12,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
     advancedOptionsGear: {
-      marginLeft: 16, // Space between user details and gear
-      padding: 8, // Make it easier to press
+      marginLeft: 16,
+      padding: 8,
     },
     advancedOptionsGearPressed: {
       opacity: 0.7,
@@ -820,7 +979,6 @@ const styles = StyleSheet.create({
     taskButtonsContainer: {
       flexDirection: 'row',
       gap: 16,
-      marginBottom: 16,
     },
     taskButton: {
       flex: 1,
@@ -856,71 +1014,6 @@ const styles = StyleSheet.create({
       marginLeft: 8,
       textAlign: 'center',
     },
-    advancedOptionsSection: {
-      marginTop: 8,
-    },
-    advancedOptionsHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      backgroundColor: '#f8f9fa',
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: '#e9ecef',
-    },
-    advancedOptionsHeaderPressed: {
-      backgroundColor: '#e9ecef',
-    },
-    advancedOptionsHeaderContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    advancedOptionsTitle: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#6c757d',
-      marginLeft: 8,
-    },
-    advancedOptionsContent: {
-      marginTop: 12,
-    },
-    userActionsContainer: {
-      flexDirection: 'row',
-      gap: 12,
-    },
-    actionButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 12,
-      borderWidth: 1.5,
-      minHeight: 48,
-    },
-    toggleRoleButton: {
-      backgroundColor: '#0A84FF10',
-      borderColor: '#0A84FF30',
-    },
-    deleteButton: {
-      backgroundColor: '#dc354510',
-      borderColor: '#dc354530',
-    },
-    toggleRoleButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#0A84FF',
-      marginLeft: 8,
-    },
-    deleteButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: '#dc3545',
-      marginLeft: 8,
-    },
     buttonPressed: {
       opacity: 0.7,
       transform: [{ scale: 0.98 }],
@@ -953,7 +1046,7 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       zIndex: 10,
       paddingTop: 0,
-      paddingBottom: 200, // Push content up from bottom
+      paddingBottom: 200,
     },
     passwordModal: {
       backgroundColor: 'white',
@@ -1020,6 +1113,107 @@ const styles = StyleSheet.create({
       color: '#0A84FF',
     },
     confirmButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: 'white',
+    },
+    registrationSection: {
+      marginTop: 24,
+      marginBottom: 24,
+      backgroundColor: 'white',
+      borderRadius: 16,
+      padding: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    registrationSectionCollapsed: {
+      marginTop: 24,
+      backgroundColor: 'white',
+      borderRadius: 16,
+      padding: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    registrationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+      minHeight: 48,
+      paddingLeft: 17, // Align with user icons (20px container padding + 40px avatar width + 16px margin)
+    },
+    registrationTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: '#1a1a1a',
+      lineHeight: 24,
+    },
+    toggleRegistrationButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 48,
+      height: 48,
+    },
+    toggleRegistrationText: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: '#0A84FF',
+      textAlignVertical: 'center',
+      lineHeight: 24,
+      includeFontPadding: false,
+      textAlign: 'center',
+    },
+    registrationForm: {
+      width: '100%',
+    },
+    formField: {
+      marginBottom: 16,
+    },
+    formLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#6c757d',
+      marginBottom: 8,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f8f9fa',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#e9ecef',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    inputIcon: {
+      marginRight: 12,
+    },
+    textInput: {
+      flex: 1,
+      fontSize: 16,
+      color: '#1a1a1a',
+      paddingVertical: 0,
+    },
+    registerButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#0A84FF',
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      minHeight: 56,
+      gap: 8,
+    },
+    registerButtonText: {
       fontSize: 16,
       fontWeight: '600',
       color: 'white',

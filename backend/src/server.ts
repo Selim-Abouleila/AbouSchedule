@@ -723,7 +723,47 @@ app.register(async (f) => {
     return { message: 'User deleted successfully' };
   });
 
+  // Change user password (admin only)
+  f.post('/users/:id/change-password', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
 
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    const { newPassword } = req.body as { newPassword: string };
+    if (!newPassword || newPassword.length < 6) {
+      return rep.code(400).send({ error: 'Password must be at least 6 characters long' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return rep.code(404).send({ error: 'User not found' });
+    }
+
+    // Prevent admin from changing their own password through this endpoint
+    if (user.id === req.user.sub) {
+      return rep.code(400).send({ error: 'Cannot change your own password through admin endpoint' });
+    }
+
+    // Hash the new password
+    const hash = await argon2.hash(newPassword);
+    
+    // Update the user's password
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hash },
+    });
+
+    return { message: 'Password changed successfully' };
+  });
 
   // Get tasks for a specific user (admin only) - similar to regular user endpoint
   f.get('/users/:id/tasks', async (req: any, rep) => {
