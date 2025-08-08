@@ -127,6 +127,16 @@ enum Recurrence {
   YEARLY
 }
 
+model Settings {
+  id             Int      @id @default(autoincrement())
+  userId         Int?     // null for global settings
+  defaultLabelDone Boolean @default(true) @map("default_label_done")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId]) // one settings record per user (or global if userId is null)
+}
+
 model PushToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique

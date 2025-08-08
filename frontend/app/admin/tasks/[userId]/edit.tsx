@@ -11,6 +11,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     Image,
+    Modal,
 } from "react-native";
 
 import DateTimePicker, {
@@ -27,6 +28,7 @@ import { endpoints, API_BASE } from "../../../../src/api";
 import { getToken } from "../../../../src/auth";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { compressImages } from "../../../../src/imageCompression";
 
 /*  --- enums reused from AddTask ---  */
 const PRIORITIES = ["NONE", "ONE", "TWO", "THREE", "IMMEDIATE", "RECURRENT"] as const;
@@ -393,17 +395,22 @@ export default function EditTask() {
 
     /* pick image(s) */
     const pickImages = async () => {
-        const res = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsMultipleSelection: true,
-            selectionLimit: 6,
-        });
+        setPickingPhotos(true);
+        try {
+            const res = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsMultipleSelection: true,
+                selectionLimit: 6,
+            });
 
-        if (!res.canceled && res.assets?.length) {
-            setPhotos(prev => [
-                ...prev,
-                ...(res.assets as TaskPhoto[])
-            ]);
+            if (!res.canceled && res.assets?.length) {
+                setPhotos(prev => [
+                    ...prev,
+                    ...(res.assets as TaskPhoto[])
+                ]);
+            }
+        } finally {
+            setPickingPhotos(false);
         }
     };
 
@@ -440,7 +447,11 @@ export default function EditTask() {
     };
 
 
-    const [loading, setLoad] = useState(true);
+    const [loading, setLoad] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [uploadProgress, setUploadProgress] = useState<string>('');
+    const [pickingPhotos, setPickingPhotos] = useState(false);
+    const [pickingDocs, setPickingDocs] = useState(false);
 
     /* --------- fetch current task once (runs whenever `id` changes) ----- */
     useEffect(() => {
@@ -453,7 +464,7 @@ export default function EditTask() {
                 setRemovedDocs(false);
                 setRemovedSomething(false);
 
-                setLoad(true);          // show spinner while we fetch
+                setInitialLoading(true);          // show spinner while we fetch
 
                 const jwt = await getToken();
                 const endpoint = endpoints.admin.userTask(parseInt(userId), parseInt(id));
@@ -566,7 +577,7 @@ export default function EditTask() {
                     router.back();
                 }
             } finally {
-                if (!cancelled) setLoad(false);
+                if (!cancelled) setInitialLoading(false);
             }
 
             
@@ -594,6 +605,9 @@ export default function EditTask() {
     /* ----------- submit PATCH ------------------------------- */
 const save = async () => {
   /* validate inputs here as before … */
+
+  setLoad(true);
+  setUploadProgress('Preparing upload...');
 
   const jwt = await getToken();
 
@@ -666,6 +680,9 @@ const save = async () => {
       body: JSON.stringify(body),
     });
     if (!res.ok) return Alert.alert('Failed', `HTTP ${res.status}`);
+    
+    setLoad(false);
+    setUploadProgress('');
   } else {
     /* ❷ multipart PATCH */
     const form = new FormData();
@@ -707,13 +724,22 @@ const save = async () => {
     form.append('keep',     keepImgIds.join(','));   // images to keep
     form.append('keepDocs', keepDocIds.join(','));   // docs to keep
 
-    newPhotos.forEach((p, idx) =>
-      form.append(`photo${idx}`, {
-        uri:  p.uri,
-        name: p.fileName ?? `photo${idx}.jpg`,
-        type: p.mimeType ?? 'image/jpeg',
-      } as any)
-    );
+    // Compress new images before uploading
+    if (newPhotos.length > 0) {
+      setUploadProgress('Compressing images...');
+      const imageUris = newPhotos.map(p => p.uri);
+      const compressedImages = await compressImages(imageUris);
+      
+      // Use compressed images for upload
+      compressedImages.forEach((compressed, idx) => {
+        const originalPhoto = newPhotos[idx];
+        form.append(`photo${idx}`, {
+          uri: compressed.uri,
+          name: originalPhoto.fileName ?? `photo${idx}.jpg`,
+          type: originalPhoto.mimeType ?? 'image/jpeg',
+        } as any);
+      });
+    }
 
     // Only append new documents (those without id)
     newDocs.forEach((d, idx) =>
@@ -724,12 +750,17 @@ const save = async () => {
       } as any)
     );
 
+    setUploadProgress('Uploading files...');
+    
     const res = await fetch(endpoints.admin.userTask(parseInt(userId), parseInt(id)), {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${jwt}` },
       body: form,
     });
     if (!res.ok) return Alert.alert('Failed', `HTTP ${res.status}`);
+    
+    setLoad(false);
+    setUploadProgress('');
   }
 
   router.push('/admin');
@@ -783,7 +814,7 @@ const handleBack = useCallback(() => {
 
 
     /* ------------- UI --------------------------------------- */
-    if (loading) {
+    if (initialLoading) {
         return (
             <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
                 <ActivityIndicator />
@@ -1148,16 +1179,40 @@ const handleBack = useCallback(() => {
                     
                               {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
                               <View style={styles.pickerRow}>
-                                <Pressable onPress={takePhoto} style={styles.pickerBox}>
-                                  <Text style={styles.pickerIcon}>📷</Text>
+                                <Pressable 
+                                  onPress={takePhoto} 
+                                  style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
+                                  disabled={pickingPhotos}
+                                >
+                                  {pickingPhotos ? (
+                                    <ActivityIndicator size="small" color="#555" />
+                                  ) : (
+                                    <Text style={styles.pickerIcon}>📷</Text>
+                                  )}
                                 </Pressable>
                     
-                                <Pressable onPress={pickImages} style={styles.pickerBox}>
-                                  <Text style={styles.pickerIcon}>🖼️</Text>
+                                <Pressable 
+                                  onPress={pickImages} 
+                                  style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
+                                  disabled={pickingPhotos}
+                                >
+                                  {pickingPhotos ? (
+                                    <ActivityIndicator size="small" color="#555" />
+                                  ) : (
+                                    <Text style={styles.pickerIcon}>🖼️</Text>
+                                  )}
                                 </Pressable>
                     
-                                <Pressable onPress={pickDocs} style={styles.pickerBox}>
-                                  <Text style={styles.pickerIcon}>📄</Text>
+                                <Pressable 
+                                  onPress={pickDocs} 
+                                  style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
+                                  disabled={pickingDocs}
+                                >
+                                  {pickingDocs ? (
+                                    <ActivityIndicator size="small" color="#555" />
+                                  ) : (
+                                    <Text style={styles.pickerIcon}>📄</Text>
+                                  )}
                                 </Pressable>
                               </View>
                     
@@ -1247,6 +1302,36 @@ const handleBack = useCallback(() => {
                     <Button title="← Back" onPress={handleBack} />
                 </View>
             </ScrollView>
+
+            {/* Loading Overlay */}
+            <Modal
+              transparent
+              visible={loading}
+              animationType="fade"
+            >
+              <View style={{
+                flex: 1,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}>
+                <View style={{
+                  backgroundColor: 'white',
+                  borderRadius: 12,
+                  padding: 24,
+                  alignItems: 'center',
+                  minWidth: 200,
+                }}>
+                  <ActivityIndicator size="large" color="#0A84FF" style={{ marginBottom: 16 }} />
+                  <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+                    Saving Task
+                  </Text>
+                  <Text style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>
+                    {uploadProgress}
+                  </Text>
+                </View>
+              </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 }

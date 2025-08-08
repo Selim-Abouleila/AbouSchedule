@@ -10,6 +10,8 @@ import {
   Image,
   Alert,
   Platform,
+  ActivityIndicator,
+  Modal,
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
@@ -28,6 +30,7 @@ import { useMemo, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { getDefaultLabelDone } from "../../../src/settings";
+import { compressImages } from "../../../src/imageCompression";
 
 
 const PRIORITIES = [
@@ -146,6 +149,9 @@ export default function AddTask() {
   const [photos, setPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [docs, setDocs] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const [loading, setLoad] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
+  const [pickingPhotos, setPickingPhotos] = useState(false);
+  const [pickingDocs, setPickingDocs] = useState(false);
 
 
 
@@ -303,50 +309,64 @@ const scrollRef = useRef<ScrollView>(null);
     }
     if (photos.length >= 6) { Alert.alert('Maximum 6 pictures'); return; }
 
-    const res = await ImagePicker.launchCameraAsync({
-      quality: 0.9,        
-      allowsEditing: false, 
-      exif: false,               
-    });
+    setPickingPhotos(true);
+    try {
+      const res = await ImagePicker.launchCameraAsync({
+        quality: 0.9,        
+        allowsEditing: false, 
+        exif: false,               
+      });
 
-    if (!res.canceled && res.assets?.length) {
-      setPhotos(prev => [...prev, ...res.assets]);
+      if (!res.canceled && res.assets?.length) {
+        setPhotos(prev => [...prev, ...res.assets]);
+      }
+    } finally {
+      setPickingPhotos(false);
     }
   };
 
   /* pick image(s) */
   const pickImages = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
-      selectionLimit: 6,
-    });
-    if (!res.canceled) setPhotos((prev) => [...prev, ...res.assets]);
+    setPickingPhotos(true);
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: 6,
+      });
+      if (!res.canceled) setPhotos((prev) => [...prev, ...res.assets]);
+    } finally {
+      setPickingPhotos(false);
+    }
   };
 
   /* pick Doc(s) */
   const pickDocs = async () => {
-   
-    const result: any = await DocumentPicker.getDocumentAsync({
-      multiple: true,
-      copyToCacheDirectory: false,
-    });
+    setPickingDocs(true);
+    try {
+      const result: any = await DocumentPicker.getDocumentAsync({
+        multiple: true,
+        copyToCacheDirectory: false,
+      });
 
-    /* ───── SDK 50+ ───── */
-    if ('canceled' in result) {
-      if (result.canceled) return;                      
-      if (Array.isArray(result.assets) && result.assets.length) {
-        setDocs(prev => [...prev, ...result.assets]);
+      /* ───── SDK 50+ ───── */
+      if ('canceled' in result) {
+        if (result.canceled) return;                      
+        if (Array.isArray(result.assets) && result.assets.length) {
+          setDocs(prev => [...prev, ...result.assets]);
+        }
+        return;
       }
-      return;
-    }
 
-    /* ───── SDK 49 and earlier ───── */
-    if (result.type === 'cancel') return;      
-    setDocs(prev => [
-      ...prev,
-      { uri: result.uri, name: result.name, mimeType: result.mimeType } as any,
-    ]);
+      /* ───── SDK 49 and earlier ───── */
+      if (result.type === 'cancel') return;      
+      setDocs(prev => [
+        ...prev,
+        { uri: result.uri, name: result.name, mimeType: result.mimeType } as any,
+      ]);
+    } finally {
+      setPickingDocs(false);
+    }
   };
 
   useFocusEffect(
@@ -472,6 +492,7 @@ const scrollRef = useRef<ScrollView>(null);
     if (!title) return Alert.alert("Please enter a title");
     if (!userId) return Alert.alert("No user selected");
     setLoad(true);
+    setUploadProgress('Preparing upload...');
 
     const jwt = await getToken();
     const form = new FormData();
@@ -483,13 +504,20 @@ const scrollRef = useRef<ScrollView>(null);
     form.append("size", size);
     if (dueAt) form.append("dueAt", dueAt.toISOString());
 
-    photos.forEach((p, idx) =>
+    // Compress images before uploading
+    setUploadProgress('Compressing images...');
+    const imageUris = photos.map(p => p.uri);
+    const compressedImages = await compressImages(imageUris);
+    
+    // Use compressed images for upload
+    compressedImages.forEach((compressed, idx) => {
+      const originalPhoto = photos[idx];
       form.append(`photo${idx}`, {
-        uri: p.uri,
-        name: p.fileName ?? `photo${idx}.jpg`,
-        type: p.mimeType ?? "image/jpeg",
-      } as any)
-    );
+        uri: compressed.uri,
+        name: originalPhoto.fileName ?? `photo${idx}.jpg`,
+        type: originalPhoto.mimeType ?? "image/jpeg",
+      } as any);
+    });
 
     docs.forEach((d, idx) =>
       form.append(`doc${idx}`, {
@@ -521,6 +549,8 @@ const scrollRef = useRef<ScrollView>(null);
     }
     form.append("labelDone", labelDone.toString());
 
+    setUploadProgress('Uploading files...');
+    
     const res = await fetch(endpoints.admin.userTasks(userId), {
       method: "POST",
       headers: { Authorization: `Bearer ${jwt}` },
@@ -528,6 +558,7 @@ const scrollRef = useRef<ScrollView>(null);
     });
 
     setLoad(false);
+    setUploadProgress('');
     if (!res.ok) {
       return Alert.alert("Failed", await res.text());
     }
@@ -950,16 +981,40 @@ const scrollRef = useRef<ScrollView>(null);
 
           {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
           <View style={styles.pickerRow}>
-            <Pressable onPress={takePhoto} style={styles.pickerBox}>
-              <Text style={styles.pickerIcon}>📷</Text>
+            <Pressable 
+              onPress={takePhoto} 
+              style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
+              disabled={pickingPhotos}
+            >
+              {pickingPhotos ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <Text style={styles.pickerIcon}>📷</Text>
+              )}
             </Pressable>
 
-            <Pressable onPress={pickImages} style={styles.pickerBox}>
-              <Text style={styles.pickerIcon}>🖼️</Text>
+            <Pressable 
+              onPress={pickImages} 
+              style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
+              disabled={pickingPhotos}
+            >
+              {pickingPhotos ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <Text style={styles.pickerIcon}>🖼️</Text>
+              )}
             </Pressable>
 
-            <Pressable onPress={pickDocs} style={styles.pickerBox}>
-              <Text style={styles.pickerIcon}>📄</Text>
+            <Pressable 
+              onPress={pickDocs} 
+              style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
+              disabled={pickingDocs}
+            >
+              {pickingDocs ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <Text style={styles.pickerIcon}>📄</Text>
+              )}
             </Pressable>
           </View>
 
@@ -1029,6 +1084,36 @@ const scrollRef = useRef<ScrollView>(null);
           <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
         </View>
       </ScrollView>
+
+      {/* Loading Overlay */}
+      <Modal
+        transparent
+        visible={loading}
+        animationType="fade"
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            alignItems: 'center',
+            minWidth: 200,
+          }}>
+            <ActivityIndicator size="large" color="#0A84FF" style={{ marginBottom: 16 }} />
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+              Uploading Task
+            </Text>
+            <Text style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>
+              {uploadProgress}
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 

@@ -47,22 +47,60 @@ export default function AppDrawerLayout() {
         }} 
       />
 
-      
-      {/* TASK list (and nested add / detail) */}
-      <Drawer.Screen name="tasks/index" options={{ title: 'Tasks' }} />
-      
+      {/* Tasks list - main screen */}
+      <Drawer.Screen 
+        name="tasks/index" 
+        options={{ 
+          title: 'Tasks',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="list" size={size} color={color} />
+          ),
+        }} 
+      />
 
       {/* Media page */}
-      <Drawer.Screen name="media/media" options={{ title: 'Media' }} />
+      <Drawer.Screen 
+        name="media/media" 
+        options={{ 
+          title: 'Media',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="images" size={size} color={color} />
+          ),
+        }} 
+      />
 
       {/* Settings page */}
-      <Drawer.Screen name="settings" options={{ title: 'Settings' }} />
+      <Drawer.Screen 
+        name="settings" 
+        options={{ 
+          title: 'Settings',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="settings" size={size} color={color} />
+          ),
+        }} 
+      />
 
       {/* Login lives one level up (app/login.tsx) */}
-      <Drawer.Screen name="auth/login" options={{ title: 'Login' }} />
+      <Drawer.Screen 
+        name="auth/login" 
+        options={{ 
+          title: 'Login',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="key" size={size} color={color} />
+          ),
+        }} 
+      />
 
       {/* Logout screen we'll add next */}
-      <Drawer.Screen name="logout" options={{ title: 'Logout' }} />
+      <Drawer.Screen 
+        name="logout" 
+        options={{ 
+          title: 'Logout',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="log-out" size={size} color={color} />
+          ),
+        }} 
+      />
 
       {/* Edit Screen*/}
       <Drawer.Screen name="[id]/edit" options={{ title: 'Edit Task', drawerItemStyle: { display: 'none' }, }}  />
@@ -95,6 +133,14 @@ export default function AppDrawerLayout() {
         options={{ drawerItemStyle: { display: 'none' } }}
       />
 
+      {/* Root index - loading/redirect screen */}
+      <Drawer.Screen
+        name="index"
+        options={{ 
+          title: 'Loading',
+          drawerItemStyle: { display: 'none' }
+        }}
+      />
 
       
 

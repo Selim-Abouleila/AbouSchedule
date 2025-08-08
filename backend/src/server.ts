@@ -950,6 +950,8 @@ app.register(async (f) => {
 
           const result = await response.json();
           console.log('Expo notification sent:', result);
+          console.log('Push tokens used:', pushTokens.map(pt => pt.token));
+          console.log('Task details:', { id: full.id, title: full.title, userId: full.userId });
         }
       } catch (error) {
         console.error('Failed to send notification:', error);
@@ -1429,6 +1431,186 @@ app.register(async (f) => {
   });
 
 }, { prefix: '/admin' });
+
+/* ───── Settings Management ───── */
+app.get('/settings', { preHandler: app.auth }, async (req, rep) => {
+  try {
+    const userId = (req.user as any).sub as number;
+    const userRole = (req.user as any).role as string;
+
+    // Get settings for the current user
+    let settings = await prisma.settings.findUnique({
+      where: { userId },
+    });
+
+    // If no user-specific settings, get global settings
+    if (!settings) {
+      settings = await prisma.settings.findUnique({
+        where: { userId: undefined },
+      });
+    }
+
+    // If no settings exist at all, return defaults
+    if (!settings) {
+      return {
+        defaultLabelDone: true,
+      };
+    }
+
+    return {
+      defaultLabelDone: settings.defaultLabelDone,
+    };
+  } catch (error) {
+    console.error('Error getting settings:', error);
+    return rep.code(500).send({ error: 'Failed to get settings' });
+  }
+});
+
+app.put('/settings', { preHandler: app.auth }, async (req, rep) => {
+  try {
+    const userId = (req.user as any).sub as number;
+    const { defaultLabelDone } = req.body as { defaultLabelDone: boolean };
+
+    // Upsert settings for the current user
+    const settings = await prisma.settings.upsert({
+      where: { userId },
+      update: { defaultLabelDone },
+      create: { userId, defaultLabelDone },
+    });
+
+    return { 
+      defaultLabelDone: settings.defaultLabelDone,
+    };
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    return rep.code(500).send({ error: 'Failed to update settings' });
+  }
+});
+
+// Admin-only endpoints for managing other users' settings
+app.get('/admin/settings/:userId', { preHandler: app.auth }, async (req: any, rep) => {
+  try {
+    const userRole = (req.user as any).role as string;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const targetUserId = parseInt(req.params.userId as string);
+    if (isNaN(targetUserId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    // Get settings for the target user
+    let settings = await prisma.settings.findUnique({
+      where: { userId: targetUserId },
+    });
+
+    // If no user-specific settings, get global settings
+    if (!settings) {
+      settings = await prisma.settings.findUnique({
+        where: { userId: undefined },
+      });
+    }
+
+    // If no settings exist at all, return defaults
+    if (!settings) {
+      return {
+        defaultLabelDone: true,
+      };
+    }
+
+    return {
+      defaultLabelDone: settings.defaultLabelDone,
+    };
+  } catch (error) {
+    console.error('Error getting user settings:', error);
+    return rep.code(500).send({ error: 'Failed to get user settings' });
+  }
+});
+
+app.put('/admin/settings/:userId', { preHandler: app.auth }, async (req: any, rep) => {
+  try {
+    const userRole = (req.user as any).role as string;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const targetUserId = parseInt(req.params.userId as string);
+    if (isNaN(targetUserId)) {
+      return rep.code(400).send({ error: 'Invalid user ID' });
+    }
+
+    const { defaultLabelDone } = req.body as { defaultLabelDone: boolean };
+
+    // Upsert settings for the target user
+    const settings = await prisma.settings.upsert({
+      where: { userId: targetUserId },
+      update: { defaultLabelDone },
+      create: { userId: targetUserId, defaultLabelDone },
+    });
+
+    return { 
+      defaultLabelDone: settings.defaultLabelDone,
+    };
+  } catch (error) {
+    console.error('Error updating user settings:', error);
+    return rep.code(500).send({ error: 'Failed to update user settings' });
+  }
+});
+
+// Global settings management (admin only)
+app.get('/admin/settings/global', { preHandler: app.auth }, async (req, rep) => {
+  try {
+    const userRole = (req.user as any).role as string;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    // Get global settings
+    let settings = await prisma.settings.findUnique({
+      where: { userId: undefined },
+    });
+
+    // If no global settings exist, return defaults
+    if (!settings) {
+      return {
+        defaultLabelDone: true,
+      };
+    }
+
+    return {
+      defaultLabelDone: settings.defaultLabelDone,
+    };
+  } catch (error) {
+    console.error('Error getting global settings:', error);
+    return rep.code(500).send({ error: 'Failed to get global settings' });
+  }
+});
+
+app.put('/admin/settings/global', { preHandler: app.auth }, async (req, rep) => {
+  try {
+    const userRole = (req.user as any).role as string;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const { defaultLabelDone } = req.body as { defaultLabelDone: boolean };
+
+    // Upsert global settings
+    const settings = await prisma.settings.upsert({
+      where: { userId: undefined },
+      update: { defaultLabelDone },
+      create: { userId: undefined, defaultLabelDone },
+    });
+
+    return { 
+      defaultLabelDone: settings.defaultLabelDone,
+    };
+  } catch (error) {
+    console.error('Error updating global settings:', error);
+    return rep.code(500).send({ error: 'Failed to update global settings' });
+  }
+});
 
 /* ───── Push Token Management ───── */
 app.post('/push-tokens/register', { preHandler: app.auth }, async (req, rep) => {

@@ -391,7 +391,7 @@ useEffect(() => {
       style={({ pressed }) => ({
         position: 'absolute',
         right: 20,
-        bottom: 20,
+        bottom: 80, // Increased from 20 to avoid back button
         backgroundColor: '#0A84FF',
         borderRadius: 28,
         width: 56,
@@ -404,6 +404,7 @@ useEffect(() => {
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },
         elevation: 8,
+        zIndex: 1000, // Ensure it's above other elements
       })}
     >
       <Ionicons name="add" size={24} color="white" />
