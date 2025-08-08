@@ -39,11 +39,7 @@ export default function AdminPanel() {
   const [currentUserInfo, setCurrentUserInfo] = useState<{ username?: string; email: string } | null>(null);
   
   // Admin registration form state
-  const [showRegistrationForm, setShowRegistrationForm] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [registrationLoading, setRegistrationLoading] = useState(false);
+
 
   useEffect(() => {
     checkAdminStatus();
@@ -98,18 +94,16 @@ export default function AdminPanel() {
           
           // Filter out current user from the list
           const otherUsers = usersData.filter((user: any) => user.id !== currentUser.id);
+          console.log('Loaded users:', otherUsers.map((u: any) => ({ id: u.id, email: u.email, role: u.role })));
           setUsers(otherUsers);
           
-          // Set the first other user as selected by default
-          if (otherUsers.length > 0) {
-            setSelectedUserId(otherUsers[0].id);
-          }
+          // Don't select any user by default - let user choose
+          setSelectedUserId(null);
         } else {
           // Fallback: if current user not found, show all users
           setUsers(usersData);
-          if (usersData.length > 0) {
-            setSelectedUserId(usersData[0].id);
-          }
+          // Don't select any user by default
+          setSelectedUserId(null);
         }
       }
     } catch (error) {
@@ -131,7 +125,13 @@ export default function AdminPanel() {
       const token = await getToken();
       if (!token) return;
 
-      const response = await fetch(`${API_BASE}/admin/users/${userId}/${action}`, {
+      const endpoint = action === 'toggle-role' 
+        ? `${API_BASE}/admin/users/${userId}/toggle-role`
+        : `${API_BASE}/admin/users/${userId}/delete`;
+      
+      console.log('Making request to:', endpoint, 'with userId:', userId);
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -142,7 +142,9 @@ export default function AdminPanel() {
         Alert.alert('Success', `User ${action === 'delete' ? 'deleted' : 'role updated'} successfully`);
         loadData();
       } else {
-        Alert.alert('Error', 'Failed to perform action');
+        const errorText = await response.text();
+        console.error('Server response:', response.status, errorText);
+        Alert.alert('Error', `Failed to perform action: ${errorText || response.statusText}`);
       }
     } catch (error) {
       console.error('Error performing user action:', error);
@@ -150,55 +152,55 @@ export default function AdminPanel() {
     }
   };
 
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [changePasswordInput, setChangePasswordInput] = useState('');
+  const [changePasswordUserId, setChangePasswordUserId] = useState<number | null>(null);
+  const [changePasswordUserDisplayName, setChangePasswordUserDisplayName] = useState('');
+  const [showUserActionsModal, setShowUserActionsModal] = useState(false);
+
   const handleChangePassword = async (userId: number, userDisplayName: string) => {
+    setChangePasswordUserId(userId);
+    setChangePasswordUserDisplayName(userDisplayName);
+    setChangePasswordInput('');
+    setShowChangePasswordModal(true);
+  };
+
+  const handleChangePasswordSubmit = async () => {
+    if (!changePasswordInput || changePasswordInput.trim().length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
     try {
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        Alert.alert('Error', 'Authentication required');
+        return;
+      }
 
-      // Prompt for new password
-      Alert.prompt(
-        'Enter New Password',
-        `Enter a new password for ${userDisplayName}:`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Change Password', 
-            style: 'default', 
-            onPress: async (newPassword) => {
-              if (!newPassword || newPassword.trim().length < 6) {
-                Alert.alert('Error', 'Password must be at least 6 characters long');
-                return;
-              }
+      const response = await fetch(`${API_BASE}/admin/users/${changePasswordUserId}/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          newPassword: changePasswordInput.trim(),
+        }),
+      });
 
-              try {
-                const response = await fetch(`${API_BASE}/admin/users/${userId}/change-password`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                  },
-                  body: JSON.stringify({
-                    newPassword: newPassword.trim(),
-                  }),
-                });
-
-                if (response.ok) {
-                  Alert.alert('Success', `Password changed successfully for ${userDisplayName}`);
-                } else {
-                  const errorText = await response.text();
-                  Alert.alert('Error', errorText || 'Failed to change password');
-                }
-              } catch (error) {
-                console.error('Error changing password:', error);
-                Alert.alert('Error', 'Failed to change password');
-              }
-            }
-          }
-        ],
-        'secure-text'
-      );
+      if (response.ok) {
+        Alert.alert('Success', `Password changed successfully for ${changePasswordUserDisplayName}`);
+        setShowChangePasswordModal(false);
+        setChangePasswordInput('');
+        setChangePasswordUserId(null);
+        setChangePasswordUserDisplayName('');
+      } else {
+        const errorText = await response.text();
+        Alert.alert('Error', errorText || 'Failed to change password');
+      }
     } catch (error) {
-      console.error('Error in handleChangePassword:', error);
+      console.error('Error changing password:', error);
       Alert.alert('Error', 'Failed to change password');
     }
   };
@@ -220,7 +222,13 @@ export default function AdminPanel() {
   };
 
   const handleUserSelect = (userId: number) => {
-    setSelectedUserId(userId);
+    // If clicking on already selected user, deselect it
+    if (selectedUserId === userId) {
+      setSelectedUserId(null);
+    } else {
+      // Otherwise select the clicked user
+      setSelectedUserId(userId);
+    }
   };
 
   const verifyPassword = async (inputPassword: string) => {
@@ -287,67 +295,9 @@ export default function AdminPanel() {
           const selectedUser = getSelectedUser();
           if (!selectedUser) return;
           
-          Alert.alert(
-            'User Actions',
-            `Choose an action for ${selectedUser.username ? selectedUser.username : selectedUser.email}:`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { 
-                text: `Toggle Role (${selectedUser.role === 'EMPLOYEE' ? 'Make Admin' : 'Make Tasker'})`, 
-                style: 'default', 
-                onPress: () => {
-                  Alert.alert(
-                    'Toggle User Role',
-                    `Are you sure you want to change ${selectedUser.username ? selectedUser.username : selectedUser.email}'s role from ${selectedUser.role === 'EMPLOYEE' ? 'tasker' : selectedUser.role} to ${selectedUser.role === 'ADMIN' ? 'tasker' : 'ADMIN'}?`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'Toggle', 
-                        style: 'default', 
-                        onPress: () => handleUserAction(pendingAction.userId, 'toggle-role') 
-                      }
-                    ]
-                  );
-                }
-              },
-              { 
-                text: 'Change Password', 
-                style: 'default', 
-                onPress: () => {
-                  Alert.alert(
-                    'Change User Password',
-                    `Are you sure you want to change the password for ${selectedUser.username ? selectedUser.username : selectedUser.email}?`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'Change Password', 
-                        style: 'default', 
-                        onPress: () => handleChangePassword(pendingAction.userId, selectedUser.username ? selectedUser.username : selectedUser.email) 
-                      }
-                    ]
-                  );
-                }
-              },
-              { 
-                text: 'Delete User', 
-                style: 'destructive', 
-                onPress: () => {
-                  Alert.alert(
-                    'Delete User',
-                    `Are you sure you want to delete ${selectedUser.username ? selectedUser.username : selectedUser.email}? This action cannot be undone and will also delete all their tasks.`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { 
-                        text: 'Delete', 
-                        style: 'destructive', 
-                        onPress: () => handleUserAction(pendingAction.userId, 'delete') 
-                      }
-                    ]
-                  );
-                }
-              }
-            ]
-          );
+          // Show custom user actions modal
+          setShowUserActionsModal(true);
+          // Don't clear pendingAction here - it will be cleared when modal is closed
         } else if (pendingAction.type === 'toggle-role') {
           Alert.alert(
             'Toggle User Role',
@@ -361,8 +311,8 @@ export default function AdminPanel() {
               }
             ]
           );
+          setPendingAction(null);
         }
-        setPendingAction(null);
       }
     } else {
       Alert.alert('Error', 'Incorrect password. Please try again.');
@@ -370,67 +320,7 @@ export default function AdminPanel() {
     }
   };
 
-  const handleAdminRegister = async () => {
-    if (!newUsername || !newEmail || !newPassword) {
-      Alert.alert('Error', 'Please fill all fields');
-      return;
-    }
 
-    // Show confirmation dialog before creating account
-    Alert.alert(
-      'Create Tasker Account',
-      `Are you sure you want to create a new tasker account for ${newUsername} (${newEmail})?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Create Account', 
-          style: 'default', 
-          onPress: async () => {
-            setRegistrationLoading(true);
-            try {
-              const token = await getToken();
-              if (!token) {
-                Alert.alert('Error', 'Authentication required');
-                return;
-              }
-
-              const response = await fetch(endpoints.register, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                  username: newUsername,
-                  email: newEmail,
-                  password: newPassword,
-                }),
-              });
-
-              if (response.ok) {
-                Alert.alert('Success', 'Tasker account created successfully');
-                // Clear form
-                setNewUsername('');
-                setNewEmail('');
-                setNewPassword('');
-                setShowRegistrationForm(false);
-                // Refresh the users list
-                loadData();
-              } else {
-                const errorText = await response.text();
-                Alert.alert('Error', errorText || 'Failed to create account');
-              }
-            } catch (error) {
-              console.error('Error creating account:', error);
-              Alert.alert('Error', 'Failed to create account');
-            } finally {
-              setRegistrationLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
 
   const sortedUsers = users.sort((a, b) => {
     // Sort by role first (EMPLOYEE before ADMIN), then by name
@@ -515,21 +405,21 @@ export default function AdminPanel() {
                           />
                         </View>
                         <View style={styles.userListItemDetails}>
-                          <Text style={styles.userListItemName}>
-                            {user.username || user.email}
-                          </Text>
-                          <View style={styles.userListItemRole}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <View style={[
                               styles.roleBadge,
                               { backgroundColor: user.role === 'ADMIN' ? '#0A84FF20' : '#6c757d20' }
                             ]}>
-                                                          <Text style={[
-                              styles.userRole,
-                              { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
-                            ]}>
-                              {user.role === 'EMPLOYEE' ? 'tasker' : user.role}
-                            </Text>
+                              <Text style={[
+                                styles.userRole,
+                                { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
+                              ]}>
+                                {user.role === 'EMPLOYEE' ? 'tasker' : user.role}
+                              </Text>
                             </View>
+                            <Text style={styles.userListItemName}>
+                              {user.username || user.email}
+                            </Text>
                           </View>
                         </View>
                         {selectedUserId === user.id && (
@@ -540,97 +430,6 @@ export default function AdminPanel() {
                   ))}
                 </View>
               </View>
-
-                          {/* Admin Registration Form */}
-            <Pressable
-              style={({ pressed }) => [
-                showRegistrationForm ? styles.registrationSection : styles.registrationSectionCollapsed,
-                pressed && styles.buttonPressed
-              ]}
-              onPress={() => setShowRegistrationForm(!showRegistrationForm)}
-            >
-                <View style={styles.registrationHeader}>
-                  <Text style={styles.registrationTitle}>Add New Tasker</Text>
-                  <View style={styles.toggleRegistrationButton}>
-                    <Text style={styles.toggleRegistrationText}>
-                      {showRegistrationForm ? '−' : '+'}
-                    </Text>
-                  </View>
-                </View>
-
-                {showRegistrationForm && (
-                  <View style={styles.registrationForm}>
-                    {/* Username Input */}
-                    <View style={styles.formField}>
-                      <Text style={styles.formLabel}>Username</Text>
-                      <View style={styles.inputContainer}>
-                        <Ionicons name="person-outline" size={20} color="#6c757d" style={styles.inputIcon} />
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="Choose a username"
-                          placeholderTextColor="#adb5bd"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          value={newUsername}
-                          onChangeText={setNewUsername}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Email Input */}
-                    <View style={styles.formField}>
-                      <Text style={styles.formLabel}>Email Address</Text>
-                      <View style={styles.inputContainer}>
-                        <Ionicons name="mail-outline" size={20} color="#6c757d" style={styles.inputIcon} />
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="Enter email address"
-                          placeholderTextColor="#adb5bd"
-                          autoCapitalize="none"
-                          keyboardType="email-address"
-                          value={newEmail}
-                          onChangeText={setNewEmail}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Password Input */}
-                    <View style={styles.formField}>
-                      <Text style={styles.formLabel}>Password</Text>
-                      <View style={styles.inputContainer}>
-                        <Ionicons name="lock-closed-outline" size={20} color="#6c757d" style={styles.inputIcon} />
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="Create a password"
-                          placeholderTextColor="#adb5bd"
-                          secureTextEntry
-                          value={newPassword}
-                          onChangeText={setNewPassword}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Register Button */}
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.registerButton,
-                        pressed && styles.buttonPressed
-                      ]}
-                      onPress={handleAdminRegister}
-                      disabled={registrationLoading}
-                    >
-                      {registrationLoading ? (
-                        <ActivityIndicator color="white" size="small" />
-                      ) : (
-                        <>
-                          <Ionicons name="person-add" size={18} color="white" />
-                          <Text style={styles.registerButtonText}>Create Tasker Account</Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
-                )}
-            </Pressable>
               
               {users.length === 0 && (
                 <View style={styles.emptyState}>
@@ -652,7 +451,7 @@ export default function AdminPanel() {
               <View style={styles.userAvatar}>
                 <Ionicons 
                   name={selectedUser.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                  size={20} 
+                  size={24} 
                   color={selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
                 />
               </View>
@@ -660,19 +459,6 @@ export default function AdminPanel() {
                 <Text style={styles.userEmail}>
                   {selectedUser.username || selectedUser.email}
                 </Text>
-                <View style={styles.roleContainer}>
-                  <View style={[
-                    styles.roleBadge,
-                    { backgroundColor: selectedUser.role === 'ADMIN' ? '#0A84FF20' : '#6c757d20' }
-                  ]}>
-                    <Text style={[
-                      styles.userRole,
-                      { color: selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
-                    ]}>
-                      {selectedUser.role === 'EMPLOYEE' ? 'tasker' : selectedUser.role}
-                    </Text>
-                  </View>
-                </View>
               </View>
               
               {/* Advanced Options Gear Icon */}
@@ -686,7 +472,7 @@ export default function AdminPanel() {
                   setShowPasswordModal(true);
                 }}
               >
-                <Ionicons name="settings-outline" size={16} color="#6c757d" />
+                <Ionicons name="settings-outline" size={20} color="#0A84FF" />
               </Pressable>
             </View>
             
@@ -768,6 +554,176 @@ export default function AdminPanel() {
                   onPress={handlePasswordSubmit}
                 >
                   <Text style={styles.confirmButtonText}>Verify</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      )}
+
+      {/* Change Password Modal */}
+      {showChangePasswordModal && (
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+          >
+            <View style={styles.passwordModal}>
+              <View style={styles.passwordModalHeader}>
+                <Text style={styles.passwordModalTitle}>Change User Password</Text>
+                <Text style={styles.passwordModalSubtitle}>Enter a new password for {changePasswordUserDisplayName}</Text>
+              </View>
+              
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter new password"
+                secureTextEntry={true}
+                value={changePasswordInput}
+                onChangeText={setChangePasswordInput}
+                autoFocus={true}
+                onSubmitEditing={handleChangePasswordSubmit}
+              />
+              
+              <View style={styles.passwordModalButtons}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.passwordModalButton,
+                    styles.cancelButton,
+                    pressed && styles.buttonPressed
+                  ]}
+                  onPress={() => {
+                    setShowChangePasswordModal(false);
+                    setChangePasswordInput('');
+                    setChangePasswordUserId(null);
+                    setChangePasswordUserDisplayName('');
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.passwordModalButton,
+                    styles.confirmButton,
+                    pressed && styles.buttonPressed
+                  ]}
+                  onPress={handleChangePasswordSubmit}
+                >
+                  <Text style={styles.confirmButtonText}>Change Password</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      )}
+
+      {/* User Actions Modal */}
+      {showUserActionsModal && (
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+          >
+            <View style={styles.passwordModal}>
+              <View style={styles.passwordModalHeader}>
+                <Text style={styles.passwordModalTitle}>Tasker Actions</Text>
+                <Text style={styles.passwordModalSubtitle}>
+                  Choose an action for {getSelectedUser()?.username ? getSelectedUser()?.username : getSelectedUser()?.email}:
+                </Text>
+              </View>
+              
+              <View style={styles.userActionsContainer}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.userActionButton,
+                    styles.toggleRoleButton,
+                    pressed && styles.buttonPressed
+                  ]}
+                  onPress={() => {
+                    const userId = pendingAction?.userId || 0;
+                    setShowUserActionsModal(false);
+                    setPendingAction(null);
+                    console.log('Selected user for toggle:', getSelectedUser());
+                    console.log('Pending action userId:', userId);
+                    Alert.alert(
+                      'Toggle User Role',
+                      `Are you sure you want to change ${getSelectedUser()?.username ? getSelectedUser()?.username : getSelectedUser()?.email}'s role from ${getSelectedUser()?.role === 'EMPLOYEE' ? 'tasker' : getSelectedUser()?.role} to ${getSelectedUser()?.role === 'ADMIN' ? 'tasker' : 'ADMIN'}?`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { 
+                          text: 'Toggle', 
+                          style: 'default', 
+                          onPress: () => handleUserAction(userId, 'toggle-role') 
+                        }
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="swap-horizontal-outline" size={20} color="#0A84FF" />
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#000000' }}>
+                    {getSelectedUser()?.role === 'EMPLOYEE' ? 'Make Admin' : 'Make Tasker'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.userActionButton,
+                    styles.changePasswordButton,
+                    pressed && styles.buttonPressed
+                  ]}
+                  onPress={() => {
+                    const userId = pendingAction?.userId || 0;
+                    setShowUserActionsModal(false);
+                    setPendingAction(null);
+                    handleChangePassword(userId, getSelectedUser()?.username || getSelectedUser()?.email || 'Unknown User');
+                  }}
+                >
+                  <Ionicons name="key-outline" size={20} color="#28a745" />
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#000000' }}>Change Password</Text>
+                </Pressable>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.userActionButton,
+                    styles.deleteUserButton,
+                    pressed && styles.buttonPressed
+                  ]}
+                  onPress={() => {
+                    const userId = pendingAction?.userId || 0;
+                    setShowUserActionsModal(false);
+                    setPendingAction(null);
+                    Alert.alert(
+                      'Delete User',
+                      `Are you sure you want to delete ${getSelectedUser()?.username ? getSelectedUser()?.username : getSelectedUser()?.email}? This action cannot be undone and will also delete all their tasks.`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { 
+                          text: 'Delete', 
+                          style: 'destructive', 
+                          onPress: () => handleUserAction(userId, 'delete') 
+                        }
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#dc3545" />
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#000000' }}>Delete User</Text>
+                </Pressable>
+              </View>
+              
+              <View style={styles.passwordModalButtons}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.passwordModalButton,
+                    styles.cancelButton,
+                    pressed && styles.buttonPressed
+                  ]}
+                  onPress={() => {
+                    setShowUserActionsModal(false);
+                    setPendingAction(null);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
                 </Pressable>
               </View>
             </View>
@@ -948,10 +904,10 @@ const styles = StyleSheet.create({
       marginBottom: 20,
     },
     userAvatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: '#f8f9fa',
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: '#e9ecef',
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 16,
@@ -1217,5 +1173,40 @@ const styles = StyleSheet.create({
       fontSize: 16,
       fontWeight: '600',
       color: 'white',
+    },
+    userActionsContainer: {
+      width: '100%',
+      marginBottom: 20,
+    },
+    userActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#e9ecef',
+      backgroundColor: 'white',
+      marginBottom: 12,
+      gap: 12,
+      minHeight: 56,
+    },
+    toggleRoleButton: {
+      borderColor: '#0A84FF',
+      backgroundColor: '#0A84FF10',
+    },
+    changePasswordButton: {
+      borderColor: '#28a745',
+      backgroundColor: '#28a74510',
+    },
+    deleteUserButton: {
+      borderColor: '#dc3545',
+      backgroundColor: '#dc354510',
+    },
+    userActionButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#000000',
+      flex: 1,
     },
   }); 

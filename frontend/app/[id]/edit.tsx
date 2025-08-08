@@ -32,7 +32,7 @@ import { compressImages } from "../../src/imageCompression";
 /*  --- enums reused from AddTask ---  */
 const PRIORITIES = ["NONE", "ONE", "TWO", "THREE", "IMMEDIATE", "RECURRENT"] as const;
 const STATUSES = [ "ACTIVE", "DONE", "PENDING"] as const;
-const SIZES = ["SMALL", "LARGE"] as const;
+const SIZES = ["SMALL", "NORMAL", "LARGE"] as const;
 const RECURRENCES = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 
 /** A picked‑or‑existing picture kept in state */
@@ -758,17 +758,93 @@ const handleBack = useCallback(() => {
 
                     {/* Priority */}
                     <Text style={{ fontWeight: "bold", marginTop: 8 }}>PRIORITY</Text>
-                    <Picker selectedValue={priority} onValueChange={setPriority}>
-                        {PRIORITIES
-                            .filter(p => p !== "RECURRENT")
-                            .map(p => <Picker.Item key={p} label={p} value={p} />)}
-                    </Picker>
+                    <View style={{ marginTop: 8 }}>
+                        {/* First row: ONE TWO THREE */}
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                            {(['ONE', 'TWO', 'THREE'] as const).map(p => (
+                                <Pressable
+                                    key={p}
+                                    onPress={() => setPriority(p)}
+                                    style={{
+                                        flex: 1,
+                                        paddingHorizontal: 16,
+                                        paddingVertical: 12,
+                                        borderRadius: 8,
+                                        borderWidth: 2,
+                                        borderColor: priority === p ? '#0A84FF' : '#e9ecef',
+                                        backgroundColor: priority === p ? '#0A84FF' : 'white',
+                                        alignItems: 'center',
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontSize: 14,
+                                        fontWeight: '600',
+                                        color: priority === p ? 'white' : '#1a1a1a',
+                                    }}>
+                                        {p}
+                                    </Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                        {/* Second row: NONE IMMEDIATE */}
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            {(['NONE', 'IMMEDIATE'] as const).map(p => (
+                                <Pressable
+                                    key={p}
+                                    onPress={() => setPriority(p)}
+                                    style={{
+                                        flex: 1,
+                                        paddingHorizontal: 16,
+                                        paddingVertical: 12,
+                                        borderRadius: 8,
+                                        borderWidth: 2,
+                                        borderColor: priority === p ? (p === 'IMMEDIATE' ? '#dc3545' : '#0A84FF') : '#e9ecef',
+                                        backgroundColor: priority === p ? (p === 'IMMEDIATE' ? '#dc3545' : '#0A84FF') : 'white',
+                                        alignItems: 'center',
+                                    }}
+                                >
+                                    <Text style={{
+                                        fontSize: 14,
+                                        fontWeight: '600',
+                                        color: priority === p ? 'white' : '#1a1a1a',
+                                    }}>
+                                        {p}
+                                    </Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    </View>
 
                     {/* Status */}
                     <Text style={{ fontWeight: "bold", marginTop: 8 }}>STATUS</Text>
-                    <Picker selectedValue={status} onValueChange={setStatus}>
-                        {STATUSES.map((s) => <Picker.Item key={s} label={s} value={s} />)}
-                    </Picker>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                        {(['ACTIVE', 'PENDING', 'DONE'] as const).map(s => (
+                            <Pressable
+                                key={s}
+                                onPress={() => setStatus(s)}
+                                style={{
+                                    flex: 1,
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 12,
+                                    borderRadius: 8,
+                                    borderWidth: 2,
+                                    borderColor: status === s ? '#0A84FF' : '#e9ecef',
+                                    backgroundColor: status === s ? '#0A84FF' : 'white',
+                                    alignItems: 'center',
+                                    minWidth: 0,
+                                }}
+                            >
+                                <Text style={{
+                                    fontSize: 13,
+                                    fontWeight: '600',
+                                    color: status === s ? 'white' : '#1a1a1a',
+                                    textAlign: 'center',
+                                }}>
+                                    {s}
+                                </Text>
+                            </Pressable>
+                        ))}
+                    </View>
 
                     {/* Size */}
                     <Text style={{ fontWeight: "bold", marginTop: 8 }}>SIZE</Text>

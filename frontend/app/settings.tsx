@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getSettings, saveSettings, getSettingsForUser, getUserSettings } from '../src/settings';
 import { getToken, getCurrentUserId } from '../src/auth';
@@ -20,6 +20,17 @@ export default function Settings() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [showUserSelector, setShowUserSelector] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // Admin registration form state
+  const [showRegistrationForm, setShowRegistrationForm] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [registrationLoading, setRegistrationLoading] = useState(false);
+  
+  // Refs for form navigation
+  const emailInputRef = React.useRef<TextInput>(null);
+  const passwordInputRef = React.useRef<TextInput>(null);
 
   useEffect(() => {
     loadSettings();
@@ -110,6 +121,68 @@ export default function Settings() {
     await loadSettings();
   };
 
+  const handleAdminRegister = async () => {
+    if (!newUsername || !newEmail || !newPassword) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
+    }
+
+    // Show confirmation dialog before creating account
+    Alert.alert(
+      'Create Tasker Account',
+      `Are you sure you want to create a new tasker account for ${newUsername} (${newEmail})?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Create Account', 
+          style: 'default', 
+          onPress: async () => {
+            setRegistrationLoading(true);
+            try {
+              const token = await getToken();
+              if (!token) {
+                Alert.alert('Error', 'Authentication required');
+                return;
+              }
+
+              const response = await fetch(endpoints.register, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  username: newUsername,
+                  email: newEmail,
+                  password: newPassword,
+                }),
+              });
+
+              if (response.ok) {
+                Alert.alert('Success', 'Tasker account created successfully');
+                // Clear form
+                setNewUsername('');
+                setNewEmail('');
+                setNewPassword('');
+                setShowRegistrationForm(false);
+                // Refresh the users list
+                await checkAdminStatus();
+              } else {
+                const errorText = await response.text();
+                Alert.alert('Error', errorText || 'Failed to create account');
+              }
+            } catch (error) {
+              console.error('Error creating account:', error);
+              Alert.alert('Error', 'Failed to create account');
+            } finally {
+              setRegistrationLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -121,9 +194,19 @@ export default function Settings() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Settings</Text>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.content}>
+          <Text style={styles.title}>Settings</Text>
         
         {/* Admin User Selector */}
         {isAdmin && (
@@ -234,18 +317,148 @@ export default function Settings() {
              </View>
            </View>
          )}
-      </View>
-    </ScrollView>
-  );
-}
+
+                 {/* Admin Registration Form */}
+         {isAdmin && (
+           <View style={styles.section}>
+                           <View style={showRegistrationForm ? styles.registrationSection : styles.registrationSectionCollapsed}>
+                <View style={styles.registrationHeader}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.registrationTitleContainer,
+                      pressed && styles.buttonPressed
+                    ]}
+                    onPress={() => setShowRegistrationForm(!showRegistrationForm)}
+                  >
+                    <Text style={styles.registrationTitle}>Add New Tasker</Text>
+                  </Pressable>
+                 <Pressable
+                   style={({ pressed }) => [
+                     styles.toggleRegistrationButton,
+                     pressed && styles.buttonPressed
+                   ]}
+                   onPress={() => setShowRegistrationForm(!showRegistrationForm)}
+                 >
+                   <Text style={styles.toggleRegistrationText}>
+                     {showRegistrationForm ? '−' : '+'}
+                   </Text>
+                 </Pressable>
+               </View>
+
+              {showRegistrationForm && (
+                <View style={styles.registrationForm}>
+                  {/* Username Input */}
+                  <View style={styles.formField}>
+                    <Text style={styles.formLabel}>Username</Text>
+                    <View style={styles.inputContainer}>
+                      <Ionicons name="person-outline" size={20} color="#6c757d" style={styles.inputIcon} />
+                                             <TextInput
+                         style={styles.textInput}
+                         placeholder="Choose a username"
+                         placeholderTextColor="#adb5bd"
+                         autoCapitalize="none"
+                         autoCorrect={false}
+                         returnKeyType="next"
+                         value={newUsername}
+                         onChangeText={setNewUsername}
+                         onSubmitEditing={() => {
+                           // Focus the email input
+                           if (emailInputRef.current) {
+                             emailInputRef.current.focus();
+                           }
+                         }}
+                       />
+                    </View>
+                  </View>
+
+                  {/* Email Input */}
+                  <View style={styles.formField}>
+                    <Text style={styles.formLabel}>Email Address</Text>
+                    <View style={styles.inputContainer}>
+                      <Ionicons name="mail-outline" size={20} color="#6c757d" style={styles.inputIcon} />
+                                             <TextInput
+                         ref={emailInputRef}
+                         style={styles.textInput}
+                         placeholder="Enter email address"
+                         placeholderTextColor="#adb5bd"
+                         autoCapitalize="none"
+                         keyboardType="email-address"
+                         returnKeyType="next"
+                         value={newEmail}
+                         onChangeText={setNewEmail}
+                         onSubmitEditing={() => {
+                           // Focus the password input
+                           if (passwordInputRef.current) {
+                             passwordInputRef.current.focus();
+                           }
+                         }}
+                       />
+                    </View>
+                  </View>
+
+                  {/* Password Input */}
+                  <View style={styles.formField}>
+                    <Text style={styles.formLabel}>Password</Text>
+                    <View style={styles.inputContainer}>
+                      <Ionicons name="lock-closed-outline" size={20} color="#6c757d" style={styles.inputIcon} />
+                                             <TextInput
+                         ref={passwordInputRef}
+                         style={styles.textInput}
+                         placeholder="Create a password"
+                         placeholderTextColor="#adb5bd"
+                         secureTextEntry
+                         returnKeyType="done"
+                         value={newPassword}
+                         onChangeText={setNewPassword}
+                         onSubmitEditing={handleAdminRegister}
+                       />
+                    </View>
+                  </View>
+
+                  {/* Register Button */}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.registerButton,
+                      pressed && styles.buttonPressed
+                    ]}
+                    onPress={handleAdminRegister}
+                    disabled={registrationLoading}
+                  >
+                    {registrationLoading ? (
+                      <ActivityIndicator color="white" size="small" />
+                    ) : (
+                      <>
+                        <Ionicons name="person-add" size={18} color="white" />
+                        <Text style={styles.registerButtonText}>Create Tasker Account</Text>
+                      </>
+                    )}
+                  </Pressable>
+                                 </View>
+               )}
+             </View>
+           </View>
+                 )}
+       </View>
+       </ScrollView>
+     </KeyboardAvoidingView>
+   );
+ }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: Platform.OS === 'android' ? 100 : 20, // Extra padding for Android navigation buttons
+  },
   content: {
     padding: 20,
+    paddingBottom: Platform.OS === 'android' ? 40 : 20, // Extra bottom padding for Android
   },
   loadingContainer: {
     flex: 1,
@@ -370,5 +583,112 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Registration form styles
+  registrationSection: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  registrationSectionCollapsed: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  registrationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+    minHeight: 48,
+  },
+     registrationTitleContainer: {
+     flex: 1,
+     justifyContent: 'center',
+   },
+   registrationTitle: {
+     fontSize: 18,
+     fontWeight: '700',
+     color: '#1a1a1a',
+     lineHeight: 24,
+   },
+  toggleRegistrationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 48,
+    height: 48,
+  },
+  toggleRegistrationText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#0A84FF',
+    textAlignVertical: 'center',
+    lineHeight: 24,
+    includeFontPadding: false,
+    textAlign: 'center',
+  },
+  registrationForm: {
+    width: '100%',
+  },
+  formField: {
+    marginBottom: 16,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6c757d',
+    marginBottom: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1a1a1a',
+    paddingVertical: 0,
+  },
+  registerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0A84FF',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    minHeight: 56,
+    gap: 8,
+  },
+  registerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  buttonPressed: {
+    opacity: 0.7,
   },
 });

@@ -17,7 +17,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 //helpers for sorting
-import { SORT_PRESETS, sortBySize } from './lib/helpers';
+import { SORT_PRESETS, customSortTasks } from './lib/helpers';
 import { nextDate } from "./lib/recur";
 import { startRecurrenceRoller } from "./lib/roll-recurrence"
 
@@ -270,11 +270,8 @@ f.get('/', async (req: any, rep) => {
     include: { images: true, documents: true },
   });
 
-  // Apply custom size sorting if size is part of the sort criteria
-  let sortedTasks = tasks;
-  if (orderBy.some(item => 'size' in item)) {
-    sortedTasks = tasks.sort(sortBySize);
-  }
+  // Apply comprehensive custom sorting
+  const sortedTasks = tasks.sort(customSortTasks(orderBy));
 
   const nextCursor =
     sortedTasks.length === take ? sortedTasks[sortedTasks.length - 1].id : null;
@@ -811,11 +808,8 @@ app.register(async (f) => {
       },
     });
 
-    // Apply custom size sorting if size is part of the sort criteria
-    let sortedTasks = tasks;
-    if (orderBy.some(item => 'size' in item)) {
-      sortedTasks = tasks.sort(sortBySize);
-    }
+    // Apply comprehensive custom sorting
+    const sortedTasks = tasks.sort(customSortTasks(orderBy));
 
     const nextCursor =
       sortedTasks.length === take ? sortedTasks[sortedTasks.length - 1].id : null;
