@@ -829,7 +829,7 @@ const handleBack = useCallback(() => {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
             <ScrollView
-                contentContainerStyle={{ padding: 24, gap: 12 }}
+                contentContainerStyle={{ padding: 24, gap: 12, paddingBottom: Platform.OS === 'android' ? 120 : 100 }}
                 keyboardShouldPersistTaps="handled"
             >
                 <View style={{ padding: 24, gap: 12 }}>

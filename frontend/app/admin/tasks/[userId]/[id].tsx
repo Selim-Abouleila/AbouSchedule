@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -379,7 +380,7 @@ export default function AdminTaskDetail() {
       </View>
 
       {/* Main scrollable content */}
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: Platform.OS === 'android' ? 120 : 100 }}>
         {/* Header */}
         <View style={{ 
           flexDirection: 'row', 

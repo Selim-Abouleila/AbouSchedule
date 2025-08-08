@@ -11,21 +11,29 @@ export const requestNotificationPermissions = async (): Promise<string | null> =
   }
 
   try {
+    console.log('🔔 Starting notification permission request...');
+    
     // Request permission using expo-notifications
     const { getPermissionsAsync, requestPermissionsAsync } = await import('expo-notifications');
     
     const { status: existingStatus } = await getPermissionsAsync();
+    console.log('📱 Current notification status:', existingStatus);
+    
     let finalStatus = existingStatus;
     
     if (existingStatus !== 'granted') {
+      console.log('🔔 Requesting notification permissions...');
       const { status } = await requestPermissionsAsync();
       finalStatus = status;
+      console.log('📱 New notification status:', finalStatus);
     }
 
     if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
+      console.log('❌ Failed to get push token for push notification!');
       return null;
     }
+
+    console.log('✅ Notification permissions granted, getting push token...');
 
     // For Expo, we need to use expo-notifications to get the token
     const { getExpoPushTokenAsync } = await import('expo-notifications');
@@ -35,18 +43,18 @@ export const requestNotificationPermissions = async (): Promise<string | null> =
     });
 
     if (token) {
-      console.log('Push token:', token.data);
+      console.log('✅ Push token received:', token.data);
       
       // Register token with backend
       await registerPushToken(token.data);
       
       return token.data;
     } else {
-      console.log('No registration token available');
+      console.log('❌ No registration token available');
       return null;
     }
   } catch (error) {
-    console.error('Error getting push token:', error);
+    console.error('❌ Error getting push token:', error);
     return null;
   }
 };

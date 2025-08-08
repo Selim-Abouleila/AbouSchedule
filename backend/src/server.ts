@@ -920,10 +920,16 @@ app.register(async (f) => {
     // Send notification for immediate tasks
     if (full && full.status === 'ACTIVE' && !full.dueAt) {
       try {
+        console.log('🔔 Checking for immediate task notification...');
+        console.log('📋 Task details:', { id: full.id, title: full.title, userId: full.userId, status: full.status, dueAt: full.dueAt });
+        
         // Get all push tokens for the target user
         const pushTokens = await prisma.pushToken.findMany({
           where: { userId: userId }
         });
+
+        console.log('📱 Found push tokens for user:', pushTokens.length);
+        console.log('🔑 Push tokens:', pushTokens.map(pt => pt.token));
 
         if (pushTokens.length > 0) {
           // Send notification using Expo's push service
@@ -938,6 +944,9 @@ app.register(async (f) => {
             }
           }));
 
+          console.log('📤 Sending notification to Expo...');
+          console.log('📨 Message payload:', JSON.stringify(expoMessages, null, 2));
+
           const response = await fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
             headers: {
@@ -949,14 +958,25 @@ app.register(async (f) => {
           });
 
           const result = await response.json();
-          console.log('Expo notification sent:', result);
-          console.log('Push tokens used:', pushTokens.map(pt => pt.token));
-          console.log('Task details:', { id: full.id, title: full.title, userId: full.userId });
+          console.log('✅ Expo notification response:', result);
+          console.log('📱 Push tokens used:', pushTokens.map(pt => pt.token));
+          console.log('📋 Task details:', { id: full.id, title: full.title, userId: full.userId });
+        } else {
+          console.log('❌ No push tokens found for user:', userId);
         }
       } catch (error) {
-        console.error('Failed to send notification:', error);
+        console.error('❌ Failed to send notification:', error);
         // Don't fail the task creation if notification fails
       }
+    } else {
+      console.log('⏭️ Skipping notification - not an immediate task');
+      console.log('📋 Task details:', { 
+        id: full?.id, 
+        title: full?.title, 
+        userId: full?.userId, 
+        status: full?.status, 
+        dueAt: full?.dueAt 
+      });
     }
 
     return rep.code(201).send(full);

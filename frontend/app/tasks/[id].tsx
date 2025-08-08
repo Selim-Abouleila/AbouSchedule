@@ -410,7 +410,7 @@ export default function TaskDetail() {
   return (
     <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
       {/* ── main scrollable content ───────────────────────────── */}
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: Platform.OS === 'android' ? 120 : 100 }}>
         {/* Header */}
         <View style={{ 
           flexDirection: 'row', 

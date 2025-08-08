@@ -1,5 +1,5 @@
 import { endpoints } from './api';
-import { getToken } from './auth';
+import { getToken, getCurrentUserId } from './auth';
 
 interface AppSettings {
   defaultLabelDone: boolean;
@@ -90,8 +90,11 @@ export const getSettingsForUser = async (userId?: number): Promise<AppSettings> 
       throw new Error('No authentication token');
     }
 
-    if (userId) {
-      // Get per-user settings (admin only)
+    // Get current user's ID to check if this is an admin request
+    const currentUserId = await getCurrentUserId();
+    
+    if (userId && userId !== currentUserId) {
+      // Admin requesting another user's settings
       const response = await fetch(`${endpoints.admin.settings(userId)}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -105,7 +108,7 @@ export const getSettingsForUser = async (userId?: number): Promise<AppSettings> 
       const settings = await response.json();
       return { ...defaultSettings, ...settings };
     } else {
-      // Get current user's settings
+      // Regular user getting their own settings or admin getting their own settings
       return await getSettings();
     }
   } catch (error) {

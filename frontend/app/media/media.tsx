@@ -295,10 +295,20 @@ export default function MediaScreen() {
     const switchMode = async () => {
       setSwitchingMode(true);
       try {
+        // Clear current data and cache
+        setUris([]);
+        setPage(1);
+        setHasMore(true);
+        allDataRef.current = []; // Clear the cache
+        
         const data = mode === 'images'
           ? await getLocalMediaUris(selectedUserId || undefined)
           : await getLocalDocumentUris(selectedUserId || undefined);
-        setUris(data);
+        
+        // Apply pagination
+        const paginatedData = data.slice(0, PAGE_SIZE);
+        setHasMore(data.length > PAGE_SIZE);
+        setUris(paginatedData);
       } catch (err) {
         console.error('Failed to switch mode:', err);
       } finally {
@@ -310,28 +320,7 @@ export default function MediaScreen() {
   }, [mode, selectedUserId]);
 
   /* TO be able to share*/
-  const [selected, setSelected] = useState<Set<number>>(new Set());
 
-  // NEW: share all selected URIs (just as newline‑separated text)
-  /* …inside the component… */
-  const shareSelected = async () => {
-    const files = Array.from(selected).map(i => uris[i]);   // absolute file‑URIs
-    if (files.length === 0) return;
-
-    try {
-      if (Platform.OS === 'android') {
-        // Android can handle many files at once
-        await Share.share({ urls: files } as any);
-      } else {
-        // iOS: one file per call
-        for (const uri of files) {
-          await Share.share({ url: uri });
-        }
-      }
-    } catch (e) {
-      console.warn('share failed', e);
-    }
-  };
 
   if (loading && !refreshing && !switchingMode) {
     return (
@@ -391,15 +380,30 @@ export default function MediaScreen() {
         // Clean up temp file
         await FileSystem.deleteAsync(tempFileUri, { idempotent: true });
       } else {
-        // Android: Use intent launcher
-        const result = await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-          data: fileUri,
-          flags: 1,
-        });
+        // Android: Use sharing instead of direct intent to avoid FileUriExposedException
+        const tempDir = FileSystem.cacheDirectory!;
+        const tempFileUri = `${tempDir}${cleanFileName}`;
         
-        if (result.resultCode !== 0) {
-          Alert.alert('Error', 'No app found to open this file');
-        }
+        // Copy file to temp location with clean name
+        await FileSystem.copyAsync({
+          from: fileUri,
+          to: tempFileUri,
+        });
+
+        // Share the temp file
+        await Sharing.shareAsync(tempFileUri, {
+          mimeType: getUTIForExtension(cleanFileName.split('.').pop() || ''),
+          dialogTitle: `Open ${cleanFileName}`,
+        });
+
+        // Clean up temp file after a delay
+        setTimeout(async () => {
+          try {
+            await FileSystem.deleteAsync(tempFileUri, { idempotent: true });
+          } catch (cleanupError) {
+            console.log('Cleanup error (expected):', cleanupError);
+          }
+        }, 5000);
       }
     } catch (error) {
       console.error('Error opening document:', error);
@@ -424,42 +428,15 @@ export default function MediaScreen() {
 
   const renderItem = ({ item, index }: { item: string; index: number }) => {
     if (mode === 'images') {
-      const inSelection = selected.size > 0;
-
       return (
         <Pressable
           style={styles.imageWrapper}
           onPress={() => {
-            if (inSelection) {
-              // toggle selection on tap
-              setSelected(s => {
-                const next = new Set(s);
-                next.has(index) ? next.delete(index) : next.add(index);
-                return next;
-              });
-            } else {
-              // open fullscreen when not selecting
-              setViewerIndex(index);
-              setViewerVisible(true);
-            }
-          }}
-          onLongPress={() => {
-            if (!inSelection) {
-              // start selection‑mode on first long press
-              setSelected(s => {
-                const next = new Set(s);
-                next.add(index);
-                return next;
-              });
-            }
+            setViewerIndex(index);
+            setViewerVisible(true);
           }}
         >
           <ProgressiveImage uri={item} style={styles.image} />
-          {selected.has(index) && (
-            <View style={styles.checkOverlay}>
-              <Ionicons name="checkmark-circle" size={24} color="#0A84FF" />
-            </View>
-          )}
 
           {/* share button overlay */}
           <Pressable
@@ -477,34 +454,10 @@ export default function MediaScreen() {
       const decodedName = decodeURIComponent(filename);
       const title = decodedName.includes('_') ? decodedName.split('_').slice(1).join('_') : decodedName;
 
-      const inSelection = selected.size > 0;
-
       return (
         <Pressable
           style={styles.docWrapper}
-          onPress={() => {
-            if (inSelection) {
-              // toggle selection on tap
-              setSelected(s => {
-                const next = new Set(s);
-                next.has(index) ? next.delete(index) : next.add(index);
-                return next;
-              });
-            } else {
-              // open document when not selecting
-              openDocument(item);
-            }
-          }}
-          onLongPress={() => {
-            if (!inSelection) {
-              // start selection‑mode on first long press
-              setSelected(s => {
-                const next = new Set(s);
-                next.add(index);
-                return next;
-              });
-            }
-          }}
+          onPress={() => openDocument(item)}
         >
           <View style={styles.docIconContainer}>
             <Ionicons name="document-outline" size={24} color="#6c757d" />
@@ -512,14 +465,7 @@ export default function MediaScreen() {
           <View style={styles.docContent}>
             <Text style={styles.docTitle}>{title}</Text>
           </View>
-          {selected.has(index) && (
-            <View style={styles.checkOverlay}>
-              <Ionicons name="checkmark-circle" size={24} color="#0A84FF" />
-            </View>
-          )}
-          {!inSelection && (
-            <Ionicons name="open-outline" size={20} color="#6c757d" style={styles.openIcon} />
-          )}
+          <Ionicons name="open-outline" size={20} color="#6c757d" style={styles.openIcon} />
         </Pressable>
       );
     }
@@ -659,7 +605,7 @@ export default function MediaScreen() {
           ) : null
         )}
         data={uris}
-        keyExtractor={(uri) => uri}
+        keyExtractor={(uri, index) => `${uri}-${index}`}
         numColumns={mode === 'images' ? 3 : 1}
         contentContainerStyle={[
           styles.list,
@@ -697,29 +643,7 @@ export default function MediaScreen() {
       />
 
       {/* Bulk Actions Toolbar */}
-      {selected.size > 0 && (
-        <View style={styles.bulkToolbar}>
-          <View style={styles.bulkInfo}>
-            <Text style={styles.bulkCount}>{selected.size} selected</Text>
-          </View>
-          <View style={styles.bulkActions}>
-            <Pressable
-              style={styles.bulkButton}
-              onPress={shareSelected}
-            >
-              <Ionicons name="share-outline" size={18} color="white" style={{ marginRight: 6 }} />
-              <Text style={styles.bulkButtonText}>Share</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.bulkButton, styles.cancelButton]}
-              onPress={() => setSelected(new Set())}
-            >
-              <Ionicons name="close" size={18} color="white" style={{ marginRight: 6 }} />
-              <Text style={styles.bulkButtonText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
+
     </View>
   );
 }
@@ -899,54 +823,7 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 12,
   },
-  checkOverlay: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: 'white',
-    borderRadius: 12,
-  },
-  bulkToolbar: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  bulkInfo: {
-    flex: 1,
-  },
-  bulkCount: { 
-    color: '#1a1a1a', 
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  bulkActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  bulkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginLeft: 8,
-    backgroundColor: '#0A84FF',
-  },
-  cancelButton: {
-    backgroundColor: '#FF3B30',
-  },
-  bulkButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+
   // Admin styles
   adminSection: {
     backgroundColor: 'white',

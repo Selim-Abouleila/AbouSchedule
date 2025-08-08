@@ -605,7 +605,7 @@ const scrollRef = useRef<ScrollView>(null);
       
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={{ padding: 24, gap: 12 }}
+        contentContainerStyle={{ padding: 24, gap: 12, paddingBottom: Platform.OS === 'android' ? 120 : 100 }}
         keyboardShouldPersistTaps="handled"
       >
         <View style={{ padding: 24, gap: 12 }}>
