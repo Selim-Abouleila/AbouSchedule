@@ -1389,40 +1389,48 @@ app.register(async (f) => {
 
 }, { prefix: '/admin' });
 
-/* ───── Firebase Test Endpoint ───── */
-app.get('/test-firebase', async (req, rep) => {
+/* ───── Push Token Management ───── */
+app.post('/push-tokens/register', { preHandler: app.auth }, async (req, rep) => {
   try {
-    // Import Firebase admin
-    const admin = (await import('./firebase-admin.js')).default;
-    
-    // Test Firebase connection by trying to send a test message
-    const message = {
-      notification: {
-        title: 'Firebase Test',
-        body: 'This is a test notification from your backend!'
-      },
-      token: 'test-token', // This will fail, but we just want to test the connection
-    };
+    const { token } = req.body as { token: string };
+    const userId = (req.user as any).sub as number;
 
-    // Try to validate the message (this will fail with invalid token, but proves Firebase is working)
-    await admin.messaging().send(message);
-    
-    return { success: true, message: 'Firebase is properly configured!' };
-  } catch (error: any) {
-    // We expect this to fail due to invalid token, but it proves Firebase is initialized
-    if (error.code === 'messaging/invalid-registration-token') {
-      return { 
-        success: true, 
-        message: '🎉 Firebase is working perfectly! The error is expected because we used a fake token.',
-        error: error.message 
-      };
+    if (!token) {
+      return rep.code(400).send({ error: 'Push token is required' });
     }
-    
-    return { 
-      success: false, 
-      message: 'Firebase configuration error',
-      error: error.message 
-    };
+
+    // Upsert the token (create or update)
+    await prisma.pushToken.upsert({
+      where: { token },
+      update: { userId },
+      create: { token, userId }
+    });
+
+    return { success: true, message: 'Push token registered successfully' };
+  } catch (error) {
+    console.error('Error registering push token:', error);
+    return rep.code(500).send({ error: 'Failed to register push token' });
+  }
+});
+
+app.delete('/push-tokens/unregister', { preHandler: app.auth }, async (req, rep) => {
+  try {
+    const { token } = req.body as { token: string };
+    const userId = (req.user as any).sub as number;
+
+    if (!token) {
+      return rep.code(400).send({ error: 'Push token is required' });
+    }
+
+    // Delete the token
+    await prisma.pushToken.deleteMany({
+      where: { token, userId }
+    });
+
+    return { success: true, message: 'Push token unregistered successfully' };
+  } catch (error) {
+    console.error('Error unregistering push token:', error);
+    return rep.code(500).send({ error: 'Failed to unregister push token' });
   }
 });
 
