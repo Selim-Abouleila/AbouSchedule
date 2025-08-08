@@ -1,5 +1,5 @@
 export const unstable_settings = {
-  initialRouteName: 'tasks/index',   // or 'index' / '(tabs)' / any drawer screen
+  initialRouteName: 'index',   // Start with index which handles auth
   statePersistence: false,
 };
 

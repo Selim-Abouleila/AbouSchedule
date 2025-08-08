@@ -54,7 +54,7 @@ app.decorate('auth', async (req: any, rep: any) => {
 
 /* ───── Multipart support ───── */
 app.register(multipart, {
-  limits: { fileSize: 5 * 1024 * 1024 },  // 5 MB per file
+  limits: { fileSize: 50 * 1024 * 1024 },  // 50 MB per file
 });
 
 /* ───── Auth routes ───── */
@@ -926,21 +926,30 @@ app.register(async (f) => {
         });
 
         if (pushTokens.length > 0) {
-          // Send notification to all user's devices
-          const message = {
-            notification: {
-              title: 'New Task Assigned',
-              body: `You have a new immediate task: ${full.title}`
-            },
+          // Send notification using Expo's push service
+          const expoMessages = pushTokens.map(pt => ({
+            to: pt.token,
+            sound: 'default',
+            title: 'New Task Assigned',
+            body: `You have a new immediate task: ${full.title}`,
             data: {
               taskId: full.id.toString(),
               type: 'immediate_task'
-            },
-            tokens: pushTokens.map(pt => pt.token)
-          };
+            }
+          }));
 
-          const response = await admin.messaging().sendEachForMulticast(message);
-          console.log('Notification sent:', response);
+          const response = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Accept-encoding': 'gzip, deflate',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(expoMessages)
+          });
+
+          const result = await response.json();
+          console.log('Expo notification sent:', result);
         }
       } catch (error) {
         console.error('Failed to send notification:', error);

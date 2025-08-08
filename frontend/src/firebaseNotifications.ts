@@ -1,4 +1,3 @@
-import { messaging, getToken, onMessage } from './firebase';
 import { getToken as getAuthToken } from './auth';
 import { API_BASE } from './api';
 import * as Device from 'expo-device';
@@ -32,7 +31,7 @@ export const requestNotificationPermissions = async (): Promise<string | null> =
     const { getExpoPushTokenAsync } = await import('expo-notifications');
     
     const token = await getExpoPushTokenAsync({
-      projectId: 'abouschedule' // Your Expo project ID
+      projectId: '8cffe111-34b6-49d5-8fff-60395880677b' // Your actual Expo project ID
     });
 
     if (token) {
@@ -110,12 +109,9 @@ export const unregisterPushToken = async (token: string): Promise<void> => {
 
 // Handle foreground messages
 export const setupForegroundHandler = (): void => {
-  onMessage(messaging, (payload) => {
-    console.log('Message received in foreground:', payload);
-    
-    // You can show a local notification here if needed
-    // For now, we'll just log it
-  });
+  // For Expo, we handle notifications through expo-notifications
+  // Background notifications are handled automatically by Expo
+  console.log('Foreground handler setup - notifications will be handled by Expo');
 };
 
 // Initialize notifications
@@ -127,9 +123,9 @@ export const initializeNotifications = async (): Promise<void> => {
     if (token) {
       // Setup foreground message handler
       setupForegroundHandler();
-      console.log('Firebase notifications initialized successfully');
+      console.log('Expo notifications initialized successfully');
     } else {
-      console.log('Failed to initialize Firebase notifications');
+      console.log('Failed to initialize Expo notifications');
     }
   } catch (error) {
     console.error('Error initializing notifications:', error);
@@ -141,7 +137,7 @@ export const cleanupNotifications = async (): Promise<void> => {
   try {
     const { getExpoPushTokenAsync } = await import('expo-notifications');
     const token = await getExpoPushTokenAsync({
-      projectId: 'abouschedule'
+      projectId: '8cffe111-34b6-49d5-8fff-60395880677b'
     });
     
     if (token && token.data) {
