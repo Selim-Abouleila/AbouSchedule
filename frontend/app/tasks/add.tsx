@@ -15,8 +15,10 @@ import {
   BackHandler,
 } from "react-native";
 
+
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import { Video, ResizeMode } from 'expo-av';
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker, {
   DateTimePickerAndroid,
@@ -145,6 +147,7 @@ export default function AddTask() {
 
   const [photos, setPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [docs, setDocs] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
+  const [videos, setVideos] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [loading, setLoad] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
       const [pickingPhotos, setPickingPhotos] = useState(false);
@@ -154,8 +157,10 @@ export default function AddTask() {
 
 
 
-const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
-const [selectedDocs,   setSelectedDocs]   = useState<Set<number>>(new Set());
+  const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
+  const [selectedDocs,   setSelectedDocs]   = useState<Set<number>>(new Set());
+  const [selectedVideos, setSelectedVideos] = useState<Set<number>>(new Set());
+  const [playingVideo, setPlayingVideo] = useState<{ uri: string; index: number } | null>(null);
 
 /* For reccurance */
 const [recurrenceDow, setRecurrenceDow] = useState("1");  // 0 = Sun … 6 = Sat; default Monday
@@ -207,6 +212,7 @@ const hasUnsavedChanges = useMemo(
     description.trim() !== "" ||
     photos.length > 0 ||
     docs.length > 0 ||
+    videos.length > 0 ||
     dueAt !== null ||
     recurring ||                       // anything else you care about
     timeCapH !== 0 || timeCapM !== 0,
@@ -215,6 +221,7 @@ const hasUnsavedChanges = useMemo(
     description,
     photos,
     docs,
+    videos,
     dueAt,
     recurring,
     timeCapH,
@@ -250,21 +257,32 @@ const toggleDoc = (idx: number) =>
     return next;
   });
 
+const toggleVideo = (idx: number) =>
+  setSelectedVideos(prev => {
+    const next = new Set(prev);
+    next.has(idx) ? next.delete(idx) : next.add(idx);
+    return next;
+  });
+
 const deleteChecked = () => {
   if (selectedPhotos.size)
     setPhotos(p => p.filter((_, i) => !selectedPhotos.has(i)));
   if (selectedDocs.size)
     setDocs(d => d.filter((_, i) => !selectedDocs.has(i)));
+  if (selectedVideos.size)
+    setVideos(v => v.filter((_, i) => !selectedVideos.has(i)));
   setSelectedPhotos(new Set());
   setSelectedDocs(new Set());
+  setSelectedVideos(new Set());
 };
 
 const abortDelete = () => {
   setSelectedPhotos(new Set());
   setSelectedDocs(new Set());
+  setSelectedVideos(new Set());
 };
 
-const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0;
+const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0 || selectedVideos.size > 0;
 const scrollRef = useRef<ScrollView>(null);
 
   
@@ -294,7 +312,7 @@ const scrollRef = useRef<ScrollView>(null);
     }
   };
 
-  /** open device camera, then push the result into `photos` */
+  /** open device camera, then push the result into `photos` or `videos` */
   const takePhoto = async () => {
     
     const { granted } = await ImagePicker.requestCameraPermissionsAsync();
@@ -302,34 +320,114 @@ const scrollRef = useRef<ScrollView>(null);
       Alert.alert('Camera access was denied');
       return;
     }
-    if (photos.length >= 6) { Alert.alert('Maximum 6 pictures'); return; }
 
-    setPickingCamera(true);
-    try {
-      const res = await ImagePicker.launchCameraAsync({
-        quality: 0.9,        
-        allowsEditing: false, 
-        exif: false,               
-      });
-
-      if (!res.canceled && res.assets?.length) {
-        setPhotos(prev => [...prev, ...res.assets]);
+    // Also check photo library permissions for iOS
+    if (Platform.OS === 'ios') {
+      const { granted: libraryGranted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!libraryGranted) {
+        Alert.alert('Photo library access was denied');
+        return;
       }
-    } finally {
-      setPickingCamera(false);
     }
+
+    // Show option to choose between photo and video for camera
+    Alert.alert(
+      'Camera Mode',
+      'Choose what you want to capture:',
+      [
+        {
+          text: 'Photo',
+          onPress: async () => {
+            if (photos.length >= 6) { Alert.alert('Maximum 6 pictures'); return; }
+            setPickingCamera(true);
+            try {
+              const res = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.9,        
+                allowsEditing: false, 
+                exif: false,               
+              });
+
+              if (!res.canceled && res.assets?.length) {
+                setPhotos(prev => [...prev, ...res.assets]);
+              }
+            } finally {
+              setPickingCamera(false);
+            }
+          }
+        },
+        {
+          text: 'Video',
+          onPress: async () => {
+            if (videos.length >= 3) { Alert.alert('Maximum 3 videos'); return; }
+            setPickingCamera(true);
+            try {
+              const res = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+                quality: 0.9,
+                allowsEditing: false,
+                videoMaxDuration: 60, // 60 seconds max
+              });
+
+              if (!res.canceled && res.assets?.length) {
+                console.log('📹 Video captured:', res.assets);
+                setVideos(prev => [...prev, ...res.assets]);
+              }
+            } finally {
+              setPickingCamera(false);
+            }
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
   };
 
-  /* pick image(s) */
+  /* pick image(s) and video(s) */
   const pickImages = async () => {
+    // Check photo library permissions
+    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!granted) {
+      Alert.alert('Photo library access was denied');
+      return;
+    }
+
     setPickingGallery(true);
     try {
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsMultipleSelection: true,
         selectionLimit: 6,
+        videoMaxDuration: 60, // 60 seconds max
+        // iOS-specific options
+        ...(Platform.OS === 'ios' && {
+          allowsEditing: false,
+          aspect: [1, 1], // Square aspect ratio for consistency
+        }),
       });
-      if (!res.canceled) setPhotos((prev) => [...prev, ...res.assets]);
+      
+      if (!res.canceled && res.assets?.length) {
+        console.log('📹 Media selected from gallery:', res.assets);
+        
+        // Separate images and videos based on MIME type
+        const images = res.assets.filter(asset => 
+          asset.mimeType?.startsWith('image/')
+        );
+        const videos = res.assets.filter(asset => 
+          asset.mimeType?.startsWith('video/')
+        );
+        
+        // Add to respective state arrays
+        if (images.length > 0) {
+          setPhotos((prev) => [...prev, ...images]);
+        }
+        if (videos.length > 0) {
+          setVideos((prev) => [...prev, ...videos]);
+        }
+      }
     } finally {
       setPickingGallery(false);
     }
@@ -369,6 +467,7 @@ const scrollRef = useRef<ScrollView>(null);
     const resetForm = async () => {
       setPhotos([]);
       setDocs([]);
+      setVideos([]);
       setTitle('');
       setDescription('');
       setPrio('NONE');
@@ -395,6 +494,7 @@ const scrollRef = useRef<ScrollView>(null);
       
       setSelectedPhotos(new Set());
       setSelectedDocs(new Set());
+      setSelectedVideos(new Set());
       setShowIOS(false);
       setShowIOSRecEnd(false); 
       scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -512,6 +612,15 @@ const scrollRef = useRef<ScrollView>(null);
         uri: d.uri,
         name: d.name ?? `doc${idx}`,
         type: (d as any).mimeType ?? 'application/octet-stream',
+      } as any)
+    );
+
+    // Add videos to form
+    videos.forEach((v, idx) =>
+      form.append(`video${idx}`, {
+        uri: v.uri,
+        name: v.fileName ?? `video${idx}.mp4`,
+        type: v.mimeType ?? 'video/mp4',
       } as any)
     );
 
@@ -1040,8 +1149,71 @@ const scrollRef = useRef<ScrollView>(null);
               </Pressable>
             ))}
 
+            {videos.map((v, i) => (
+              <Pressable
+                key={`video-${i}`}
+                onPress={() => setPlayingVideo({ uri: v.uri, index: i })}
+                onLongPress={() =>
+                  Alert.alert('Remove video', 'Delete this video?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: () => setVideos(prev => prev.filter((_, j) => j !== i)),
+                    },
+                  ])
+                }>
+                <View style={{ position: 'relative' }}>
+                  <Image
+                    source={{ uri: v.uri }}
+                    style={[
+                      styles.thumb,
+                      selectedVideos.has(i) && {
+                        opacity: 0.4,
+                        borderWidth: 2,
+                        borderColor: '#0A84FF',
+                      },
+                    ]}
+                  />
+                  {/* Play button overlay */}
+                  <View style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: [{ translateX: -15 }, { translateY: -15 }],
+                    width: 30,
+                    height: 30,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    borderRadius: 15,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 16 }}>▶️</Text>
+                  </View>
+                  {/* Duration overlay */}
+                  {v.duration && (
+                    <View style={{
+                      position: 'absolute',
+                      bottom: 4,
+                      right: 4,
+                      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                      paddingHorizontal: 4,
+                      paddingVertical: 2,
+                      borderRadius: 4,
+                    }}>
+                      <Text style={{ color: '#fff', fontSize: 10 }}>
+                        {Math.round(v.duration / 1000)}s
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+            ))}
+
             {/* ✂️ REMOVED docs.map() here — docs now show only in the bottom grid */}
           </View>
+
+
 
           {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
                                           <View style={styles.pickerRow}>
@@ -1152,7 +1324,7 @@ const scrollRef = useRef<ScrollView>(null);
           {hasSelection && (
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <Button
-                title={`Delete ${selectedPhotos.size + selectedDocs.size} selected`}
+                title={`Delete ${selectedPhotos.size + selectedDocs.size + selectedVideos.size} selected`}
                 color="#FF3B30"
                 onPress={() =>
                   Alert.alert('Delete selected', 'Remove all chosen items?', [
@@ -1181,18 +1353,35 @@ const scrollRef = useRef<ScrollView>(null);
         paddingBottom: Platform.OS === 'android' ? 50 : 16,
       }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Button 
-            title="← Back" 
+          <Pressable 
             onPress={() => router.push('/tasks')}
-            style={{ flex: 1 }}
-          />
-          <Button 
-            title={loading ? "Saving…" : "Save"} 
-            onPress={save} 
+            style={{ 
+              flex: 1, 
+              backgroundColor: '#f8f9fa', 
+              padding: 12, 
+              borderRadius: 8, 
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: '#dee2e6'
+            }}
+          >
+            <Text style={{ color: '#6c757d', fontWeight: '600' }}>← Back</Text>
+          </Pressable>
+          <Pressable 
+            onPress={save}
             disabled={loading}
-            color="#0A84FF"
-            style={{ flex: 1 }}
-          />
+            style={{ 
+              flex: 1, 
+              backgroundColor: loading ? '#6c757d' : '#0A84FF', 
+              padding: 12, 
+              borderRadius: 8, 
+              alignItems: 'center'
+            }}
+          >
+            <Text style={{ color: 'white', fontWeight: '600' }}>
+              {loading ? "Saving…" : "Save"}
+            </Text>
+          </Pressable>
         </View>
       </View>
 
@@ -1223,6 +1412,52 @@ const scrollRef = useRef<ScrollView>(null);
               {uploadProgress}
             </Text>
           </View>
+        </View>
+      </Modal>
+
+      {/* Video Player Modal */}
+      <Modal
+        visible={playingVideo !== null}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'black',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            position: 'absolute',
+            top: 50,
+            left: 20,
+            zIndex: 10,
+          }}>
+            <Pressable
+              onPress={() => setPlayingVideo(null)}
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                borderRadius: 20,
+                padding: 10,
+              }}
+            >
+              <Text style={{ color: 'white', fontSize: 18 }}>✕</Text>
+            </Pressable>
+          </View>
+          
+          {playingVideo && (
+            <Video
+              source={{ uri: playingVideo.uri }}
+              style={{
+                width: '100%',
+                height: '100%',
+              }}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              isLooping={false}
+            />
+          )}
         </View>
       </Modal>
     </KeyboardAvoidingView>

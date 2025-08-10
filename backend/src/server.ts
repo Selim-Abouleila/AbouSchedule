@@ -876,9 +876,23 @@ app.register(async (f) => {
         if (part.type === 'file') {
           const url = await uploadToS3(part, 'tasks/tmp');
 
+          /* Debug: Log the MIME type and filename */
+          console.log('File upload:', {
+            filename: part.filename,
+            mimetype: part.mimetype,
+            fieldname: part.fieldname
+          });
+
           /* heuristics: treat PDFs, DOCX, etc. as documents, videos as videos */
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
           const isVideo = /^video\//.test(part.mimetype ?? '');
+
+          console.log('File classification:', {
+            filename: part.filename,
+            isVideo,
+            isDoc,
+            mimetype: part.mimetype
+          });
 
           if (isVideo) {
             videos.push({
@@ -909,6 +923,13 @@ app.register(async (f) => {
     } else {
       Object.assign(fields, req.body);
     }
+
+    /* Debug: Log what we collected */
+    console.log('Collected files:', {
+      images: images.length,
+      videos: videos.length,
+      documents: documents.length
+    });
 
     /* --- ❷  Create the Task -------------------------------------- */
     const {
@@ -1008,6 +1029,7 @@ app.register(async (f) => {
     if (videos.length) {
       for (const vid of videos) vid.taskId = task.id;
       await prisma.video.createMany({ data: videos });
+      console.log('✅ Stored videos in database:', videos.length);
     }
 
     const full = await prisma.task.findUnique({
