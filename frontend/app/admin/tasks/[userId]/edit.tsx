@@ -12,6 +12,7 @@ import {
     Platform,
     Image,
     Modal,
+    BackHandler,
 } from "react-native";
 
 import DateTimePicker, {
@@ -378,14 +379,19 @@ export default function EditTask() {
             return;
         }
 
-        const res = await ImagePicker.launchCameraAsync({
-            quality: 0.9,            // 90 % JPEG
-            allowsEditing: false,
-            exif: false,
-        });
+        setPickingCamera(true);
+        try {
+            const res = await ImagePicker.launchCameraAsync({
+                quality: 0.9,            // 90 % JPEG
+                allowsEditing: false,
+                exif: false,
+            });
 
-        if (!res.canceled && res.assets?.length) {
-            setPhotos(prev => [...prev, ...res.assets]);
+            if (!res.canceled && res.assets?.length) {
+                setPhotos(prev => [...prev, ...res.assets]);
+            }
+        } finally {
+            setPickingCamera(false);
         }
     };
 
@@ -395,7 +401,7 @@ export default function EditTask() {
 
     /* pick image(s) */
     const pickImages = async () => {
-        setPickingPhotos(true);
+        setPickingGallery(true);
         try {
             const res = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -410,7 +416,7 @@ export default function EditTask() {
                 ]);
             }
         } finally {
-            setPickingPhotos(false);
+            setPickingGallery(false);
         }
     };
 
@@ -451,6 +457,8 @@ export default function EditTask() {
     const [initialLoading, setInitialLoading] = useState(true);
     const [uploadProgress, setUploadProgress] = useState<string>('');
     const [pickingPhotos, setPickingPhotos] = useState(false);
+    const [pickingCamera, setPickingCamera] = useState(false);
+    const [pickingGallery, setPickingGallery] = useState(false);
     const [pickingDocs, setPickingDocs] = useState(false);
 
     /* --------- fetch current task once (runs whenever `id` changes) ----- */
@@ -539,10 +547,43 @@ export default function EditTask() {
                     (Array.isArray(t.documents) ? t.documents : []).map(
                         (d: { id: number; url: string; mime: string; name?: string }) => {
                             console.log('Admin edit: Processing document:', d);
+                            // Get the proper filename using the same logic as task detail view
+                            const getDisplayName = () => {
+                                if (d.name && d.name !== `doc-${d.id}`) {
+                                    // Use the name from database if it's not a generic doc-id
+                                    return decodeURIComponent(d.name);
+                                } else {
+                                    // Extract filename from URL
+                                    const getDocFileName = (url: string): string => {
+                                        try {
+                                            const urlObj = new URL(url);
+                                            const pathParts = urlObj.pathname.split('/');
+                                            const filename = pathParts[pathParts.length - 1];
+                                            
+                                            if (!filename || !filename.includes('.')) {
+                                                const fallback = url.split('/').pop()!.split('?')[0];
+                                                return decodeURIComponent(fallback);
+                                            }
+                                            
+                                            return decodeURIComponent(filename);
+                                        } catch (error) {
+                                            const fallback = url.split('/').pop()!.split('?')[0];
+                                            return decodeURIComponent(fallback);
+                                        }
+                                    };
+                                    
+                                    const filename = getDocFileName(d.url);
+                                    // Remove UUID prefix if present (format: uuid_filename.pdf)
+                                    const cleanName = filename.includes('_') ? filename.split('_').slice(1).join('_') : filename;
+                                    // Decode any remaining URL encoding (like %20 for spaces)
+                                    return decodeURIComponent(cleanName) || `Document ${d.id}`;
+                                }
+                            };
+                            
                             return {
                                 id: d.id,
                                 uri: d.url,  // This is fine for display purposes
-                                name: d.name ?? `doc-${d.id}`,
+                                name: getDisplayName(),
                                 mimeType: d.mime,
                             } as TaskDoc;
                         }
@@ -801,15 +842,19 @@ const handleBack = useCallback(() => {
     );
   }, [hasUnsavedChanges, save]);
 
-  // Navigation listener for back button/gesture
+  // Android back button handler
   useEffect(() => {
-    const sub = navigation.addListener("beforeRemove", (e: any) => {
-      // stop the default behaviour
-      e.preventDefault();
-      handleBack();
-    });
-    return sub;
-  }, [navigation, handleBack]);
+    const backAction = () => {
+      if (hasUnsavedChanges) {
+        handleBack();
+        return true; // Prevent default behavior
+      }
+      return false; // Allow default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [hasUnsavedChanges, handleBack]);
 
 
 
@@ -863,12 +908,18 @@ const handleBack = useCallback(() => {
                     </View>
 
                     {/* Title */}
-                    <TextInput
-                        placeholder="Task title"
-                        value={title}
-                        onChangeText={setTitle}
-                        style={{ borderWidth: 1, padding: 10, borderRadius: 6 }}
-                    />
+                    <View>
+                        <TextInput
+                            placeholder="Task title"
+                            value={title}
+                            onChangeText={setTitle}
+                            maxLength={70}
+                            style={{ borderWidth: 1, padding: 10, borderRadius: 6 }}
+                        />
+                        <Text style={{ fontSize: 12, color: '#666', textAlign: 'right', marginTop: 4 }}>
+                            {title.length}/70
+                        </Text>
+                    </View>
 
                     {/* Description */}
                     <TextInput
@@ -970,23 +1021,46 @@ const handleBack = useCallback(() => {
                         ))}
                     </View>
 
-                    {/* Size */}
-                    <Text style={{ fontWeight: "bold", marginTop: 8 }}>SIZE</Text>
-                    <Picker selectedValue={size} onValueChange={setSize}>
-                        {SIZES.map((s) => <Picker.Item key={s} label={s} value={s} />)}
-                    </Picker>
+                                         {/* Size */}
+                     <Text style={{ fontWeight: "bold", marginTop: 8 }}>SIZE</Text>
+                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                         {SIZES.map(s => (
+                             <Pressable
+                                 key={s}
+                                 onPress={() => setSize(s)}
+                                 style={{
+                                     flex: 1,
+                                     paddingHorizontal: 12,
+                                     paddingVertical: 12,
+                                     borderRadius: 8,
+                                     borderWidth: 2,
+                                     borderColor: size === s ? '#0A84FF' : '#e9ecef',
+                                     backgroundColor: size === s ? '#0A84FF' : 'white',
+                                     alignItems: 'center',
+                                     minWidth: 0,
+                                 }}
+                             >
+                                 <Text style={{
+                                     fontSize: 13,
+                                     fontWeight: '600',
+                                     color: size === s ? 'white' : '#1a1a1a',
+                                     textAlign: 'center',
+                                 }}>
+                                     {s}
+                                 </Text>
+                             </Pressable>
+                         ))}
+                     </View>
 
-                    {/* Time-cap */}
-                    <Text style={{ fontWeight: 'bold', marginTop: 8 }}>TIME CAP</Text>
-
-                    <Button
-                        title={
-                            timeCapH === 0 && timeCapM === 0
-                                ? 'Set time cap'
-                                : `${timeCapH} h ${timeCapM} min`
-                        }
-                        onPress={showTimeCapPicker}
-                    />
+                                         {/* Time-cap */}
+                     <Button
+                         title={
+                             timeCapH === 0 && timeCapM === 0
+                                 ? 'Set time cap'
+                                 : `${timeCapH} h ${timeCapM} min`
+                         }
+                         onPress={showTimeCapPicker}
+                     />
 
                     {Platform.OS === 'ios' && showCapIOS && (
                         <DateTimePicker
@@ -1003,36 +1077,24 @@ const handleBack = useCallback(() => {
                         />
                     )}
 
+                    {/* Due date */}
+                    <Button
+                        title={dueAt ? dueAt.toLocaleString() : "Due date"}
+                        onPress={showPicker}
+                    />
+                    {Platform.OS === "ios" && showIOS && (
+                        <DateTimePicker
+                            value={dueAt ?? new Date()}
+                            mode="datetime"
+                            display="inline"
+                            onChange={(_, d) => {
+                                setShowIOS(false);
+                                if (d) setDueAt(d);
+                            }}
+                        />
+                    )}
 
                     <View style={{ gap: 12 }}>
-
-                        {/* RECURRING */}
-                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                            <Text style={{ fontWeight: "bold", marginRight: 8 }}>RECURRING</Text>
-                            <Pressable
-                                onPress={() =>
-                                    !recurring ? confirmRecurring() : setRecurring(false)
-                                }
-                                style={{
-                                    width: 50,
-                                    height: 30,
-                                    borderRadius: 15,
-                                    backgroundColor: recurring ? "#0A84FF" : "#CCC",
-                                    justifyContent: "center",
-                                }}
-                            >
-                                <View
-                                    style={{
-                                        width: 24,
-                                        height: 24,
-                                        borderRadius: 12,
-                                        backgroundColor: "white",
-                                        alignSelf: recurring ? "flex-end" : "flex-start",
-                                        margin: 3,
-                                    }}
-                                />
-                            </Pressable>
-                        </View>
 
                         {/* TASK DONE */}
                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -1059,6 +1121,35 @@ const handleBack = useCallback(() => {
                                 />
                             </Pressable>
                         </View>
+
+                                                 {/* RECURRING */}
+                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                             <Text style={{ fontWeight: "bold", marginRight: 8 }}>RECURRING</Text>
+                             <Pressable
+                                 onPress={() =>
+                                     !recurring ? confirmRecurring() : setRecurring(false)
+                                 }
+                                 style={{
+                                     width: 24,
+                                     height: 24,
+                                     borderRadius: 12,
+                                     backgroundColor: recurring ? "#0A84FF" : "#CCC",
+                                     justifyContent: "center",
+                                     alignItems: "center",
+                                 }}
+                             >
+                                 {recurring && (
+                                     <View
+                                         style={{
+                                             width: 8,
+                                             height: 8,
+                                             borderRadius: 4,
+                                             backgroundColor: "white",
+                                         }}
+                                     />
+                                 )}
+                             </Pressable>
+                         </View>
 
                     </View>
 
@@ -1199,23 +1290,6 @@ const handleBack = useCallback(() => {
                         </>
                     )}
 
-                    {/* Due date */}
-                    <Button
-                        title={dueAt ? dueAt.toLocaleString() : "Due date"}
-                        onPress={showPicker}
-                    />
-                    {Platform.OS === "ios" && showIOS && (
-                        <DateTimePicker
-                            value={dueAt ?? new Date()}
-                            mode="datetime"
-                            display="inline"
-                            onChange={(_, d) => {
-                                setShowIOS(false);
-                                if (d) setDueAt(d);
-                            }}
-                        />
-                    )}
-
                     {/* Photo thumbnails + picker */}
                     
                     
@@ -1254,43 +1328,52 @@ const handleBack = useCallback(() => {
                               </View>
                     
                               {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
-                              <View style={styles.pickerRow}>
-                                <Pressable 
-                                  onPress={takePhoto} 
-                                  style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
-                                  disabled={pickingPhotos}
-                                >
-                                  {pickingPhotos ? (
-                                    <ActivityIndicator size="small" color="#555" />
-                                  ) : (
-                                    <Text style={styles.pickerIcon}>📷</Text>
-                                  )}
-                                </Pressable>
-                    
-                                <Pressable 
-                                  onPress={pickImages} 
-                                  style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
-                                  disabled={pickingPhotos}
-                                >
-                                  {pickingPhotos ? (
-                                    <ActivityIndicator size="small" color="#555" />
-                                  ) : (
-                                    <Text style={styles.pickerIcon}>🖼️</Text>
-                                  )}
-                                </Pressable>
-                    
-                                <Pressable 
-                                  onPress={pickDocs} 
-                                  style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
-                                  disabled={pickingDocs}
-                                >
-                                  {pickingDocs ? (
-                                    <ActivityIndicator size="small" color="#555" />
-                                  ) : (
-                                    <Text style={styles.pickerIcon}>📄</Text>
-                                  )}
-                                </Pressable>
-                              </View>
+                                                              <View style={styles.pickerRow}>
+                                  <View style={{ alignItems: 'center' }}>
+                                    <Pressable 
+                                      onPress={takePhoto} 
+                                      style={[styles.pickerBox, pickingCamera && { opacity: 0.5 }]}
+                                      disabled={pickingCamera}
+                                    >
+                                      {pickingCamera ? (
+                                        <ActivityIndicator size="small" color="#555" />
+                                      ) : (
+                                        <Text style={styles.pickerIcon}>📷</Text>
+                                      )}
+                                    </Pressable>
+                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Camera</Text>
+                                  </View>
+                      
+                                  <View style={{ alignItems: 'center' }}>
+                                    <Pressable 
+                                      onPress={pickImages} 
+                                      style={[styles.pickerBox, pickingGallery && { opacity: 0.5 }]}
+                                      disabled={pickingGallery}
+                                    >
+                                      {pickingGallery ? (
+                                        <ActivityIndicator size="small" color="#555" />
+                                      ) : (
+                                        <Text style={styles.pickerIcon}>🖼</Text>
+                                      )}
+                                    </Pressable>
+                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Gallery</Text>
+                                  </View>
+                      
+                                  <View style={{ alignItems: 'center' }}>
+                                    <Pressable 
+                                      onPress={pickDocs} 
+                                      style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
+                                      disabled={pickingDocs}
+                                    >
+                                      {pickingDocs ? (
+                                        <ActivityIndicator size="small" color="#555" />
+                                      ) : (
+                                        <Text style={styles.pickerIcon}>📄</Text>
+                                      )}
+                                    </Pressable>
+                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Document</Text>
+                                  </View>
+                                </View>
                     
 
                     <View style={styles.docRow}>
@@ -1331,19 +1414,32 @@ const handleBack = useCallback(() => {
                                             console.log('Loading document image:', d.name, d.uri);
                                         }}
                                     />
-                                ) : (
-                                    <View
-                                        style={[
-                                            styles.pickerBox,
-                                            selectedDocs.has(i) && {
-                                                opacity: 0.4,
-                                                borderWidth: 2,
-                                                borderColor: '#0A84FF',
-                                            },
-                                        ]}>
-                                        <Text style={styles.pickerIcon}>📄</Text>
-                                    </View>
-                                )}
+                                                                 ) : (
+                                     <View
+                                         style={[
+                                             styles.pickerBox,
+                                             selectedDocs.has(i) && {
+                                                 opacity: 0.4,
+                                                 borderWidth: 2,
+                                                 borderColor: '#0A84FF',
+                                             },
+                                         ]}>
+                                         <Text style={styles.pickerIcon}>📄</Text>
+                                         {/* Document name preview */}
+                                         <Text style={{
+                                             fontSize: 10,
+                                             color: '#666',
+                                             textAlign: 'center',
+                                             marginTop: 2,
+                                             fontWeight: '500',
+                                         }}>
+                                             {d.name ? 
+                                                 `${d.name.substring(0, 3)}${d.name.includes('.') ? d.name.substring(d.name.lastIndexOf('.')) : ''}`
+                                                 : 'doc'
+                                             }
+                                         </Text>
+                                     </View>
+                                 )}
 
                                 {/* ⓘ overlay — tap shows file name */}
                                 <InfoBadge onPress={() => Alert.alert('Document', d.name ?? 'Unnamed file')} />
@@ -1375,7 +1471,6 @@ const handleBack = useCallback(() => {
 
                     {/* Action buttons */}
                     <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
-                    <Button title="← Back" onPress={handleBack} />
                 </View>
             </ScrollView>
 

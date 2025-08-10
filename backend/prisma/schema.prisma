@@ -1,97 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 model User {
-  id       Int    @id @default(autoincrement())
-  username String? @unique
-  email    String @unique
-  password String
-  role     Role
-  tasks    Task[]
+  id         Int         @id @default(autoincrement())
+  email      String      @unique
+  password   String
+  role       Role
+  username   String?     @unique
   pushTokens PushToken[]
+  tasks      Task[]
 }
 
 model Task {
-  id          Int       @id @default(autoincrement())
-  title       String
-  description String?
-  priority    Priority
-  status      Status    @default(PENDING)
-  previousStatus Status?
-  size        Size      @default(LARGE)
-  dueAt       DateTime?
-  createdAt   DateTime  @default(now())
-
-  /// NEW – optional time limit to finish the task (minutes)
-  timeCapMinutes Int?
-  startedAt      DateTime?       
-
+  id              Int        @id @default(autoincrement())
+  title           String
+  priority        Priority
+  status          Status     @default(PENDING)
+  dueAt           DateTime?
+  userId          Int?
+  createdAt       DateTime   @default(now())
+  description     String?
   /// NEW – optional recurrence rule
-  recurrence     Recurrence   @default(NONE)
-  /// If you need “every 2 weeks / every 3 months”, keep this too
-  recurrenceEvery Int?        // 1 = every week/month/…
-
-  /** NEW — for WEEKLY */
-  recurrenceDow    Int?       // 0=Sunday … 6=Saturday
-  recurrenceMonth  Int?       // 1‑12   (NEW)
-
-  /** NEW — for MONTHLY */
-  recurrenceDom    Int?       // 1‑31  (day‑of‑month)
-  nextOccurrence  DateTime?
-
+  recurrence      Recurrence @default(NONE)
   /// Optionally: stop repeating after this date
-  recurrenceEnd  DateTime?
-  labelDone      Boolean?  @default(false) @map("label_done")
-  isDone       Boolean          @default(false) @map("is_done")
-  lastOccurrence DateTime?
-  
+  recurrenceEnd   DateTime?
+  /// If you need “every 2 weeks / every 3 months”, keep this too
+  recurrenceEvery Int?
+  /// NEW – optional time limit to finish the task (minutes)
+  timeCapMinutes  Int?
+  startedAt       DateTime?
+  labelDone       Boolean?   @default(false) @map("label_done")
+  isDone          Boolean    @default(false) @map("is_done")
+  lastOccurrence  DateTime?
+  previousStatus  Status?
+  /// * NEW — for MONTHLY
+  recurrenceDom   Int?
+  /// * NEW — for WEEKLY
+  recurrenceDow   Int?
+  recurrenceMonth Int?
+  nextOccurrence  DateTime?
+  readAt          DateTime?  @map("read_at")
   /// Track if task has been read by the assigned user
-  readByUser   Boolean?         @default(false) @map("read_by_user")
-  readAt       DateTime?        @map("read_at")
-
-  /// Existing relation to user
-  user    User?   @relation(fields: [userId], references: [id])
-  userId  Int?
-
-  /// Existing 1‑to‑many with images
-  images  Image[]
-  documents  Document[]
+  readByUser      Boolean?   @default(false) @map("read_by_user")
+  size            Size       @default(NORMAL)
+  documents       Document[]
+  images          Image[]
+  videos          Video[]
+  user            User?      @relation(fields: [userId], references: [id])
 }
 
 model Image {
-  id     Int  @id @default(autoincrement())
-  taskId Int
-  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  url  String // use this when you store the file in S3 / R2
-  mime String
-  // --- If you prefer binary-in-DB, swap the two lines above for:
-  // data   Bytes   @db.ByteA
-
-  createdAt DateTime @default(now())
-
-  @@index([taskId]) // speeds up SELECT … WHERE taskId = …
-}
-
-
-model Document {
-  id        Int    @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   taskId    Int
-  task      Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  url       String         // or use Bytes if you prefer in‑DB storage
-  mime      String         // e.g. "application/pdf"
-  fileName  String?        // original file name (optional)
-
+  url       String
+  mime      String
   createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
+}
+
+model Document {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  url       String
+  mime      String
+  fileName  String?
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Video {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  url       String
+  mime      String
+  fileName  String?
+  duration  Int?     // Duration in seconds
+  thumbnail String?  // URL to video thumbnail
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model Settings {
+  id               Int      @id @default(autoincrement())
+  userId           Int?     @unique
+  defaultLabelDone Boolean  @default(true) @map("default_label_done")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PushToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 enum Role {
@@ -121,30 +138,9 @@ enum Size {
 }
 
 enum Recurrence {
-  NONE       // one‑off (default)
+  NONE
   DAILY
   WEEKLY
   MONTHLY
   YEARLY
-}
-
-model Settings {
-  id             Int      @id @default(autoincrement())
-  userId         Int?     // null for global settings
-  defaultLabelDone Boolean @default(true) @map("default_label_done")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([userId]) // one settings record per user (or global if userId is null)
-}
-
-model PushToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
 }

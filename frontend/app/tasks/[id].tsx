@@ -65,6 +65,7 @@ type Task = {
   priority: string;
   size: string;
   dueAt: string | null;
+  timeCapMinutes: number | null;
   createdAt: string;
   /** NEW */
   recurrence: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
@@ -463,6 +464,14 @@ export default function TaskDetail() {
             <Text style={{ fontWeight: '600', color: '#666' }}>Status</Text>
             <Text style={{ color: '#1a1a1a' }}>{task.status}</Text>
           </View>
+          {task.timeCapMinutes && (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Time Cap</Text>
+              <Text style={{ color: '#1a1a1a' }}>
+                {Math.floor(task.timeCapMinutes / 60)}h {task.timeCapMinutes % 60}min
+              </Text>
+            </View>
+          )}
           {task.dueAt && (
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Due</Text>

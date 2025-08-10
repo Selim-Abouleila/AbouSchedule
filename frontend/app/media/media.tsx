@@ -71,6 +71,7 @@ export default function MediaScreen() {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
+  const [syncingInBackground, setSyncingInBackground] = useState<boolean>(false);
   const PAGE_SIZE = 30; // Number of items to load per page
   
   // Track visible items for preloading
@@ -122,7 +123,7 @@ export default function MediaScreen() {
         // Use cached data if available
         allData = allDataRef.current;
       } else {
-        // Load all data if not cached
+        // Load all data if not cached (this should rarely happen with our new approach)
         allData = (isAdmin && showAllMedia)
           ? (mode === 'images' ? await getAllLocalMediaUris() : await getAllLocalDocumentUris())
           : (mode === 'images' ? await getLocalMediaUris(selectedUserId || undefined) : await getLocalDocumentUris(selectedUserId || undefined));
@@ -152,40 +153,85 @@ export default function MediaScreen() {
     } else {
       setLoading(true);
     }
+    
     try {
       console.log('Loading media for selectedUserId:', selectedUserId);
       console.log('Is admin:', isAdmin);
       console.log('Mode:', mode);
       console.log('Show all media:', showAllMedia);
       
+      // STEP 1: Load existing cached files immediately for fast display
+      let existingData: string[];
       if (isAdmin && showAllMedia) {
-        // Load all media for admins only
-        await syncAllMedia();
-        const allData = mode === 'images'
+        existingData = mode === 'images'
           ? await getAllLocalMediaUris()
           : await getAllLocalDocumentUris();
-        console.log('Loaded all media URIs:', allData.length);
-        
-        // Apply pagination to the data
-        const paginatedData = allData.slice(0, PAGE_SIZE);
-        setHasMore(allData.length > PAGE_SIZE);
-        setUris(paginatedData);
       } else {
-        // Load media for specific user (or current user for regular users)
-        await syncMedia(selectedUserId || undefined);
-        const allData = mode === 'images'
+        existingData = mode === 'images'
           ? await getLocalMediaUris(selectedUserId || undefined)
           : await getLocalDocumentUris(selectedUserId || undefined);
-        console.log('Loaded media URIs:', allData.length);
-        
-        // Apply pagination to the data
-        const paginatedData = allData.slice(0, PAGE_SIZE);
-        setHasMore(allData.length > PAGE_SIZE);
-        setUris(paginatedData);
       }
+      
+      console.log('Loaded existing cached files:', existingData.length);
+      
+      // Apply pagination to existing data and show immediately
+      const paginatedData = existingData.slice(0, PAGE_SIZE);
+      setHasMore(existingData.length > PAGE_SIZE);
+      setUris(paginatedData);
+      allDataRef.current = existingData; // Cache the full data
+      
+      // Clear loading state for existing files
+      if (isRefresh) setRefreshing(false);
+      else setLoading(false);
+      
+      // STEP 2: Sync/download new files in the background (non-blocking)
+      const syncInBackground = async () => {
+        try {
+          setSyncingInBackground(true);
+          console.log('Starting background sync...');
+          if (isAdmin && showAllMedia) {
+            await syncAllMedia();
+          } else {
+            await syncMedia(selectedUserId || undefined);
+          }
+          
+          // STEP 3: Reload data after sync to include new files
+          let updatedData: string[];
+          if (isAdmin && showAllMedia) {
+            updatedData = mode === 'images'
+              ? await getAllLocalMediaUris()
+              : await getAllLocalDocumentUris();
+          } else {
+            updatedData = mode === 'images'
+              ? await getLocalMediaUris(selectedUserId || undefined)
+              : await getLocalDocumentUris(selectedUserId || undefined);
+          }
+          
+          console.log('Updated data after sync:', updatedData.length);
+          
+          // Only update if we have new files
+          if (updatedData.length !== existingData.length) {
+            console.log('New files detected, updating UI...');
+            const newFilesCount = updatedData.length - existingData.length;
+            console.log(`Found ${newFilesCount} new files`);
+            
+            const updatedPaginatedData = updatedData.slice(0, PAGE_SIZE);
+            setHasMore(updatedData.length > PAGE_SIZE);
+            setUris(updatedPaginatedData);
+            allDataRef.current = updatedData; // Update cache
+          }
+        } catch (err) {
+          console.error('Background sync failed:', err);
+        } finally {
+          setSyncingInBackground(false);
+        }
+      };
+      
+      // Start background sync without blocking the UI
+      syncInBackground();
+      
     } catch (err) {
-      console.error('Failed to load media:', err);
-    } finally {
+      console.error('Failed to load existing media:', err);
       if (isRefresh) setRefreshing(false);
       else setLoading(false);
     }
@@ -301,23 +347,79 @@ export default function MediaScreen() {
         setHasMore(true);
         allDataRef.current = []; // Clear the cache
         
-        const data = mode === 'images'
-          ? await getLocalMediaUris(selectedUserId || undefined)
-          : await getLocalDocumentUris(selectedUserId || undefined);
+        // STEP 1: Load existing cached files immediately
+        let existingData: string[];
+        if (isAdmin && showAllMedia) {
+          existingData = mode === 'images'
+            ? await getAllLocalMediaUris()
+            : await getAllLocalDocumentUris();
+        } else {
+          existingData = mode === 'images'
+            ? await getLocalMediaUris(selectedUserId || undefined)
+            : await getLocalDocumentUris(selectedUserId || undefined);
+        }
         
-        // Apply pagination
-        const paginatedData = data.slice(0, PAGE_SIZE);
-        setHasMore(data.length > PAGE_SIZE);
+        // Apply pagination to existing data and show immediately
+        const paginatedData = existingData.slice(0, PAGE_SIZE);
+        setHasMore(existingData.length > PAGE_SIZE);
         setUris(paginatedData);
+        allDataRef.current = existingData; // Cache the full data
+        
+        // Clear switching mode state
+        setSwitchingMode(false);
+        
+        // STEP 2: Sync in background for new files
+        const syncInBackground = async () => {
+          try {
+            setSyncingInBackground(true);
+            console.log('Starting background sync for mode switch...');
+            if (isAdmin && showAllMedia) {
+              await syncAllMedia();
+            } else {
+              await syncMedia(selectedUserId || undefined);
+            }
+            
+            // Reload data after sync
+            let updatedData: string[];
+            if (isAdmin && showAllMedia) {
+              updatedData = mode === 'images'
+                ? await getAllLocalMediaUris()
+                : await getAllLocalDocumentUris();
+            } else {
+              updatedData = mode === 'images'
+                ? await getLocalMediaUris(selectedUserId || undefined)
+                : await getLocalDocumentUris(selectedUserId || undefined);
+            }
+            
+            // Only update if we have new files
+            if (updatedData.length !== existingData.length) {
+              console.log('New files detected after mode switch, updating UI...');
+              const newFilesCount = updatedData.length - existingData.length;
+              console.log(`Found ${newFilesCount} new files after mode switch`);
+              
+              const updatedPaginatedData = updatedData.slice(0, PAGE_SIZE);
+              setHasMore(updatedData.length > PAGE_SIZE);
+              setUris(updatedPaginatedData);
+              allDataRef.current = updatedData;
+            }
+          } catch (err) {
+            console.error('Background sync failed during mode switch:', err);
+          } finally {
+            setSyncingInBackground(false);
+          }
+        };
+        
+        // Start background sync without blocking the UI
+        syncInBackground();
+        
       } catch (err) {
         console.error('Failed to switch mode:', err);
-      } finally {
         setSwitchingMode(false);
       }
     };
     
     switchMode();
-  }, [mode, selectedUserId]);
+  }, [mode, selectedUserId, isAdmin, showAllMedia]);
 
   /* TO be able to share*/
 
@@ -492,12 +594,20 @@ export default function MediaScreen() {
           </Pressable>
         </View>
         
-        <Pressable
-          style={styles.refreshButton}
-          onPress={handleClearCache}
-        >
-          <Ionicons name="refresh" size={20} color="#0A84FF" />
-        </Pressable>
+        <View style={styles.headerButtons}>
+          {syncingInBackground && (
+            <View style={styles.syncIndicator}>
+              <ActivityIndicator size="small" color="#0A84FF" />
+              <Text style={styles.syncText}>Syncing...</Text>
+            </View>
+          )}
+          <Pressable
+            style={styles.refreshButton}
+            onPress={handleClearCache}
+          >
+            <Ionicons name="refresh" size={20} color="#0A84FF" />
+          </Pressable>
+        </View>
       </View>
 
       {/* Admin User Selector */}
@@ -903,5 +1013,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1a1a1a',
     letterSpacing: 0.3,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  syncIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#0A84FF',
+  },
+  syncText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#0A84FF',
+    fontWeight: '500',
   },
 });

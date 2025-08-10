@@ -12,6 +12,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  BackHandler,
 } from "react-native";
 
 import * as ImagePicker from "expo-image-picker";
@@ -127,7 +128,7 @@ export default function AddTask() {
   const [description, setDescription] = useState("");
   const [priority, setPrio] = useState("NONE" as typeof PRIORITIES[number]);
   const [status, setStat] = useState("PENDING" as typeof STATUSES[number]);
-  const [size, setSize] = useState("NORMAL" as typeof SIZES[number]);
+  const [size, setSize] = useState<typeof SIZES[number]>("NORMAL");
   const [dueAt, setDueAt] = useState<Date | null>(null);
   const [showIOS,     setShowIOS]     = useState(false);  
   const [showCapIOS,  setShowCapIOS]  = useState(false);
@@ -150,8 +151,10 @@ export default function AddTask() {
   const [docs, setDocs] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
   const [loading, setLoad] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
-  const [pickingPhotos, setPickingPhotos] = useState(false);
-  const [pickingDocs, setPickingDocs] = useState(false);
+      const [pickingPhotos, setPickingPhotos] = useState(false);
+    const [pickingCamera, setPickingCamera] = useState(false);
+    const [pickingGallery, setPickingGallery] = useState(false);
+    const [pickingDocs, setPickingDocs] = useState(false);
 
 
 
@@ -223,10 +226,6 @@ const hasUnsavedChanges = useMemo(
   ],
 );
 const navigation = useNavigation();
-
-
-
-
 
 /* Recurrence reset */
 useEffect(() => {
@@ -309,7 +308,7 @@ const scrollRef = useRef<ScrollView>(null);
     }
     if (photos.length >= 6) { Alert.alert('Maximum 6 pictures'); return; }
 
-    setPickingPhotos(true);
+    setPickingCamera(true);
     try {
       const res = await ImagePicker.launchCameraAsync({
         quality: 0.9,        
@@ -321,13 +320,13 @@ const scrollRef = useRef<ScrollView>(null);
         setPhotos(prev => [...prev, ...res.assets]);
       }
     } finally {
-      setPickingPhotos(false);
+      setPickingCamera(false);
     }
   };
 
   /* pick image(s) */
   const pickImages = async () => {
-    setPickingPhotos(true);
+    setPickingGallery(true);
     try {
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -336,7 +335,7 @@ const scrollRef = useRef<ScrollView>(null);
       });
       if (!res.canceled) setPhotos((prev) => [...prev, ...res.assets]);
     } finally {
-      setPickingPhotos(false);
+      setPickingGallery(false);
     }
   };
 
@@ -378,7 +377,7 @@ const scrollRef = useRef<ScrollView>(null);
       setDescription('');
       setPrio('NONE');
       setStat('ACTIVE');
-      setSize('LARGE');
+      setSize('NORMAL');
       setDueAt(null);
       setTimeCapH(0);
       setTimeCapM(0);
@@ -462,7 +461,7 @@ const scrollRef = useRef<ScrollView>(null);
     setDescription("");
     setPrio("NONE");
     setStat("ACTIVE");
-    setSize("LARGE");
+    setSize("NORMAL");
     setDueAt(null);
     setRecurring(false);
     setRecurrence("DAILY");
@@ -602,16 +601,19 @@ const scrollRef = useRef<ScrollView>(null);
     );
   }, [hasUnsavedChanges, save, resetForm]);
 
-  // Navigation listener for back button/gesture
+  // Android back button handler
   useEffect(() => {
-    const sub = navigation.addListener("beforeRemove", (e) => {
-      // stop the default behaviour
-      e.preventDefault();
-      handleBack();
-    });
-    return sub;
-  }, [navigation, handleBack]);
+    const backAction = () => {
+      if (hasUnsavedChanges) {
+        handleBack();
+        return true; // Prevent default behavior
+      }
+      return false; // Allow default behavior
+    };
 
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [hasUnsavedChanges, handleBack]);
 
   /* UI */
   return (
@@ -656,12 +658,18 @@ const scrollRef = useRef<ScrollView>(null);
           </View>
 
           {/* Title */}
-          <TextInput
-            placeholder="Task title"
-            value={title}
-            onChangeText={setTitle}
-            style={{ borderWidth: 1, padding: 10, borderRadius: 6 }}
-          />
+          <View>
+            <TextInput
+              placeholder="Task title"
+              value={title}
+              onChangeText={setTitle}
+              maxLength={70}
+              style={{ borderWidth: 1, padding: 10, borderRadius: 6 }}
+            />
+            <Text style={{ fontSize: 12, color: '#666', textAlign: 'right', marginTop: 4 }}>
+              {title.length}/70
+            </Text>
+          </View>
 
 
 
@@ -765,21 +773,44 @@ const scrollRef = useRef<ScrollView>(null);
 
           {/* Size */}
           <Text style={{ fontWeight: "bold", marginTop: 8 }}>SIZE</Text>
-          <Picker selectedValue={size} onValueChange={setSize}>
-            {SIZES.map((s) => <Picker.Item key={s} label={s} value={s} />)}
-          </Picker>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            {SIZES.map(s => (
+              <Pressable
+                key={s}
+                onPress={() => setSize(s)}
+                style={{
+                  flex: 1,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  borderWidth: 2,
+                  borderColor: size === s ? '#0A84FF' : '#e9ecef',
+                  backgroundColor: size === s ? '#0A84FF' : 'white',
+                  alignItems: 'center',
+                  minWidth: 0,
+                }}
+              >
+                <Text style={{
+                  fontSize: 13,
+                  fontWeight: '600',
+                  color: size === s ? 'white' : '#1a1a1a',
+                  textAlign: 'center',
+                }}>
+                  {s}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
 
-          {/* Time-cap */}
-          <Text style={{ fontWeight: 'bold', marginTop: 8 }}>TIME CAP</Text>
-
-          <Button
-            title={
-              timeCapH === 0 && timeCapM === 0
-                ? 'Set time cap'
-                : `${timeCapH} h ${timeCapM} min`
-            }
-            onPress={showTimeCapPicker}
-          />
+                               {/* Time-cap */}
+                     <Button
+                         title={
+                             timeCapH === 0 && timeCapM === 0
+                                 ? 'Set time cap'
+                                 : `${timeCapH} h ${timeCapM} min`
+                         }
+                         onPress={showTimeCapPicker}
+                     />
 
           {(timeCapH !== 0 || timeCapM !== 0) && (
             <Button
@@ -805,35 +836,24 @@ const scrollRef = useRef<ScrollView>(null);
             />
           )}
 
-          <View style={{ gap: 12 }}>
+          {/* Due date */}
+          <Button
+            title={dueAt ? dueAt.toLocaleString() : "Due date"}
+            onPress={showPicker}
+          />
+          {Platform.OS === "ios" && showIOS && (
+            <DateTimePicker
+              value={dueAt ?? new Date()}
+              mode="datetime"
+              display="inline"
+              onChange={(_, d) => {
+                setShowIOS(false);
+                if (d) setDueAt(d);
+              }}
+            />
+          )}
 
-            {/* RECURRING */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text style={{ fontWeight: "bold", marginRight: 8 }}>RECURRING</Text>
-              <Pressable
-                onPress={() =>
-                  !recurring ? confirmRecurring() : setRecurring(false)
-                }
-                style={{
-                  width: 50,
-                  height: 30,
-                  borderRadius: 15,
-                  backgroundColor: recurring ? "#0A84FF" : "#CCC",
-                  justifyContent: "center",
-                }}
-              >
-                <View
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 12,
-                    backgroundColor: "white",
-                    alignSelf: recurring ? "flex-end" : "flex-start",
-                    margin: 3,
-                  }}
-                />
-              </Pressable>
-            </View>
+          <View style={{ gap: 12 }}>
 
             {/* TASK DONE */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -860,6 +880,35 @@ const scrollRef = useRef<ScrollView>(null);
                 />
               </Pressable>
             </View>
+
+                                    {/* RECURRING */}
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                            <Text style={{ fontWeight: "bold", marginRight: 8 }}>RECURRING</Text>
+                            <Pressable
+                                onPress={() =>
+                                    !recurring ? confirmRecurring() : setRecurring(false)
+                                }
+                                style={{
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: 12,
+                                    backgroundColor: recurring ? "#0A84FF" : "#CCC",
+                                    justifyContent: "center",
+                                    alignItems: "center",
+                                }}
+                            >
+                                {recurring && (
+                                    <View
+                                        style={{
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: 4,
+                                            backgroundColor: "white",
+                                        }}
+                                    />
+                                )}
+                            </Pressable>
+                        </View>
 
           </View>
 
@@ -1003,23 +1052,6 @@ const scrollRef = useRef<ScrollView>(null);
             </>
           )}
 
-          {/* Due date */}
-          <Button
-            title={dueAt ? dueAt.toLocaleString() : "Due date"}
-            onPress={showPicker}
-          />
-          {Platform.OS === "ios" && showIOS && (
-            <DateTimePicker
-              value={dueAt ?? new Date()}
-              mode="datetime"
-              display="inline"
-              onChange={(_, d) => {
-                setShowIOS(false);
-                if (d) setDueAt(d);
-              }}
-            />
-          )}
-        
           {/* Photo thumbnails + picker */}
           <View style={styles.thumbRow}>
             {photos.map((p, i) => (
@@ -1054,43 +1086,52 @@ const scrollRef = useRef<ScrollView>(null);
           </View>
 
           {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
-          <View style={styles.pickerRow}>
-            <Pressable 
-              onPress={takePhoto} 
-              style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
-              disabled={pickingPhotos}
-            >
-              {pickingPhotos ? (
-                <ActivityIndicator size="small" color="#555" />
-              ) : (
-                <Text style={styles.pickerIcon}>📷</Text>
-              )}
-            </Pressable>
-
-            <Pressable 
-              onPress={pickImages} 
-              style={[styles.pickerBox, pickingPhotos && { opacity: 0.5 }]}
-              disabled={pickingPhotos}
-            >
-              {pickingPhotos ? (
-                <ActivityIndicator size="small" color="#555" />
-              ) : (
-                <Text style={styles.pickerIcon}>🖼️</Text>
-              )}
-            </Pressable>
-
-            <Pressable 
-              onPress={pickDocs} 
-              style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
-              disabled={pickingDocs}
-            >
-              {pickingDocs ? (
-                <ActivityIndicator size="small" color="#555" />
-              ) : (
-                <Text style={styles.pickerIcon}>📄</Text>
-              )}
-            </Pressable>
-          </View>
+                                          <View style={styles.pickerRow}>
+                                  <View style={{ alignItems: 'center' }}>
+                                    <Pressable 
+                                      onPress={takePhoto} 
+                                      style={[styles.pickerBox, pickingCamera && { opacity: 0.5 }]}
+                                      disabled={pickingCamera}
+                                    >
+                                      {pickingCamera ? (
+                                        <ActivityIndicator size="small" color="#555" />
+                                      ) : (
+                                        <Text style={styles.pickerIcon}>📷</Text>
+                                      )}
+                                    </Pressable>
+                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Camera</Text>
+                                  </View>
+                      
+                                  <View style={{ alignItems: 'center' }}>
+                                    <Pressable 
+                                      onPress={pickImages} 
+                                      style={[styles.pickerBox, pickingGallery && { opacity: 0.5 }]}
+                                      disabled={pickingGallery}
+                                    >
+                                      {pickingGallery ? (
+                                        <ActivityIndicator size="small" color="#555" />
+                                      ) : (
+                                        <Text style={styles.pickerIcon}>🖼</Text>
+                                      )}
+                                    </Pressable>
+                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Gallery</Text>
+                                  </View>
+                      
+                                  <View style={{ alignItems: 'center' }}>
+                                    <Pressable 
+                                      onPress={pickDocs} 
+                                      style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
+                                      disabled={pickingDocs}
+                                    >
+                                      {pickingDocs ? (
+                                        <ActivityIndicator size="small" color="#555" />
+                                      ) : (
+                                        <Text style={styles.pickerIcon}>📄</Text>
+                                      )}
+                                    </Pressable>
+                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Document</Text>
+                                  </View>
+                                </View>
 
           {/* Docs shown a single time ------------------------------------------------ */}
           <View style={styles.docRow}>
@@ -1125,6 +1166,19 @@ const scrollRef = useRef<ScrollView>(null);
                     ]}
                   >
                     <Text style={styles.pickerIcon}>📄</Text>
+                    {/* Document name preview */}
+                    <Text style={{
+                      fontSize: 10,
+                      color: '#666',
+                      textAlign: 'center',
+                      marginTop: 2,
+                      fontWeight: '500',
+                    }}>
+                      {d.name ? 
+                        `${d.name.substring(0, 3)}${d.name.includes('.') ? d.name.substring(d.name.lastIndexOf('.')) : ''}`
+                        : 'doc'
+                      }
+                    </Text>
                   </View>
                 )}
 
@@ -1152,12 +1206,29 @@ const scrollRef = useRef<ScrollView>(null);
               <Button title="Cancel selection" onPress={abortDelete} />
             </View>
           )}
-         
-
-          {/* Action buttons */}
-          <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
         </View>
       </ScrollView>
+
+      {/* Pinned Save Button */}
+      <View style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'white',
+        borderTopWidth: 1,
+        borderTopColor: '#e9ecef',
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        paddingBottom: Platform.OS === 'android' ? 50 : 16,
+      }}>
+        <Button 
+          title={loading ? "Saving…" : "Save"} 
+          onPress={save} 
+          disabled={loading}
+          color="#0A84FF"
+        />
+      </View>
 
       {/* Loading Overlay */}
       <Modal

@@ -364,7 +364,7 @@ f.get('/:id', async (req: any, rep) => {
   /* 2. fetch exactly what's in the DB */
   const task = await prisma.task.findFirst({
     where: { id: dbId, userId },
-    include: { images: true, documents: true },
+    include: { images: true, documents: true, videos: true },
   });
 
   if (!task) return rep.code(404).send({ error: 'Task not found' });
@@ -412,10 +412,45 @@ f.get('/:id', async (req: any, rep) => {
     })
   );
 
-  /* 4. return task with pre-signed document URLs */
+  /* 3b. Generate pre-signed URLs for videos */
+  const videosWithSignedUrls = await Promise.all(
+    task.videos.map(async (vid) => {
+      try {
+        const url = new URL(vid.url);
+        const key = url.pathname.substring(1);
+        
+        const command = new GetObjectCommand({
+          Bucket: process.env.AWS_BUCKET!,
+          Key: key,
+        });
+        
+        // Create a new S3 client instance for pre-signed URLs
+        const presignerClient = new S3Client({
+          region: process.env.AWS_REGION ?? 'eu-north-1',
+          credentials: {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+          },
+        });
+        
+        const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+        
+        return {
+          ...vid,
+          url: signedUrl,
+        };
+      } catch (error) {
+        console.error('Error generating signed URL for video:', error);
+        return vid;
+      }
+    })
+  );
+
+  /* 4. return task with pre-signed document and video URLs */
   return {
     ...task,
     documents: documentsWithSignedUrls,
+    videos: videosWithSignedUrls,
   };
 });
 
@@ -832,7 +867,8 @@ app.register(async (f) => {
     /* --- ❶  Collect parts in ONE pass ----------------------------- */
     const fields: Record<string, string> = {};
     const images: { taskId: number; url: string; mime: string }[] = [];
-    const documents: { taskId: number; url: string; mime: string }[] = [];
+    const documents: { taskId: number; url: string; mime: string; fileName?: string }[] = [];
+    const videos: { taskId: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[] = [];
 
     /* same loop, just decide where to push */
     if (req.isMultipart()) {
@@ -840,15 +876,31 @@ app.register(async (f) => {
         if (part.type === 'file') {
           const url = await uploadToS3(part, 'tasks/tmp');
 
-          /* heuristics: treat PDFs, DOCX, etc. as documents */
+          /* heuristics: treat PDFs, DOCX, etc. as documents, videos as videos */
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
+          const isVideo = /^video\//.test(part.mimetype ?? '');
 
-          (isDoc ? documents : images).push({
-            taskId: 0,                 // patched after .create()
-            url,
-            mime: part.mimetype,
-            ...(isDoc && { fileName: part.filename }), // Include fileName for documents
-          });
+          if (isVideo) {
+            videos.push({
+              taskId: 0,                 // patched after .create()
+              url,
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else if (isDoc) {
+            documents.push({
+              taskId: 0,                 // patched after .create()
+              url,
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else {
+            images.push({
+              taskId: 0,                 // patched after .create()
+              url,
+              mime: part.mimetype,
+            });
+          }
 
         } else if (part.type === 'field') {
           fields[part.fieldname] = part.value;
@@ -952,9 +1004,15 @@ app.register(async (f) => {
       await prisma.document.createMany({ data: documents });
     }
 
+    /* --- ❸c  Persist video metadata ------------------------------- */
+    if (videos.length) {
+      for (const vid of videos) vid.taskId = task.id;
+      await prisma.video.createMany({ data: videos });
+    }
+
     const full = await prisma.task.findUnique({
       where: { id: task.id },
-      include: { images: true, documents: true }
+      include: { images: true, documents: true, videos: true }
     });
 
     // Send notification for immediate tasks

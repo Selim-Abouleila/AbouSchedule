@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Task" ALTER COLUMN "size" SET DEFAULT 'NORMAL';
+
