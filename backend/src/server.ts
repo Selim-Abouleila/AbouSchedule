@@ -1161,20 +1161,40 @@ app.register(async (f) => {
 
     /* ❶ Read multipart (or JSON) */
     const fields: Record<string, string> = {};
-    const newImgs: { taskId: number; url: string; mime: string }[] = [];
-    const newDocs: { taskId: number; url: string; mime: string }[] = [];
+    const newImgs: { taskId: number; url: string; mime: string; fileName?: string }[] = [];
+    const newDocs: { taskId: number; url: string; mime: string; fileName?: string }[] = [];
+    const newVideos: { taskId: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[] = [];
 
     if (req.isMultipart()) {
       for await (const part of req.parts()) {
         if (part.type === "file") {
           const url = await uploadToS3(part, `tasks/tmp/`);   // helper
+          
+          /* heuristics: treat PDFs, DOCX, etc. as documents, videos as videos */
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
-          (isDoc ? newDocs : newImgs).push({ 
-            taskId, 
-            url, 
-            mime: part.mimetype,
-            ...(isDoc && { fileName: part.filename }), // Include fileName for documents
-          });
+          const isVideo = /^video\//.test(part.mimetype ?? '');
+
+          if (isVideo) {
+            newVideos.push({
+              taskId,
+              url,
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else if (isDoc) {
+            newDocs.push({ 
+              taskId, 
+              url, 
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else {
+            newImgs.push({ 
+              taskId, 
+              url, 
+              mime: part.mimetype,
+            });
+          }
         } else if (part.type === "field") {
           fields[part.fieldname] = part.value;
         }
@@ -1312,11 +1332,16 @@ app.register(async (f) => {
     if (newDocs.length) {
       await prisma.document.createMany({ data: newDocs });
     }
+
+    /* Add video persistence logic */
+    if (newVideos.length) {
+      await prisma.video.createMany({ data: newVideos });
+    }
     
     /* ❻ Return fresh record */
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      include: { images: true, documents: true }
+      include: { images: true, documents: true, videos: true }
     });
     return task;
   });
@@ -1366,9 +1391,10 @@ app.register(async (f) => {
     }
 
     /* fetch original DB rows for the target user */
-    const [images, docs] = await Promise.all([
+    const [images, docs, videos] = await Promise.all([
       prisma.image.findMany({ where: { task: { userId: targetUserId } } }),
       prisma.document.findMany({ where: { task: { userId: targetUserId } } }),
+      prisma.video.findMany({ where: { task: { userId: targetUserId } } }),
     ]);
 
     /* add thumbUrl for each image row */
@@ -1424,9 +1450,35 @@ app.register(async (f) => {
       })
     );
 
+    /* Generate pre-signed URLs for videos */
+    const videosWithSignedUrls = await Promise.all(
+      videos.map(async (vid) => {
+        try {
+          const url = new URL(vid.url);
+          const key = url.pathname.substring(1);
+          
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+          
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+          
+          return {
+            ...vid,
+            url: signedUrl,
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for video:', error);
+          return vid;
+        }
+      })
+    );
+
     return { 
       images: thumbImages, 
       documents: documentsWithSignedUrls,
+      videos: videosWithSignedUrls,
       user: {
         id: targetUser.id,
         email: targetUser.email,
@@ -1455,6 +1507,7 @@ app.register(async (f) => {
       include: { 
         images: true, 
         documents: true,
+        videos: true,
         user: {
           select: {
             id: true,
@@ -1505,10 +1558,36 @@ app.register(async (f) => {
       })
     );
 
-    /* return task with pre-signed document URLs and user data */
+    /* Generate pre-signed URLs for videos */
+    const videosWithSignedUrls = await Promise.all(
+      task.videos.map(async (vid) => {
+        try {
+          const url = new URL(vid.url);
+          const key = url.pathname.substring(1);
+          
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+          
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+          
+          return {
+            ...vid,
+            url: signedUrl,
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for video:', error);
+          return vid;
+        }
+      })
+    );
+
+    /* return task with pre-signed document and video URLs and user data */
     return {
       ...task,
       documents: documentsWithSignedUrls,
+      videos: videosWithSignedUrls,
       user: task.user, // Ensure user data is explicitly included
     };
   });
