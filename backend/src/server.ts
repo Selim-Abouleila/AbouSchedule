@@ -109,8 +109,9 @@ app.register(async (f) => {
 
     /* --- ❶  Collect parts in ONE pass ----------------------------- */
     const fields: Record<string, string> = {};
-    const images: { taskId: number; url: string; mime: string }[] = [];
-    const documents: { taskId: number; url: string; mime: string }[] = [];
+    const images: { taskId: number; url: string; mime: string; fileName?: string }[] = [];
+    const documents: { taskId: number; url: string; mime: string; fileName?: string }[] = [];
+    const videos: { taskId: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[] = [];
 
 
     /* same loop, just decide where to push */
@@ -119,15 +120,45 @@ app.register(async (f) => {
         if (part.type === 'file') {
           const url = await uploadToS3(part, 'tasks/tmp');
 
-          /* heuristics: treat PDFs, DOCX, etc. as documents */
-          const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
-
-          (isDoc ? documents : images).push({
-            taskId: 0,                 // patched after .create()
-            url,
-            mime: part.mimetype,
-            ...(isDoc && { fileName: part.filename }), // Include fileName for documents
+          /* Debug: Log the MIME type and filename */
+          console.log('File upload:', {
+            filename: part.filename,
+            mimetype: part.mimetype,
+            fieldname: part.fieldname
           });
+
+          /* heuristics: treat PDFs, DOCX, etc. as documents, videos as videos */
+          const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
+          const isVideo = /^video\//.test(part.mimetype ?? '');
+
+          console.log('File classification:', {
+            filename: part.filename,
+            isVideo,
+            isDoc,
+            mimetype: part.mimetype
+          });
+
+          if (isVideo) {
+            videos.push({
+              taskId: 0,                 // patched after .create()
+              url,
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else if (isDoc) {
+            documents.push({
+              taskId: 0,                 // patched after .create()
+              url,
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else {
+            images.push({
+              taskId: 0,                 // patched after .create()
+              url,
+              mime: part.mimetype,
+            });
+          }
 
         } else if (part.type === 'field') {
           fields[part.fieldname] = part.value;
@@ -137,7 +168,12 @@ app.register(async (f) => {
       Object.assign(fields, req.body);
     }
 
-
+    /* Debug: Log what we collected */
+    console.log('Collected files:', {
+      images: images.length,
+      videos: videos.length,
+      documents: documents.length
+    });
 
     /* --- ❷  Create the Task -------------------------------------- */
     const {
@@ -234,9 +270,16 @@ app.register(async (f) => {
       await prisma.document.createMany({ data: documents });
     }
 
+    /* --- ❸c  Persist video metadata ------------------------------- */
+    if (videos.length) {
+      for (const vid of videos) vid.taskId = task.id;
+      await prisma.video.createMany({ data: videos });
+      console.log('✅ Stored videos in database:', videos.length);
+    }
+
     const full = await prisma.task.findUnique({
       where: { id: task.id },
-      include: { images: true, documents: true }
+      include: { images: true, documents: true, videos: true }
     });
 
     return rep.code(201).send(full);

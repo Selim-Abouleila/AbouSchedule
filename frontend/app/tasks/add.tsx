@@ -648,10 +648,22 @@ const scrollRef = useRef<ScrollView>(null);
 
     setUploadProgress('Uploading files...');
     
+    console.log('📤 Sending request to backend with:', {
+      photos: photos.length,
+      videos: videos.length,
+      docs: docs.length,
+      endpoint: endpoints.tasks
+    });
+    
     const res = await fetch(endpoints.tasks, {
       method: "POST",
       headers: { Authorization: `Bearer ${jwt}` },
       body: form,
+    });
+    
+    console.log('📥 Backend response:', {
+      status: res.status,
+      ok: res.ok
     });
 
     setLoad(false);
