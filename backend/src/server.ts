@@ -525,20 +525,40 @@ f.get('/:id', async (req: any, rep) => {
 
     /* ❶ Read multipart (or JSON) */
     const fields: Record<string, string> = {};
-    const newImgs: { taskId: number; url: string; mime: string }[] = [];
-    const newDocs: { taskId: number; url: string; mime: string }[] = [];
+    const newImgs: { taskId: number; url: string; mime: string; fileName?: string }[] = [];
+    const newDocs: { taskId: number; url: string; mime: string; fileName?: string }[] = [];
+    const newVideos: { taskId: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[] = [];
 
     if (req.isMultipart()) {
       for await (const part of req.parts()) {
         if (part.type === "file") {
           const url = await uploadToS3(part, `tasks/tmp/`);   // helper
+          
+          /* heuristics: treat PDFs, DOCX, etc. as documents, videos as videos */
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
-          (isDoc ? newDocs : newImgs).push({ 
-            taskId: id, 
-            url, 
-            mime: part.mimetype,
-            ...(isDoc && { fileName: part.filename }), // Include fileName for documents
-          });
+          const isVideo = /^video\//.test(part.mimetype ?? '');
+
+          if (isVideo) {
+            newVideos.push({
+              taskId: id,
+              url,
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else if (isDoc) {
+            newDocs.push({ 
+              taskId: id, 
+              url, 
+              mime: part.mimetype,
+              fileName: part.filename,
+            });
+          } else {
+            newImgs.push({ 
+              taskId: id, 
+              url, 
+              mime: part.mimetype,
+            });
+          }
         } else if (part.type === "field") {
           fields[part.fieldname] = part.value;
         }
@@ -551,11 +571,11 @@ f.get('/:id', async (req: any, rep) => {
     const {
       title, description, priority, status, size,
       dueAt, timeCapMinutes, recurrence, recurrenceDow, recurrenceDom, recurrenceMonth, recurrenceEvery,
-      recurrenceEnd, labelDone, keep, keepDocs
+      recurrenceEnd, labelDone, keep, keepDocs, keepVideos
     } = fields as Partial<{
       title: string; description: string; priority: Priority; status: Status; size: Size;
       dueAt: string; timeCapMinutes: string; recurrence: Recurrence; recurrenceDow: string; recurrenceDom: string; recurrenceMonth: string;
-      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string;
+      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string; keepVideos: string;
     }>;
 
     /* ❸ Build `data` dynamically */
@@ -663,12 +683,24 @@ f.get('/:id', async (req: any, rep) => {
     if (newDocs.length) {
       await prisma.document.createMany({ data: newDocs });
     }
+
+    /* Videos – delete removed, then add new */
+    if (keepVideos !== undefined) {
+      const keepVideoIds = keepVideos.split(',').map(Number).filter(Boolean);
+      await prisma.video.deleteMany({
+        where: { taskId: id, id: { notIn: keepVideoIds } }
+      });
+    }
+
+    if (newVideos.length) {
+      await prisma.video.createMany({ data: newVideos });
+    }
     
 
     /* ❻ Return fresh record */
     const task = await prisma.task.findUnique({
       where: { id },
-      include: { images: true, documents: true }
+      include: { images: true, documents: true, videos: true }
     });
     return task;
   });
@@ -1207,11 +1239,11 @@ app.register(async (f) => {
     const {
       title, description, priority, status, size,
       dueAt, timeCapMinutes, recurrence, recurrenceDow, recurrenceDom, recurrenceMonth, recurrenceEvery,
-      recurrenceEnd, labelDone, keep, keepDocs
+      recurrenceEnd, labelDone, keep, keepDocs, keepVideos
     } = fields as Partial<{
       title: string; description: string; priority: Priority; status: Status; size: Size;
       dueAt: string; timeCapMinutes: string; recurrence: Recurrence; recurrenceDow: string; recurrenceDom: string; recurrenceMonth: string;
-      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string;
+      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string; keepVideos: string;
     }>;
 
     /* ❸ Build `data` dynamically */
@@ -1333,7 +1365,14 @@ app.register(async (f) => {
       await prisma.document.createMany({ data: newDocs });
     }
 
-    /* Add video persistence logic */
+    /* Videos – delete removed, then add new */
+    if (keepVideos !== undefined) {
+      const keepVideoIds = keepVideos.split(',').map(Number).filter(Boolean);
+      await prisma.video.deleteMany({
+        where: { taskId, id: { notIn: keepVideoIds } }
+      });
+    }
+
     if (newVideos.length) {
       await prisma.video.createMany({ data: newVideos });
     }

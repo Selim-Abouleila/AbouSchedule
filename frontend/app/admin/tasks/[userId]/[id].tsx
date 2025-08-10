@@ -8,6 +8,7 @@ import {
   Pressable,
   Alert,
   Platform,
+  Modal,
 } from 'react-native';
 
 import { useLocalSearchParams, router } from 'expo-router';
@@ -23,6 +24,7 @@ import * as FileSystem from 'expo-file-system';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import * as Linking from 'expo-linking';
+import { Video, ResizeMode } from 'expo-av';
 
 /*
   Admin Task Detail Page
@@ -54,6 +56,7 @@ type Task = {
   readAt?: string;
   images: { id: number; url: string; mime: string }[];
   documents: { id: number; url: string; mime: string; fileName?: string }[];
+  videos: { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[];
   user?: {
     id: number;
     email: string;
@@ -78,6 +81,8 @@ export default function AdminTaskDetail() {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerNonce, setViewerNonce] = useState(0);
+  // Video player state
+  const [playingVideo, setPlayingVideo] = useState<{ uri: string; index: number } | null>(null);
 
   const openViewer = (idx: number) => {
     setViewerIndex(idx);
@@ -618,6 +623,75 @@ export default function AdminTaskDetail() {
           </View>
         )}
 
+        {/* Videos */}
+        {task.videos && task.videos.length > 0 && (
+          <View style={{
+            backgroundColor: 'white',
+            padding: 16,
+            borderRadius: 12,
+            marginBottom: 16,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 3,
+            elevation: 2,
+          }}>
+            <Text style={{ fontWeight: '600', fontSize: 16, marginBottom: 12, color: '#1a1a1a' }}>
+              Videos ({task.videos.length})
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {task.videos.map((video, idx) => (
+                <Pressable
+                  key={video.id}
+                  onPress={() => setPlayingVideo({ uri: video.url, index: idx })}
+                  style={{ position: 'relative', marginRight: 12 }}
+                >
+                  <View style={{ position: 'relative' }}>
+                    <Image
+                      source={{ uri: video.thumbnail || video.url }}
+                      style={{ width: 160, height: 160, borderRadius: 8 }}
+                      resizeMode="cover"
+                    />
+                    
+                    {/* Play button overlay */}
+                    <View style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: [{ translateX: -20 }, { translateY: -20 }],
+                      width: 40,
+                      height: 40,
+                      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                      borderRadius: 20,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}>
+                      <Text style={{ color: '#fff', fontSize: 16 }}>▶️</Text>
+                    </View>
+                    
+                    {/* Duration overlay */}
+                    {video.duration && (
+                      <View style={{
+                        position: 'absolute',
+                        bottom: 8,
+                        right: 8,
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        paddingHorizontal: 6,
+                        paddingVertical: 3,
+                        borderRadius: 12,
+                      }}>
+                        <Text style={{ color: '#fff', fontSize: 10 }}>
+                          {Math.round(video.duration / 1000)}s
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Documents */}
         {task.documents.length > 0 && (
           <View style={{
@@ -716,6 +790,52 @@ export default function AdminTaskDetail() {
           key={viewerNonce}
         />
       )}
+
+      {/* Video Player Modal */}
+      <Modal
+        visible={playingVideo !== null}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'black',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            position: 'absolute',
+            top: 50,
+            left: 20,
+            zIndex: 10,
+          }}>
+            <Pressable
+              onPress={() => setPlayingVideo(null)}
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                borderRadius: 20,
+                padding: 10,
+              }}
+            >
+              <Text style={{ color: 'white', fontSize: 18 }}>✕</Text>
+            </Pressable>
+          </View>
+          
+          {playingVideo && (
+            <Video
+              source={{ uri: playingVideo.uri }}
+              style={{
+                width: '100%',
+                height: '100%',
+              }}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              isLooping={false}
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
