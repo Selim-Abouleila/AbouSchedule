@@ -84,6 +84,8 @@ type Task = {
   documents: { id: number; url: string; mime: string; name?: string }[];
   videos:    { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[];
   wasAddedByAdmin?: boolean;
+  labelDone?: boolean;
+  requiresCompletionApproval?: boolean;
 };
 
 
@@ -423,6 +425,39 @@ export default function TaskDetail() {
         },
       ]
     );
+  };
+
+  const markTaskAsDone = async () => {
+    try {
+      const jwt = await getToken();
+      const res = await fetch(`${endpoints.tasks}/${id}/mark-done`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+      
+      const result = await res.json();
+      
+      if (result.requiresApproval) {
+        Alert.alert(
+          "Approval Required",
+          "Task has been submitted for completion approval. An admin will review and mark it as done.",
+          [{ text: "OK", onPress: () => router.push('/tasks') }]
+        );
+      } else {
+        Alert.alert(
+          "Success",
+          "Task has been marked as done!",
+          [{ text: "OK", onPress: () => router.push('/tasks') }]
+        );
+      }
+    } catch (e: any) {
+      Alert.alert("Failed to mark task as done", e.message);
+    }
   };
 
   if (loading) {
@@ -947,14 +982,14 @@ export default function TaskDetail() {
           <View style={{
             flexDirection: 'row',
             justifyContent: 'space-between',
-            gap: 12,
+            gap: 8,
           }}>
             {/* Edit button - only show if user can edit */}
             {(userRole === 'ADMIN' || !task?.wasAddedByAdmin) && (
               <Pressable
                 onPress={() => router.push(`/${id}/edit`)}
                 style={{
-                  flex: 1,
+                  flex: 0.8,
                   paddingVertical: 16,
                   backgroundColor: '#FF9F0A',
                   borderRadius: 12,
@@ -966,7 +1001,30 @@ export default function TaskDetail() {
                   elevation: 6,
                 }}
               >
-                <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Edit</Text>
+                <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>Edit</Text>
+              </Pressable>
+            )}
+
+            {/* Mark Done button - only show if task is not already done */}
+            {task?.status !== 'DONE' && (
+              <Pressable
+                onPress={markTaskAsDone}
+                style={{
+                  flex: 1.2,
+                  paddingVertical: 16,
+                  backgroundColor: '#32D74B',
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  shadowColor: '#32D74B',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+              >
+                <Text style={{ color: 'white', fontWeight: '700', fontSize: 13, textAlign: 'center' }}>
+                  {task?.labelDone ? 'Mark Done' : 'Request Done Approval'}
+                </Text>
               </Pressable>
             )}
 
@@ -974,7 +1032,7 @@ export default function TaskDetail() {
             <Pressable
               onPress={() => router.push('/tasks')}
               style={{
-                flex: userRole === 'ADMIN' || !task?.wasAddedByAdmin ? 1 : 1, // Always take full width if no edit button
+                flex: 0.8,
                 paddingVertical: 16,
                 backgroundColor: '#0A84FF',
                 borderRadius: 12,
@@ -986,7 +1044,7 @@ export default function TaskDetail() {
                 elevation: 6,
               }}
             >
-              <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Back</Text>
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>Back</Text>
             </Pressable>
           </View>
         </View>

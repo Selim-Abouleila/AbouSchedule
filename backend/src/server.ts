@@ -429,6 +429,8 @@ f.get('/:id', async (req: any, rep) => {
       readByUser: true,
       readAt: true,
       wasAddedByAdmin: true,
+      labelDone: true,
+      requiresCompletionApproval: true,
       images: true,
       documents: true,
       videos: true,
