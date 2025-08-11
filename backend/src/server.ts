@@ -605,10 +605,11 @@ f.get('/:id', async (req: any, rep) => {
       // only copy when the new status is NOT 'DONE'
       data.previousStatus = status;
     }
-    /// ❸b · If the user changed any recurrence field, recompute nextOccurrence
-    const existing = await prisma.task.findUnique({
+    /* ❸a · Check if task was added by admin and prevent regular users from editing */
+    const taskCheck = await prisma.task.findUnique({
       where: { id, userId },
       select: {
+        wasAddedByAdmin: true,
         dueAt: true,
         recurrence: true,
         recurrenceEvery: true,
@@ -618,7 +619,15 @@ f.get('/:id', async (req: any, rep) => {
         recurrenceEnd: true,
       },
     });
-    if (!existing) return rep.code(404).send({ error: "Task not found" });
+    if (!taskCheck) return rep.code(404).send({ error: "Task not found" });
+
+    /* Check if regular user is trying to edit an admin-created task */
+    if (taskCheck.wasAddedByAdmin && req.user.role !== 'ADMIN') {
+      return rep.code(403).send({ error: "Cannot edit tasks created by admin" });
+    }
+
+    /// ❸b · If the user changed any recurrence field, recompute nextOccurrence */
+    const existing = taskCheck;
 
     const recFieldsChanged =
       recurrence !== undefined ||
@@ -1086,6 +1095,7 @@ app.register(async (f) => {
         labelDone: done,
         lastOccurrence: null,
         nextOccurrence: firstNextOccurrence,
+        wasAddedByAdmin: true,
         userId
       }
     });

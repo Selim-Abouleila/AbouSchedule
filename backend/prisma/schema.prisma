@@ -48,6 +48,7 @@ model Task {
   readAt          DateTime?  @map("read_at")
   /// Track if task has been read by the assigned user
   readByUser      Boolean?   @default(false) @map("read_by_user")
+  wasAddedByAdmin Boolean?   @default(false) @map("was_added_by_admin")
   size            Size       @default(NORMAL)
   documents       Document[]
   images          Image[]

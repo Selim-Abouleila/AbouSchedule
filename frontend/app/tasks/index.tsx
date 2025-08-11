@@ -21,6 +21,7 @@ type Task = {
   images:   { id:number; url:string }[];
   documents: { id:number; url:string }[];
   videos:   { id:number; url:string }[];
+  wasAddedByAdmin?: boolean;
 };
 
 const statusColor: Record<Task['status'], string> = {
@@ -147,13 +148,15 @@ export default function TaskList() {
       });
       const payload = await res.json();
 
-      const newTasks: Task[] = (payload.tasks ?? []).map((t: any) => ({
-        ...t,
-        priority: t.priority ?? 'NONE',
-        images: Array.isArray(t.images) ? t.images : [],
-        documents:  Array.isArray(t.documents)  ? t.documents  : [],
-        recurrence: t.recurrence ?? 'NONE',
-      }));
+             const newTasks: Task[] = (payload.tasks ?? []).map((t: any) => ({
+         ...t,
+         priority: t.priority ?? 'NONE',
+         images: Array.isArray(t.images) ? t.images : [],
+         documents:  Array.isArray(t.documents)  ? t.documents  : [],
+         videos: Array.isArray(t.videos) ? t.videos : [],
+         recurrence: t.recurrence ?? 'NONE',
+         wasAddedByAdmin: t.wasAddedByAdmin ?? false,
+       }));
 
       setTasks(prev => (replace ? newTasks : [...prev, ...newTasks]));
       setNextCursor(payload.nextCursor);
@@ -211,6 +214,7 @@ useEffect(() => {
   const isImmediate = item.priority === 'IMMEDIATE';
   const imgCount = item.images?.length ?? 0;
   const docCount = item.documents?.length ?? 0;
+  const videoCount = item.videos?.length ?? 0;
   const label    = statusLabel[item.status];
 
     return (
@@ -334,16 +338,36 @@ useEffect(() => {
               </View>
             )}
 
-          {imgCount > 0 && (
-            <Text style={{ color: '#6e6e6e', fontSize: 13, fontWeight: '600' }}>
-              {imgCount} image{imgCount > 1 ? 's' : ''}
-            </Text>
-          )}
-
-          {docCount > 0 && (                                          /* 👈 NEW  */
-            <Text style={{ color: '#6e6e6e', fontSize: 13, fontWeight: '600' }}>
-              {docCount} doc{docCount > 1 ? 's' : ''}
-            </Text>
+          {/* Media indicators */}
+          {(imgCount > 0 || videoCount > 0 || docCount > 0) && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {imgCount > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="image" size={12} color="#6e6e6e" style={{ marginRight: 4 }} />
+                  <Text style={{ color: '#6e6e6e', fontSize: 12, fontWeight: '500' }}>
+                    {imgCount}
+                  </Text>
+                </View>
+              )}
+              
+              {videoCount > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="videocam" size={12} color="#6e6e6e" style={{ marginRight: 4 }} />
+                  <Text style={{ color: '#6e6e6e', fontSize: 12, fontWeight: '500' }}>
+                    {videoCount}
+                  </Text>
+                </View>
+              )}
+              
+              {docCount > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="document" size={12} color="#6e6e6e" style={{ marginRight: 4 }} />
+                  <Text style={{ color: '#6e6e6e', fontSize: 12, fontWeight: '500' }}>
+                    {docCount}
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
         </View>
 
