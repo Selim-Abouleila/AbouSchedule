@@ -104,6 +104,9 @@ export default function TaskDetail() {
   const [viewerNonce, setViewerNonce] = useState(0);
   // Video player state
   const [playingVideo, setPlayingVideo] = useState<{ uri: string; index: number } | null>(null);
+  // Loading states
+  const [openingDocument, setOpeningDocument] = useState(false);
+  const [openingDocumentName, setOpeningDocumentName] = useState('');
 
   // helper so the thumbnail onPress is cleaner
   const openViewer = (idx: number) => {
@@ -116,11 +119,17 @@ export default function TaskDetail() {
   const openDocument = async (url: string) => {
     console.log('Attempting to open document:', url);
     
-    // Get filename from URL
+    // Set loading state
     const filename = getDocFileName(url);
-    // Clean filename for sharing by removing AWS S3 key prefix
     const cleanFilename = getCleanFileName(filename);
-    const fileUri = `${FileSystem.documentDirectory}documents/${filename}`;
+    const decodedFilename = decodeURIComponent(cleanFilename);
+    setOpeningDocumentName(decodedFilename);
+    setOpeningDocument(true);
+    
+    try {
+      // Get filename from URL
+      // Clean filename for sharing by removing AWS S3 key prefix
+      const fileUri = `${FileSystem.documentDirectory}documents/${filename}`;
     
     // Check if file exists locally
     const info = await FileSystem.getInfoAsync(fileUri);
@@ -192,43 +201,29 @@ export default function TaskDetail() {
     
     console.log('MIME type:', mimeType);
     
-    if (Platform.OS === 'android') {
-      console.log('Using Android IntentLauncher');
-      const result = await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-        data: fileUri,
-        flags: 1,
-        type: mimeType,
-      });
-      if (result.resultCode !== 0) {
+    // Use Sharing to open the document (works on both iOS and Android)
+    console.log('Using Sharing to open document');
+    try {
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: mimeType,
+          dialogTitle: 'Open Document',
+          UTI: Platform.OS === 'ios' ? getUTIForExtension(extension || '') : undefined
+        });
+      } else {
+        Alert.alert('Error', 'Sharing is not available on this device');
+      }
+          } catch (error) {
+        console.error('Error sharing document:', error);
         Alert.alert('Error', 'Could not open document');
       }
-    } else {
-      console.log('Using iOS Sharing');
-      try {
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          // Create a copy with clean filename for sharing
-          const cleanFileUri = `${FileSystem.documentDirectory}documents/${cleanFilename}`;
-          await FileSystem.copyAsync({
-            from: fileUri,
-            to: cleanFileUri
-          });
-          
-          await Sharing.shareAsync(cleanFileUri, {
-            mimeType: mimeType,
-            dialogTitle: 'Open Document',
-            UTI: getUTIForExtension(extension || '')
-          });
-          
-          // Clean up the temporary file
-          await FileSystem.deleteAsync(cleanFileUri, { idempotent: true });
-        } else {
-          Alert.alert('Error', 'Sharing is not available on this device');
-        }
-      } catch (error) {
-        console.error('Error sharing document on iOS:', error);
-        Alert.alert('Error', 'Could not share document');
-      }
+    } catch (error) {
+      console.error('Error in openDocument:', error);
+      Alert.alert('Error', 'Could not open document');
+        } finally {
+      setOpeningDocument(false);
+      setOpeningDocumentName('');
     }
   };
 
@@ -469,11 +464,11 @@ export default function TaskDetail() {
             <Text style={{ fontWeight: '600', color: '#666' }}>Status</Text>
             <Text style={{ color: '#1a1a1a' }}>{task.status}</Text>
           </View>
-          {task.timeCapMinutes && (
+          {task.timeCapMinutes !== null && task.timeCapMinutes !== undefined && task.timeCapMinutes > 0 && (
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Time Cap</Text>
               <Text style={{ color: '#1a1a1a' }}>
-                {Math.floor(task.timeCapMinutes / 60)}h {task.timeCapMinutes % 60}min
+                {String(Math.floor(task.timeCapMinutes / 60))}h {String(task.timeCapMinutes % 60)}min
               </Text>
             </View>
           )}
@@ -510,7 +505,7 @@ export default function TaskDetail() {
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Every</Text>
-              <Text style={{ color: '#1a1a1a' }}>{task.recurrenceEvery ?? 1}</Text>
+              <Text style={{ color: '#1a1a1a' }}>{task.recurrenceEvery !== null && task.recurrenceEvery !== undefined ? task.recurrenceEvery : 1}</Text>
             </View>
 
             {/* ─── specific target day/date ─── */}
@@ -519,7 +514,7 @@ export default function TaskDetail() {
                 <Text style={{ fontWeight: '600', color: '#666' }}>Day of week</Text>
                 <Text style={{ color: '#1a1a1a' }}>
                   {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-                  [task.recurrenceDow ?? 1]}
+                  [task.recurrenceDow !== null && task.recurrenceDow !== undefined ? task.recurrenceDow : 1]}
                 </Text>
               </View>
             )}
@@ -527,7 +522,7 @@ export default function TaskDetail() {
             {task.recurrence === 'MONTHLY' && (
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                 <Text style={{ fontWeight: '600', color: '#666' }}>Day of month</Text>
-                <Text style={{ color: '#1a1a1a' }}>{task.recurrenceDom ?? 1}</Text>
+                <Text style={{ color: '#1a1a1a' }}>{task.recurrenceDom !== null && task.recurrenceDom !== undefined ? task.recurrenceDom : 1}</Text>
               </View>
             )}
 
@@ -538,7 +533,7 @@ export default function TaskDetail() {
                   {`${[
                     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-                  ][(task.recurrenceMonth ?? 1) - 1]} ${task.recurrenceDom ?? 1}`}
+                  ][(task.recurrenceMonth !== null && task.recurrenceMonth !== undefined ? task.recurrenceMonth : 1) - 1]} ${task.recurrenceDom !== null && task.recurrenceDom !== undefined ? task.recurrenceDom : 1}`}
                 </Text>
               </View>
             )}
@@ -670,11 +665,18 @@ export default function TaskDetail() {
                   style={{ position: 'relative', marginRight: 12 }}
                 >
                   <View style={{ position: 'relative' }}>
-                    <Image
-                      source={{ uri: video.thumbnail || video.url }}
-                      style={{ width: 160, height: 160, borderRadius: 8 }}
-                      resizeMode="cover"
-                    />
+                    <View
+                      style={{
+                        width: 160,
+                        height: 160,
+                        borderRadius: 8,
+                        backgroundColor: '#f0f0f0',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 48, color: '#666' }}>🎬</Text>
+                    </View>
                     
                     {/* Play button overlay */}
                     <View style={{
@@ -1014,6 +1016,38 @@ export default function TaskDetail() {
         </View>
       </Modal>
 
+      {/* Document Loading Overlay */}
+      <Modal
+        visible={openingDocument}
+        transparent
+        animationType="fade"
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            alignItems: 'center',
+            minWidth: 200,
+          }}>
+            <ActivityIndicator size="large" color="#0A84FF" style={{ marginBottom: 16 }} />
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+              Opening Document
+            </Text>
+            <Text style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>
+              {openingDocumentName}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', marginTop: 8 }}>
+              Please wait...
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 

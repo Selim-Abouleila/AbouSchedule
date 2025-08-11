@@ -20,6 +20,7 @@ type Task = {
   recurrence: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
   images:   { id:number; url:string }[];
   documents: { id:number; url:string }[];
+  videos:   { id:number; url:string }[];
 };
 
 const statusColor: Record<Task['status'], string> = {

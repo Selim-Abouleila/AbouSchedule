@@ -310,7 +310,7 @@ f.get('/', async (req: any, rep) => {
     skip: cursor ? 1 : 0,
     ...(cursor && { cursor: { id: cursor } }),
     orderBy,                               // ✅ now valid
-    include: { images: true, documents: true },
+    include: { images: true, documents: true, videos: true },
   });
 
   const nextCursor =
@@ -325,9 +325,10 @@ f.get('/', async (req: any, rep) => {
     const userId = req.user.sub as number;
 
     /* fetch original DB rows */
-    const [images, docs] = await Promise.all([
+    const [images, docs, videos] = await Promise.all([
       prisma.image.findMany({ where: { task: { userId } } }),
       prisma.document.findMany({ where: { task: { userId } } }),
+      prisma.video.findMany({ where: { task: { userId } } }),
     ]);
 
     /* add thumbUrl for each image row */
@@ -383,7 +384,7 @@ f.get('/', async (req: any, rep) => {
       })
     );
 
-    return { images: thumbImages, documents: documentsWithSignedUrls };
+    return { images: thumbImages, documents: documentsWithSignedUrls, videos };
   });
 
 
@@ -904,6 +905,7 @@ app.register(async (f) => {
       include: { 
         images: true, 
         documents: true,
+        videos: true,
         user: {
           select: {
             id: true,

@@ -21,6 +21,7 @@ import DateTimePicker, {
 
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from 'expo-document-picker';
+import { Video, ResizeMode } from 'expo-av';
 import { StyleSheet } from 'react-native';
 
 import { Picker } from "@react-native-picker/picker";
@@ -29,6 +30,7 @@ import { endpoints } from "../../src/api";
 import { getToken } from "../../src/auth";
 import { useNavigation } from "@react-navigation/native";
 import { compressImages } from "../../src/imageCompression";
+import { compressVideos } from "../../src/videoCompression";
 
 /*  --- enums reused from AddTask ---  */
 const PRIORITIES = ["NONE", "ONE", "TWO", "THREE", "IMMEDIATE", "RECURRENT"] as const;
@@ -44,6 +46,10 @@ type TaskPhoto = ImagePicker.ImagePickerAsset & {
 
 type TaskDoc = DocumentPicker.DocumentPickerAsset & {
   id?: number;          // present for documents that already exist in the DB
+};
+
+type TaskVideo = ImagePicker.ImagePickerAsset & {
+  id?: number;          // present for videos that already exist in the DB
 };
 
 
@@ -133,13 +139,18 @@ export default function EditTask() {
     const [photos, setPhotos] = useState<TaskPhoto[]>([]);
     // after photos state
     const [docs, setDocs] = useState<TaskDoc[]>([]);
+    const [videos, setVideos] = useState<TaskVideo[]>([]);
     const [removedDocs, setRemovedDocs] = useState(false);
 
     
     /* selection sets */
     const [selectedPhotos, setSelectedPhotos] = useState<Set<number>>(new Set());
     const [selectedDocs, setSelectedDocs] = useState<Set<number>>(new Set());
-    const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0;
+    const [selectedVideos, setSelectedVideos] = useState<Set<number>>(new Set());
+    const [playingVideo, setPlayingVideo] = useState<{ uri: string; index: number } | null>(null);
+    const hasSelection = selectedPhotos.size > 0 || selectedDocs.size > 0 || selectedVideos.size > 0;
+
+
 
 
     /* For reccurance */
@@ -206,6 +217,7 @@ export default function EditTask() {
         timeCapM: number;
         photosIds: number[];   // ids only!
         docsIds: number[];
+        videosIds: number[];   // ids only!
     }>(null);
 
 
@@ -269,20 +281,31 @@ export default function EditTask() {
             return next;
         });
 
+    const toggleVideo = (idx: number) =>
+        setSelectedVideos(prev => {
+            const next = new Set(prev);
+            next.has(idx) ? next.delete(idx) : next.add(idx);
+            return next;
+        });
+
     /* bulk‑delete + cancel */
     const deleteChecked = () => {
         if (selectedPhotos.size)
             setPhotos(p => p.filter((_, i) => !selectedPhotos.has(i)));
         if (selectedDocs.size)
             setDocs(d => d.filter((_, i) => !selectedDocs.has(i)));
+        if (selectedVideos.size)
+            setVideos(v => v.filter((_, i) => !selectedVideos.has(i)));
         setSelectedPhotos(new Set());
         setSelectedDocs(new Set());
+        setSelectedVideos(new Set());
         setRemovedSomething(true);          // keeps your “onlyScalars” logic intact
     };
 
     const abortDelete = () => {
         setSelectedPhotos(new Set());
         setSelectedDocs(new Set());
+        setSelectedVideos(new Set());
     };
 
 
@@ -340,13 +363,25 @@ export default function EditTask() {
         }
     };
 
-    /** launch device camera and push the result into `photos` */
     const takePhoto = async () => {
-        // ask only once – Expo caches the user’s choice
+        // ask only once – Expo caches the user's choice
         const { granted } = await ImagePicker.requestCameraPermissionsAsync();
         if (!granted) { Alert.alert('Camera access was denied'); return; }
 
-        if (photos.length >= 6) {             // same limit you use elsewhere
+        // Show dialog to choose between photo and video
+        Alert.alert(
+            'Camera',
+            'What would you like to capture?',
+            [
+                { text: 'Photo', onPress: () => takePhotoOnly() },
+                { text: 'Video', onPress: () => takeVideoOnly() },
+                { text: 'Cancel', style: 'cancel' }
+            ]
+        );
+    };
+
+    const takePhotoOnly = async () => {
+        if (photos.length >= 6) {
             Alert.alert('Maximum 6 pictures');
             return;
         }
@@ -354,7 +389,8 @@ export default function EditTask() {
         setPickingCamera(true);
         try {
             const res = await ImagePicker.launchCameraAsync({
-                quality: 0.9,            // 90 % JPEG
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                quality: 0.9,
                 allowsEditing: false,
                 exif: false,
             });
@@ -367,25 +403,72 @@ export default function EditTask() {
         }
     };
 
+    const takeVideoOnly = async () => {
+        if (videos.length >= 6) {
+            Alert.alert('Maximum 6 videos');
+            return;
+        }
 
-
-
-
-    /* pick image(s) */
-    const pickImages = async () => {
-        setPickingGallery(true);
+        setPickingCamera(true);
         try {
-            const res = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsMultipleSelection: true,
-                selectionLimit: 6,
+            const res = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+                videoMaxDuration: 60,
+                allowsEditing: false,
             });
 
             if (!res.canceled && res.assets?.length) {
-                setPhotos(prev => [
-                    ...prev,
-                    ...(res.assets as TaskPhoto[])
-                ]);
+                setVideos(prev => [...prev, ...res.assets]);
+            }
+        } finally {
+            setPickingCamera(false);
+        }
+    };
+
+
+
+
+    /* pick image(s) and video(s) */
+    const pickImages = async () => {
+        // Check photo library permissions
+        const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!granted) {
+            Alert.alert('Photo library access was denied');
+            return;
+        }
+
+        setPickingGallery(true);
+        try {
+            const res = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                allowsMultipleSelection: true,
+                selectionLimit: 6,
+                videoMaxDuration: 60, // 60 seconds max
+                // iOS-specific options
+                ...(Platform.OS === 'ios' && {
+                    allowsEditing: false,
+                    aspect: [1, 1], // Square aspect ratio for consistency
+                }),
+            });
+
+            if (!res.canceled && res.assets?.length) {
+                console.log('📹 Media selected from gallery:', res.assets);
+                
+                // Separate images and videos based on MIME type
+                const images = res.assets.filter(asset => 
+                    asset.mimeType?.startsWith('image/')
+                );
+                const videos = res.assets.filter(asset => 
+                    asset.mimeType?.startsWith('video/')
+                );
+                
+                // Add to respective state arrays
+                if (images.length > 0) {
+                    setPhotos(prev => [...prev, ...images]);
+                }
+                if (videos.length > 0) {
+                    setVideos(prev => [...prev, ...videos]);
+                }
             }
         } finally {
             setPickingGallery(false);
@@ -432,6 +515,7 @@ export default function EditTask() {
     const [pickingCamera, setPickingCamera] = useState(false);
     const [pickingGallery, setPickingGallery] = useState(false);
     const [pickingDocs, setPickingDocs] = useState(false);
+    const [pickingVideos, setPickingVideos] = useState(false);
 
     /* --------- fetch current task once (runs whenever `id` changes) ----- */
     useEffect(() => {
@@ -533,6 +617,20 @@ export default function EditTask() {
                     )
                 );
 
+                /* ⑤ videos from the server */
+                console.log('🎬 Loading videos from server:', t.videos);
+                setVideos(
+                    (Array.isArray(t.videos) ? t.videos : []).map(
+                        (v: { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }) => ({
+                            id: v.id,
+                            uri: v.url,
+                            mimeType: v.mime,
+                            fileName: v.fileName,
+                            duration: v.duration,
+                        }) as TaskVideo
+                    )
+                );
+
                 /* ─── time‑cap ─── */
                 let capH = 0, capM = 0;
                 if (t.timeCapMinutes) {
@@ -554,6 +652,7 @@ export default function EditTask() {
                     timeCapM: capM,
                     photosIds: (t.images ?? []).map((img: any) => img.id).sort(),
                     docsIds: (t.documents ?? []).map((d: any) => d.id).sort(),
+                    videosIds: (t.videos ?? []).map((v: any) => v.id).sort(),
                 };
             } catch (e) {
                 if (!cancelled) {
@@ -603,10 +702,15 @@ const save = async () => {
   const keepDocIds = docs.filter(d => d.id).map(d => d.id as number);
   const newDocs    = docs.filter(d => !d.id);
 
+  // ----- videos -----
+  const keepVideoIds = videos.filter(v => v.id).map(v => v.id as number);
+  const newVideos    = videos.filter(v => !v.id);
+
   // decide if we can use JSON
   const isOnlyScalars =
     newPhotos.length === 0 &&
     newDocs.length   === 0 &&
+    newVideos.length === 0 &&
     removedSomething === false &&
     removedDocs      === false;
 
@@ -625,6 +729,7 @@ const save = async () => {
       labelDone,
       keep:      keepImgIds.join(','),     // images
       keepDocs:  keepDocIds.join(','),     // documents
+      keepVideos: keepVideoIds.join(','),  // videos
     };
 
     if (recurring) {
@@ -682,6 +787,7 @@ const save = async () => {
 
     form.append('keep',     keepImgIds.join(','));   // images to keep
     form.append('keepDocs', keepDocIds.join(','));   // docs to keep
+    form.append('keepVideos', keepVideoIds.join(','));   // videos to keep
 
     // Compress new images before uploading
     if (newPhotos.length > 0) {
@@ -707,6 +813,23 @@ const save = async () => {
         type: (d as any).mimeType ?? 'application/octet-stream',
       } as any)
     );
+
+    // Compress new videos before uploading
+    if (newVideos.length > 0) {
+      setUploadProgress('Processing videos...');
+      const videoUris = newVideos.map(v => v.uri);
+      const compressedVideos = await compressVideos(videoUris);
+      
+      // Use compressed videos for upload
+      compressedVideos.forEach((compressed, idx) => {
+        const originalVideo = newVideos[idx];
+        form.append(`video${idx}`, {
+          uri: compressed.uri,
+          name: originalVideo.fileName ?? `video${idx}.mp4`,
+          type: originalVideo.mimeType ?? 'video/mp4',
+        } as any);
+      });
+    }
 
     setUploadProgress('Uploading files...');
     
@@ -1209,8 +1332,70 @@ const handleBack = useCallback(() => {
                                     ]}
                                 />
                             </Pressable>
+                        ))}
 
-                                ))}
+                        {videos.map((v, i) => (
+                            <Pressable
+                                key={`video-${i}`}
+                                onPress={() => setPlayingVideo({ uri: v.uri, index: i })}
+                                onLongPress={() =>
+                                    Alert.alert('Remove video', 'Delete this video?', [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        {
+                                            text: 'Delete', style: 'destructive',
+                                            onPress: () => {
+                                                setVideos(prev => prev.filter((_, j) => j !== i));
+                                                setRemovedSomething(true);
+                                            },
+                                        },
+                                    ])
+                                }>
+                                <View style={{ position: 'relative' }}>
+                                    <Image
+                                        source={{ uri: v.uri }}
+                                        style={[
+                                            styles.thumb,
+                                            selectedVideos.has(i) && {
+                                                opacity: 0.4,
+                                                borderWidth: 2,
+                                                borderColor: '#0A84FF',
+                                            },
+                                        ]}
+                                    />
+                                    {/* Play button overlay */}
+                                    <View style={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: '50%',
+                                        transform: [{ translateX: -15 }, { translateY: -15 }],
+                                        width: 30,
+                                        height: 30,
+                                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                                        borderRadius: 15,
+                                        justifyContent: 'center',
+                                        alignItems: 'center',
+                                    }}>
+                                        <Text style={{ color: '#fff', fontSize: 16 }}>▶️</Text>
+                                    </View>
+                                    {/* Duration overlay */}
+                                    {v.duration && (
+                                        <View style={{
+                                            position: 'absolute',
+                                            bottom: 4,
+                                            right: 4,
+                                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                                            paddingHorizontal: 4,
+                                            paddingVertical: 2,
+                                            borderRadius: 4,
+                                        }}>
+                                            <Text style={{ color: '#fff', fontSize: 10 }}>
+                                                {Math.round(v.duration / 1000)}s
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </Pressable>
+                        ))}
                               </View>
                     
                                                              {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
@@ -1333,7 +1518,7 @@ const handleBack = useCallback(() => {
                     {hasSelection && (
                         <View style={{ flexDirection: 'row', gap: 12 }}>
                             <Button
-                                title={`Delete ${selectedPhotos.size + selectedDocs.size} selected`}
+                                title={`Delete ${selectedPhotos.size + selectedDocs.size + selectedVideos.size} selected`}
                                 color="#FF3B30"
                                 onPress={() =>
                                     Alert.alert('Delete selected', 'Remove all chosen items?', [
@@ -1382,6 +1567,52 @@ const handleBack = useCallback(() => {
                      {uploadProgress}
                    </Text>
                  </View>
+               </View>
+             </Modal>
+
+             {/* Video Player Modal */}
+             <Modal
+               visible={playingVideo !== null}
+               animationType="slide"
+               presentationStyle="fullScreen"
+             >
+               <View style={{
+                 flex: 1,
+                 backgroundColor: 'black',
+                 justifyContent: 'center',
+                 alignItems: 'center',
+               }}>
+                 <View style={{
+                   position: 'absolute',
+                   top: 50,
+                   left: 20,
+                   zIndex: 10,
+                 }}>
+                   <Pressable
+                     onPress={() => setPlayingVideo(null)}
+                     style={{
+                       backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                       borderRadius: 20,
+                       padding: 10,
+                     }}
+                   >
+                     <Text style={{ color: 'white', fontSize: 18 }}>✕</Text>
+                   </Pressable>
+                 </View>
+                 
+                 {playingVideo && (
+                   <Video
+                     source={{ uri: playingVideo.uri }}
+                     style={{
+                       width: '100%',
+                       height: '100%',
+                     }}
+                     useNativeControls
+                     resizeMode={ResizeMode.CONTAIN}
+                     shouldPlay
+                     isLooping={false}
+                   />
+                 )}
                </View>
              </Modal>
          </KeyboardAvoidingView>

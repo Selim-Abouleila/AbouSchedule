@@ -83,6 +83,11 @@ export default function AdminTaskDetail() {
   const [viewerNonce, setViewerNonce] = useState(0);
   // Video player state
   const [playingVideo, setPlayingVideo] = useState<{ uri: string; index: number } | null>(null);
+  // Loading states
+  const [openingDocument, setOpeningDocument] = useState(false);
+  const [openingDocumentName, setOpeningDocumentName] = useState('');
+  const [sharingDocument, setSharingDocument] = useState(false);
+  const [sharingDocumentName, setSharingDocumentName] = useState('');
 
   const openViewer = (idx: number) => {
     setViewerIndex(idx);
@@ -92,14 +97,25 @@ export default function AdminTaskDetail() {
 
   const openDocument = async (doc: { url: string; fileName?: string }) => {
     try {
-      if (Platform.OS === 'ios') {
-        await Linking.openURL(doc.url);
-      } else {
-        // Android: download and open
-        const filename = doc.fileName || doc.url.split('/').pop() || 'document';
+      // Set loading state
+      const filename = doc.fileName || doc.url.split('/').pop() || 'document';
+      const cleanFilename = getCleanFileName(filename);
+      const decodedFilename = decodeURIComponent(cleanFilename);
+      setOpeningDocumentName(decodedFilename);
+      setOpeningDocument(true);
+
+      // Download the document first
+      const fileUri = `${FileSystem.documentDirectory}${cleanFilename}`;
+      
+      // Check if file exists locally
+      const info = await FileSystem.getInfoAsync(fileUri);
+      
+      if (!info.exists) {
+        // Download the file
+        console.log('Downloading document:', doc.url, 'to:', fileUri);
         const downloadResumable = FileSystem.createDownloadResumable(
           doc.url,
-          FileSystem.documentDirectory + filename,
+          fileUri,
           {},
           (downloadProgress) => {
             const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
@@ -108,38 +124,98 @@ export default function AdminTaskDetail() {
         );
 
         const result = await downloadResumable.downloadAsync();
-        if (result) {
-          await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-            data: result.uri,
-            flags: 1,
-          });
+        if (!result) {
+          throw new Error('Failed to download document');
+        }
+      }
+
+      // Use Sharing to open the document (works on both iOS and Android)
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: getMimeType(filename),
+          dialogTitle: 'Open Document',
+        });
+      } else {
+        // Fallback to Linking for iOS
+        if (Platform.OS === 'ios') {
+          await Linking.openURL(doc.url);
+        } else {
+          Alert.alert('Error', 'Sharing is not available on this device');
         }
       }
     } catch (error) {
       console.error('Error opening document:', error);
       Alert.alert('Error', 'Could not open document');
+    } finally {
+      setOpeningDocument(false);
+      setOpeningDocumentName('');
+    }
+  };
+
+  const getMimeType = (filename: string): string => {
+    const extension = filename.split('.').pop()?.toLowerCase();
+    switch (extension) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'ppt':
+        return 'application/vnd.ms-powerpoint';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'txt':
+        return 'text/plain';
+      default:
+        return 'application/octet-stream';
     }
   };
 
   const shareDocument = async (doc: { url: string; fileName?: string }) => {
     try {
+      // Set loading state
+      const filename = doc.fileName || doc.url.split('/').pop() || 'document';
+      const cleanFilename = getCleanFileName(filename);
+      const decodedFilename = decodeURIComponent(cleanFilename);
+      setSharingDocumentName(decodedFilename);
+      setSharingDocument(true);
+
       if (Platform.OS === 'ios') {
         await Sharing.shareAsync(doc.url);
       } else {
         // Android: download first, then share
-        const filename = doc.fileName || doc.url.split('/').pop() || 'document';
-        const downloadResumable = FileSystem.createDownloadResumable(
-          doc.url,
-          FileSystem.documentDirectory + filename,
-        );
-        const result = await downloadResumable.downloadAsync();
-        if (result) {
-          await Sharing.shareAsync(result.uri);
+        const fileUri = `${FileSystem.documentDirectory}${cleanFilename}`;
+        
+        // Check if file exists locally
+        const info = await FileSystem.getInfoAsync(fileUri);
+        
+        if (!info.exists) {
+          // Download the file
+          console.log('Downloading document for sharing:', doc.url, 'to:', fileUri);
+          const downloadResumable = FileSystem.createDownloadResumable(
+            doc.url,
+            fileUri,
+          );
+          const result = await downloadResumable.downloadAsync();
+          if (!result) {
+            throw new Error('Failed to download document');
+          }
         }
+        
+        await Sharing.shareAsync(fileUri);
       }
     } catch (error) {
       console.error('Error sharing document:', error);
       Alert.alert('Error', 'Could not share document');
+    } finally {
+      setSharingDocument(false);
+      setSharingDocumentName('');
     }
   };
 
@@ -356,6 +432,43 @@ export default function AdminTaskDetail() {
     );
   }
 
+  // Additional safety check to ensure task has all required properties
+  if (!task.title || !task.status || !task.priority || !task.size) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <Ionicons name="alert-circle" size={48} color="#dc3545" />
+        <Text style={{ fontSize: 16, color: '#dc3545', marginTop: 8, textAlign: 'center' }}>
+          Task data is incomplete
+        </Text>
+        <Pressable
+          onPress={() => router.push('/admin')}
+          style={{
+            marginTop: 16,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            backgroundColor: '#0A84FF',
+            borderRadius: 8,
+          }}>
+          <Text style={{ color: 'white', fontWeight: '600' }}>Go back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // Helper function to safely render text
+  const safeText = (value: any, fallback: string = '') => {
+    if (value === null || value === undefined) {
+      console.log('Warning: Attempting to render null/undefined value:', value);
+      return fallback;
+    }
+    const stringValue = String(value);
+    if (stringValue === 'undefined' || stringValue === 'null') {
+      console.log('Warning: String conversion resulted in undefined/null:', value);
+      return fallback;
+    }
+    return stringValue;
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: '#f8f9fa' }}>
       {/* Header with back button and user info */}
@@ -380,7 +493,7 @@ export default function AdminTaskDetail() {
             Task for user:
           </Text>
           <Text style={{ fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>
-            {task.user?.username || task.user?.email || `User ID: ${userId}`}
+            {safeText(task.user?.username) || safeText(task.user?.email) || `User ID: ${safeText(userId, 'Unknown')}`}
           </Text>
         </View>
       </View>
@@ -411,7 +524,7 @@ export default function AdminTaskDetail() {
             }}
           />
           <Text style={{ fontSize: 22, fontWeight: '700', flexShrink: 1, color: '#1a1a1a' }}>
-            {task.title}
+            {safeText(task.title)}
           </Text>
         </View>
 
@@ -429,7 +542,7 @@ export default function AdminTaskDetail() {
             elevation: 2,
           }}>
             <Text style={{ fontSize: 16, lineHeight: 24, color: '#1a1a1a' }}>
-              {task.description}
+              {safeText(task.description)}
             </Text>
           </View>
         )}
@@ -448,30 +561,30 @@ export default function AdminTaskDetail() {
         }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text style={{ fontWeight: '600', color: '#666' }}>Priority</Text>
-            <Text style={{ color: '#1a1a1a' }}>{task.priority}</Text>
+            <Text style={{ color: '#1a1a1a' }}>{safeText(task.priority)}</Text>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text style={{ fontWeight: '600', color: '#666' }}>Size</Text>
-            <Text style={{ color: '#1a1a1a' }}>{task.size}</Text>
+            <Text style={{ color: '#1a1a1a' }}>{safeText(task.size)}</Text>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text style={{ fontWeight: '600', color: '#666' }}>Status</Text>
-            <Text style={{ color: '#1a1a1a' }}>{task.status}</Text>
+            <Text style={{ color: '#1a1a1a' }}>{safeText(task.status)}</Text>
           </View>
-          {task.timeCapMinutes && (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ fontWeight: '600', color: '#666' }}>Time Cap</Text>
-              <Text style={{ color: '#1a1a1a' }}>
-                {Math.floor(task.timeCapMinutes / 60)}h {task.timeCapMinutes % 60}min
-              </Text>
-            </View>
-          )}
-          {task.dueAt && (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontWeight: '600', color: '#666' }}>Due</Text>
-              <Text style={{ color: '#1a1a1a' }}>{new Date(task.dueAt).toLocaleString()}</Text>
-            </View>
-          )}
+                      {task.timeCapMinutes !== null && task.timeCapMinutes !== undefined && task.timeCapMinutes > 0 && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontWeight: '600', color: '#666' }}>Time Cap</Text>
+                <Text style={{ color: '#1a1a1a' }}>
+                  {safeText(Math.floor(task.timeCapMinutes / 60))}h {safeText(task.timeCapMinutes % 60)}min
+                </Text>
+              </View>
+            )}
+            {task.dueAt && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontWeight: '600', color: '#666' }}>Due</Text>
+                <Text style={{ color: '#1a1a1a' }}>{safeText(new Date(task.dueAt).toLocaleString())}</Text>
+              </View>
+            )}
         </View>
 
         {/* Read Status */}
@@ -551,25 +664,25 @@ export default function AdminTaskDetail() {
             {/* type & frequency */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Type</Text>
-              <Text style={{ color: '#1a1a1a', textTransform: 'capitalize' }}>{task.recurrence.toLowerCase()}</Text>
+              <Text style={{ color: '#1a1a1a', textTransform: 'capitalize' }}>{safeText(task.recurrence).toLowerCase()}</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Every</Text>
-              <Text style={{ color: '#1a1a1a' }}>{task.recurrenceEvery ?? 1}</Text>
+              <Text style={{ color: '#1a1a1a' }}>{safeText(task.recurrenceEvery !== null && task.recurrenceEvery !== undefined ? task.recurrenceEvery : 1)}</Text>
             </View>
 
             {/* next occurrence */}
             {task.nextOccurrence && (
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                 <Text style={{ fontWeight: '600', color: '#666' }}>Next</Text>
-                <Text style={{ color: '#1a1a1a' }}>{new Date(task.nextOccurrence).toLocaleDateString()}</Text>
+                <Text style={{ color: '#1a1a1a' }}>{safeText(new Date(task.nextOccurrence).toLocaleDateString())}</Text>
               </View>
             )}
             {/* recurrence end */}
             {task.recurrenceEnd && (
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ fontWeight: '600', color: '#666' }}>Ends</Text>
-                <Text style={{ color: '#1a1a1a' }}>{new Date(task.recurrenceEnd).toLocaleDateString()}</Text>
+                <Text style={{ color: '#1a1a1a' }}>{safeText(new Date(task.recurrenceEnd).toLocaleDateString())}</Text>
               </View>
             )}
           </View>
@@ -647,11 +760,18 @@ export default function AdminTaskDetail() {
                   style={{ position: 'relative', marginRight: 12 }}
                 >
                   <View style={{ position: 'relative' }}>
-                    <Image
-                      source={{ uri: video.thumbnail || video.url }}
-                      style={{ width: 160, height: 160, borderRadius: 8 }}
-                      resizeMode="cover"
-                    />
+                    <View
+                      style={{
+                        width: 160,
+                        height: 160,
+                        borderRadius: 8,
+                        backgroundColor: '#f0f0f0',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ fontSize: 48, color: '#666' }}>🎬</Text>
+                    </View>
                     
                     {/* Play button overlay */}
                     <View style={{
@@ -834,6 +954,72 @@ export default function AdminTaskDetail() {
               isLooping={false}
             />
           )}
+        </View>
+      </Modal>
+
+      {/* Document Loading Overlay */}
+      <Modal
+        visible={openingDocument}
+        transparent
+        animationType="fade"
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            alignItems: 'center',
+            minWidth: 200,
+          }}>
+            <ActivityIndicator size="large" color="#0A84FF" style={{ marginBottom: 16 }} />
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+              Opening Document
+            </Text>
+            <Text style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>
+              {openingDocumentName}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', marginTop: 8 }}>
+              Please wait...
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Document Sharing Loading Overlay */}
+      <Modal
+        visible={sharingDocument}
+        transparent
+        animationType="fade"
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            alignItems: 'center',
+            minWidth: 200,
+          }}>
+            <ActivityIndicator size="large" color="#28a745" style={{ marginBottom: 16 }} />
+            <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 8 }}>
+              Sharing Document
+            </Text>
+            <Text style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>
+              {sharingDocumentName}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', marginTop: 8 }}>
+              Please wait...
+            </Text>
+          </View>
         </View>
       </Modal>
     </View>
