@@ -10,12 +10,13 @@ import {
   Platform,
   Modal,
 } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-import { endpoints } from '../../src/api';
+import { endpoints, API_BASE } from '../../src/api';
 import { getToken }  from '../../src/auth';
 import { useFocusEffect } from "@react-navigation/native";
+import { jwtDecode } from 'jwt-decode';
 import ImageViewing from 'react-native-image-viewing';
 // ⬆️ new import
 import { Image as ExpoImage } from 'expo-image';
@@ -82,6 +83,7 @@ type Task = {
   images:    { id: number; url: string; mime: string }[];
   documents: { id: number; url: string; mime: string; name?: string }[];
   videos:    { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[];
+  wasAddedByAdmin?: boolean;
 };
 
 
@@ -97,6 +99,8 @@ export default function TaskDetail() {
   const [task, setTask]     = useState<Task | null>(null);
   const [loading, setLoad]  = useState(true);
   const [error, setError]   = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>('EMPLOYEE');
+  const navigation = useNavigation();
   // put near the other state hooks
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
@@ -360,7 +364,39 @@ export default function TaskDetail() {
   }
 }, [task]);
 
+  // Fetch user role from JWT token
+  useEffect(() => {
+    const loadUserRole = async () => {
+      try {
+        const token = await getToken();
+        if (token) {
+          const decoded = jwtDecode<{ sub: number; role: string }>(token);
+          setUserRole(decoded.role || 'EMPLOYEE');
+        }
+      } catch (e) {
+        // Silently fail, default to EMPLOYEE
+        setUserRole('EMPLOYEE');
+      }
+    };
 
+    loadUserRole();
+  }, []);
+
+  // Set up header with edit button
+  useEffect(() => {
+    const canEdit = userRole === 'ADMIN' || !task?.wasAddedByAdmin;
+    
+    navigation.setOptions({
+      headerRight: canEdit ? () => (
+        <Pressable
+          onPress={() => router.push(`/tasks/${id}/edit`)}
+          style={{ marginRight: 16 }}
+        >
+          <Ionicons name="create-outline" size={24} color="#0A84FF" />
+        </Pressable>
+      ) : undefined,
+    });
+  }, [navigation, task, userRole, id]);
 
   const deleteTask = () => {
     Alert.alert(

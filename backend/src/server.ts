@@ -408,7 +408,31 @@ f.get('/:id', async (req: any, rep) => {
   /* 2. fetch exactly what's in the DB */
   const task = await prisma.task.findFirst({
     where: { id: dbId, userId },
-    include: { images: true, documents: true, videos: true },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      size: true,
+      dueAt: true,
+      timeCapMinutes: true,
+      createdAt: true,
+      recurrence: true,
+      recurrenceEvery: true,
+      recurrenceDow: true,
+      recurrenceDom: true,
+      recurrenceMonth: true,
+      lastOccurrence: true,
+      nextOccurrence: true,
+      recurrenceEnd: true,
+      readByUser: true,
+      readAt: true,
+      wasAddedByAdmin: true,
+      images: true,
+      documents: true,
+      videos: true,
+    },
   });
 
   if (!task) return rep.code(404).send({ error: 'Task not found' });
