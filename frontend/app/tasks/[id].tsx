@@ -90,7 +90,7 @@ type Task = {
 
 const statusColor: Record<Task['status'], string> = {
   PENDING: '#FFD60A',
-  ACTIVE:  '#FF453A',
+  ACTIVE:  '#FF9F0A',
   DONE:    '#32D74B',
 };
 
@@ -469,9 +469,19 @@ export default function TaskDetail() {
               backgroundColor: statusColor[task.status],
             }}
           />
-          <Text style={{ fontSize: 22, fontWeight: '700', flexShrink: 1, color: '#1a1a1a' }}>
-            {task.title}
-          </Text>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 22, fontWeight: '700', flexShrink: 1, color: '#1a1a1a' }}>
+              {task.title}
+            </Text>
+            {task.priority === 'IMMEDIATE' && (
+              <Ionicons 
+                name="flame" 
+                size={20} 
+                color="#FF453A" 
+                style={{ marginLeft: 8 }} 
+              />
+            )}
+          </View>
         </View>
 
         {/* Meta */}

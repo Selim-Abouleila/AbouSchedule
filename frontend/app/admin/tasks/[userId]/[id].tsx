@@ -54,6 +54,7 @@ type Task = {
   recurrenceEnd: string | null;
   readByUser?: boolean;
   readAt?: string;
+  requiresCompletionApproval?: boolean;
   images: { id: number; url: string; mime: string }[];
   documents: { id: number; url: string; mime: string; fileName?: string }[];
   videos: { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[];
@@ -67,7 +68,7 @@ type Task = {
 
 const statusColor: Record<Task['status'], string> = {
   PENDING: '#FFD60A',
-  ACTIVE: '#FF453A',
+  ACTIVE: '#FF9F0A',
   DONE: '#32D74B',
 };
 
@@ -402,6 +403,45 @@ export default function AdminTaskDetail() {
     );
   };
 
+  const markTaskAsDone = async () => {
+    try {
+      const jwt = await getToken();
+      const res = await fetch(`${API_BASE}/admin/tasks/${id}/mark-done`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+      
+      const result = await res.json();
+      Alert.alert("Success", result.message || "Task marked as done");
+      
+      // Reload the task to reflect the changes
+      setLoad(true);
+      const loadTask = async () => {
+        try {
+          const jwt = await getToken();
+          const res = await fetch(endpoints.admin.userTask(parseInt(userId), parseInt(id)), {
+            headers: { Authorization: `Bearer ${jwt}` },
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const taskData = await res.json();
+          setTask(taskData);
+        } catch (e: any) {
+          setError(e.message);
+        } finally {
+          setLoad(false);
+        }
+      };
+      loadTask();
+    } catch (e: any) {
+      Alert.alert("Failed to mark task as done", e.message);
+    }
+  };
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -523,9 +563,51 @@ export default function AdminTaskDetail() {
               backgroundColor: statusColor[task.status],
             }}
           />
-          <Text style={{ fontSize: 22, fontWeight: '700', flexShrink: 1, color: '#1a1a1a' }}>
-            {safeText(task.title)}
-          </Text>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Text style={{ fontSize: 22, fontWeight: '700', flexShrink: 1, color: '#1a1a1a' }}>
+                {safeText(task.title)}
+              </Text>
+              {task.priority === 'IMMEDIATE' && (
+                <Ionicons 
+                  name="flame" 
+                  size={20} 
+                  color="#FF453A" 
+                  style={{ marginLeft: 8 }} 
+                />
+              )}
+            </View>
+            {task.requiresCompletionApproval && (
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#FFD60A15',
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: '#FFD60A30',
+                marginLeft: 12,
+              }}>
+                <View style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: '#FFD60A',
+                  marginRight: 6,
+                }} />
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  color: '#FFD60A',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}>
+                  Requires Approval
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Description */}
@@ -634,11 +716,37 @@ export default function AdminTaskDetail() {
           </View>
           
           {task.readAt && (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Read At</Text>
               <Text style={{ color: '#1a1a1a' }}>
                 {new Date(task.readAt).toLocaleString()}
               </Text>
+            </View>
+          )}
+          
+          {task.requiresCompletionApproval && (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontWeight: '600', color: '#666' }}>Approval</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: '#FFD60A',
+                    marginRight: 8,
+                  }}
+                />
+                <Text style={{ 
+                  color: '#FFD60A',
+                  fontWeight: '600',
+                  fontSize: 12,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}>
+                  REQUIRES APPROVAL
+                </Text>
+              </View>
             </View>
           )}
         </View>
@@ -874,28 +982,43 @@ export default function AdminTaskDetail() {
         )}
 
         {/* Action Buttons */}
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           <Pressable
             onPress={() => router.push(`/admin/tasks/${userId}/edit?id=${id}`)}
             style={{
-              flex: 1,
+              flex: 0.8,
               backgroundColor: '#0A84FF',
               paddingVertical: 12,
               borderRadius: 8,
               alignItems: 'center',
             }}>
-            <Text style={{ color: 'white', fontWeight: '600' }}>Edit Task</Text>
+            <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>Edit Task</Text>
           </Pressable>
+          {task.status !== 'DONE' && (
+            <Pressable
+              onPress={markTaskAsDone}
+              style={{
+                flex: 1.2,
+                backgroundColor: '#32D74B',
+                paddingVertical: 12,
+                borderRadius: 8,
+                alignItems: 'center',
+              }}>
+              <Text style={{ color: 'white', fontWeight: '600', fontSize: 13, textAlign: 'center' }}>
+                {task.requiresCompletionApproval ? 'Approve Done' : 'Mark Done'}
+              </Text>
+            </Pressable>
+          )}
           <Pressable
             onPress={deleteTask}
             style={{
-              flex: 1,
+              flex: 0.8,
               backgroundColor: '#dc3545',
               paddingVertical: 12,
               borderRadius: 8,
               alignItems: 'center',
             }}>
-            <Text style={{ color: 'white', fontWeight: '600' }}>Delete Task</Text>
+            <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>Delete Task</Text>
           </Pressable>
         </View>
       </ScrollView>

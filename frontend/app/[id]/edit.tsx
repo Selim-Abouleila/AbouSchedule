@@ -508,9 +508,9 @@ export default function EditTask() {
     };
 
 
-    const [loading, setLoad] = useState(false);
-    const [initialLoading, setInitialLoading] = useState(true);
-    const [uploadProgress, setUploadProgress] = useState<string>('');
+      const [loading, setLoad] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
     const [pickingPhotos, setPickingPhotos] = useState(false);
     const [pickingCamera, setPickingCamera] = useState(false);
     const [pickingGallery, setPickingGallery] = useState(false);
@@ -687,8 +687,8 @@ export default function EditTask() {
 
     /* ----------- submit PATCH ------------------------------- */
 const save = async () => {
-  /* validate inputs here as before … */
-
+    /* validate inputs here as before … */
+  
   setLoad(true);
   setUploadProgress('Preparing upload...');
 
@@ -755,6 +755,9 @@ const save = async () => {
       body: JSON.stringify(body),
     });
     if (!res.ok) return Alert.alert('Failed', `HTTP ${res.status}`);
+    
+    setLoad(false);
+    setUploadProgress('');
   } else {
     /* ❷ multipart PATCH */
     const form = new FormData();

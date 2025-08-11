@@ -26,12 +26,12 @@ type Task = {
 
 const statusColor: Record<Task['status'], string> = {
   PENDING: '#FFD60A',
-  ACTIVE:  '#FF453A',
+  ACTIVE:  '#FF9F0A',
   DONE:    '#32D74B',
 };
 const statusLabel: Record<Task['status'], { caption: string; color: string }> = {
   PENDING: { caption: 'PENDING', color: '#FFD60A' },
-  ACTIVE:  { caption: 'ACTIVE',  color: '#FF453A' },
+  ACTIVE:  { caption: 'ACTIVE',  color: '#FF9F0A' },
   DONE:    { caption: 'DONE',    color: '#32D74B' },
 };
 
@@ -222,18 +222,18 @@ useEffect(() => {
         onPress={() => router.push(`/tasks/${item.id}`)}
         android_ripple={{ color: '#0001' }}
         style={({ pressed }) => ({
-          backgroundColor: isImmediate && !isDone ? '#FFF5E6' : 'white',
+          backgroundColor: isImmediate && !isDone ? '#FFF5F5' : '#FAFAFA',
           marginBottom: 12,
           borderRadius: 12,
           padding: 16,
-          shadowColor: isImmediate && !isDone ? '#FF9F0A' : '#000',
+          shadowColor: isImmediate && !isDone ? '#FF453A' : '#000',
           shadowOffset: { width: 0, height: 1 },
           shadowOpacity: isImmediate && !isDone ? 0.15 : 0.05,
           shadowRadius: isImmediate && !isDone ? 6 : 3,
           elevation: isImmediate && !isDone ? 4 : 2,
           opacity: pressed ? 0.7 : 1,
           borderWidth: isImmediate && !isDone ? 1 : 0,
-          borderColor: isImmediate && !isDone ? '#FF9F0A' : 'transparent',
+          borderColor: isImmediate && !isDone ? '#FF453A' : 'transparent',
         })}
       >
         {/* ②  SIDE BAR  – 4 pt wide, glued to the edge */}
@@ -281,8 +281,8 @@ useEffect(() => {
                   paddingHorizontal: 10,
                   paddingVertical: 6,
                   borderRadius: 8,
-                  backgroundColor: '#FF9F0A',
-                  shadowColor: '#FF9F0A',
+                  backgroundColor: '#FF453A',
+                  shadowColor: '#FF453A',
                   shadowOffset: { width: 0, height: 2 },
                   shadowOpacity: 0.3,
                   shadowRadius: 4,
@@ -301,7 +301,7 @@ useEffect(() => {
             fontSize: 16, 
             fontWeight: '600', 
             marginBottom: 8, 
-            color: isImmediate && !isDone ? '#B45309' : '#1a1a1a',
+            color: isImmediate && !isDone ? '#B91C1C' : '#1a1a1a',
             lineHeight: 20,
           }}>
             {item.title}
@@ -317,18 +317,18 @@ useEffect(() => {
                   paddingHorizontal: 10,
                   paddingVertical: 6,
                   borderRadius: 8,
-                  backgroundColor: isImmediate && !isDone ? '#FFF0D6' : '#f8f9fa',
+                  backgroundColor: isImmediate && !isDone ? '#FEF2F2' : '#f8f9fa',
                   borderWidth: 1,
-                  borderColor: isImmediate && !isDone ? '#FFB366' : '#e9ecef',
+                  borderColor: isImmediate && !isDone ? '#FCA5A5' : '#e9ecef',
                   marginBottom: 8,
                 }}
               >
-                <Ionicons name="repeat" size={14} color={isImmediate && !isDone ? '#B45309' : '#6c757d'} style={{ marginRight: 6 }} />
+                <Ionicons name="repeat" size={14} color={isImmediate && !isDone ? '#B91C1C' : '#6c757d'} style={{ marginRight: 6 }} />
                 <Text
                   style={{
                     fontSize: 12,
                     fontWeight: '600',
-                    color: isImmediate && !isDone ? '#B45309' : '#495057',
+                    color: isImmediate && !isDone ? '#B91C1C' : '#495057',
                     textTransform: 'uppercase',
                     letterSpacing: 0.5,
                   }}
