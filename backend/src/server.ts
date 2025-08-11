@@ -540,6 +540,60 @@ f.get('/:id', async (req: any, rep) => {
     return { ok: true };
   });
 
+  /* POST /tasks/:id/mark-done – mark task as done with approval logic */
+  f.post('/:id/mark-done', async (req: any, rep) => {
+    const userId = req.user.sub as number;
+    const id = Number(req.params.id);
+
+    /* Check if task exists and belongs to user */
+    const task = await prisma.task.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        status: true,
+        labelDone: true,
+        requiresCompletionApproval: true,
+      },
+    });
+
+    if (!task) {
+      return rep.code(404).send({ error: 'Task not found' });
+    }
+
+    /* Check if task is already done */
+    if (task.status === 'DONE') {
+      return rep.code(400).send({ error: 'Task is already marked as done' });
+    }
+
+    /* Check if task already requires approval */
+    if (task.requiresCompletionApproval) {
+      return rep.code(400).send({ error: 'Task already requires completion approval' });
+    }
+
+    /* Update task based on labelDone setting */
+    if (task.labelDone) {
+      // User can mark as done directly
+      await prisma.task.update({
+        where: { id },
+        data: {
+          status: 'DONE',
+          isDone: true,
+        },
+      });
+      return { success: true, message: 'Task marked as done' };
+    } else {
+      // User cannot mark as done, set requires approval
+      await prisma.task.update({
+        where: { id },
+        data: {
+          requiresCompletionApproval: true,
+        },
+      });
+      return { success: true, message: 'Task requires completion approval', requiresApproval: true };
+    }
+  });
+
+
 
   /* -----------------------------------------------------------------
  * PATCH /tasks/:id – update fields and optionally upload / delete images
@@ -1825,6 +1879,55 @@ app.put('/settings', { preHandler: app.auth }, async (req, rep) => {
 });
 
 // Admin-only endpoints for managing other users' settings
+
+// Admin mark-done endpoint - can mark any task as done
+app.post('/admin/tasks/:id/mark-done', { preHandler: app.auth }, async (req: any, rep) => {
+  try {
+    const userRole = (req.user as any).role as string;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const taskId = parseInt(req.params.id as string);
+    if (isNaN(taskId)) {
+      return rep.code(400).send({ error: 'Invalid task ID' });
+    }
+
+    /* Check if task exists */
+    const task = await prisma.task.findFirst({
+      where: { id: taskId },
+      select: {
+        id: true,
+        status: true,
+        requiresCompletionApproval: true,
+      },
+    });
+
+    if (!task) {
+      return rep.code(404).send({ error: 'Task not found' });
+    }
+
+    /* Check if task is already done */
+    if (task.status === 'DONE') {
+      return rep.code(400).send({ error: 'Task is already marked as done' });
+    }
+
+    /* Admin can mark any task as done */
+    await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        status: 'DONE',
+        isDone: true,
+        requiresCompletionApproval: false, // Clear any pending approval
+      },
+    });
+
+    return { success: true, message: 'Task marked as done by admin' };
+  } catch (error) {
+    console.error('Error marking task as done:', error);
+    return rep.code(500).send({ error: 'Failed to mark task as done' });
+  }
+});
 app.get('/admin/settings/:userId', { preHandler: app.auth }, async (req: any, rep) => {
   try {
     const userRole = (req.user as any).role as string;

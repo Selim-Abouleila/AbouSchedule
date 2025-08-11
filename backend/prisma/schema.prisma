@@ -49,6 +49,7 @@ model Task {
   /// Track if task has been read by the assigned user
   readByUser      Boolean?   @default(false) @map("read_by_user")
   wasAddedByAdmin Boolean?   @default(false) @map("was_added_by_admin")
+  requiresCompletionApproval Boolean?   @default(false) @map("requires_completion_approval")
   size            Size       @default(NORMAL)
   documents       Document[]
   images          Image[]

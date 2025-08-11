@@ -949,30 +949,32 @@ export default function TaskDetail() {
             justifyContent: 'space-between',
             gap: 12,
           }}>
-            {/* Edit button */}
-            <Pressable
-              onPress={() => router.push(`/${id}/edit`)}
-              style={{
-                flex: 1,
-                paddingVertical: 16,
-                backgroundColor: '#FF9F0A',
-                borderRadius: 12,
-                alignItems: 'center',
-                shadowColor: '#FF9F0A',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 8,
-                elevation: 6,
-              }}
-            >
-              <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Edit</Text>
-            </Pressable>
+            {/* Edit button - only show if user can edit */}
+            {(userRole === 'ADMIN' || !task?.wasAddedByAdmin) && (
+              <Pressable
+                onPress={() => router.push(`/${id}/edit`)}
+                style={{
+                  flex: 1,
+                  paddingVertical: 16,
+                  backgroundColor: '#FF9F0A',
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  shadowColor: '#FF9F0A',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+              >
+                <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>Edit</Text>
+              </Pressable>
+            )}
 
             {/* Back button */}
             <Pressable
               onPress={() => router.push('/tasks')}
               style={{
-                flex: 1,
+                flex: userRole === 'ADMIN' || !task?.wasAddedByAdmin ? 1 : 1, // Always take full width if no edit button
                 paddingVertical: 16,
                 backgroundColor: '#0A84FF',
                 borderRadius: 12,
