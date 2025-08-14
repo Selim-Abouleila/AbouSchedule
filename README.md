@@ -2,7 +2,7 @@
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/yourusername/AbouSchedule)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/yourusername/AbouSchedule/releases)
-[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/yourusername/AbouSchedule/blob/main/LICENSE)
+
 [![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey)](https://expo.dev/)
 [![Backend](https://img.shields.io/badge/backend-Railway-orange)](https://railway.app/)
 
