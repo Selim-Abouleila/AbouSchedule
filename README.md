@@ -1,10 +1,68 @@
 # AbouSchedule
 
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/yourusername/AbouSchedule)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/yourusername/AbouSchedule/releases)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/yourusername/AbouSchedule/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey)](https://expo.dev/)
+[![Backend](https://img.shields.io/badge/backend-Railway-orange)](https://railway.app/)
+
 A comprehensive task management application built with React Native/Expo and a Node.js backend, featuring role-based access control, media management, and real-time notifications.
 
-## Features
+## 📋 Table of Contents
 
-### Core Functionality
+- [Features](#features)
+- [Quick Start](#-quick-start)
+- [Tech Stack](#-tech-stack)
+- [Screenshots](#screenshots)
+- [API Endpoints](#api-endpoints)
+- [Configuration](#configuration)
+- [Security Features](#-security-features)
+- [Notification System](#-notification-system)
+- [Database Schema](#-database-schema)
+
+- [Troubleshooting](#-troubleshooting)
+- [Contributing](#-contributing)
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js (v18 or higher)
+- pnpm (recommended) or npm
+- Expo CLI (`npm install -g @expo/cli`)
+- Android Studio (for Android development)
+- Xcode (for iOS development, macOS only)
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/AbouSchedule.git
+   cd AbouSchedule
+   ```
+
+2. **Install frontend dependencies**
+   ```bash
+   cd frontend
+   pnpm install
+   ```
+
+3. **Start the development server**
+   ```bash
+   pnpm start
+   ```
+
+4. **Run on device**
+   - Install Expo Go on your mobile device
+   - Scan the QR code from the terminal
+   - Or press 'a' for Android emulator, 'i' for iOS simulator
+
+### Quick Demo
+- **Live Demo**: [Coming Soon]
+- **Test Credentials**: 
+  - Admin: `admin@example.com` / `password123`
+  - User: `user@example.com` / `password123`
+
+## Features
 - **Task Management**: Create, edit, and organize tasks with priorities and status tracking
 - **Role-Based Access**: Admin and Employee roles with different permissions
 - **Media Management**: Upload and manage images and documents for tasks
@@ -137,18 +195,18 @@ This panel serves as the primary interface for administrators to oversee task di
 **Password Verification Modal**
 ![Admin Verification](screenshots/admin_panel_settings_icon.png)
 
-When an admin clicks the settings gear icon for a user, the system first requires password verification for security. This modal ensures that only authorized administrators can perform sensitive user management actions.
+When an admin clicks the settings gear icon for a user, the system first requires password verification for security. This modal prompts the administrator to "Enter your password to continue" with a secure text input field, ensuring that only authorized administrators can perform sensitive user management actions.
 
 **User Management Actions**
 ![Tasker Actions](screenshots/admin_panel_settings_icon_open.png)
 
-After successful password verification, administrators can perform various user management actions:
+After successful password verification, administrators can perform various user management actions for the selected user (e.g., "Selim Abouleila"):
 
-- **Make Admin**: Toggle user role between tasker and admin with role-swap icon
-- **Change Password**: Reset user password with key icon
-- **Delete User**: Remove user account with trash icon (destructive action)
+- **Make Admin**: Light blue button with double-arrow icon to toggle user role between tasker and admin
+- **Change Password**: Light green button with key icon to reset user password
+- **Delete User**: Light red/pink button with trash can icon for destructive account removal
 
-This two-step security process ensures that sensitive administrative actions are properly authenticated and logged.
+This two-step security process ensures that sensitive administrative actions are properly authenticated and logged, with clear visual indicators and color-coded actions for different operation types.
 
 ### Admin User Task List
 ![Admin User Task List](screenshots/admin_index.png)
@@ -435,13 +493,74 @@ The application uses Prisma with PostgreSQL, featuring:
 - **Recurrence tracking** for recurring tasks
 - **Audit trails** for task changes
 
+
+
+
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Frontend Issues:**
+- **Metro bundler errors**: Clear cache with `npx expo start --clear`
+- **Icon not displaying**: Restart the development server
+- **Build failures**: Ensure all dependencies are installed with `pnpm install`
+
+**Backend Issues:**
+- **API connection**: Verify the Railway deployment URL is correct
+- **Prisma errors**: Database is managed on Railway, check deployment logs
+- **Environment variables**: Ensure all Railway environment variables are set
+
+**Firebase Issues:**
+- **Notification tokens**: Check Firebase credentials and project configuration
+- **Permission errors**: Verify Firebase Admin SDK setup
+
+### Performance Tips
+- Use `pnpm` instead of `npm` for faster installations
+- Enable Hermes engine for better React Native performance
+- Use Expo development builds for production-like testing
+
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+We welcome contributions! Please follow these guidelines:
+
+### Development Workflow
+
+1. **Fork the repository**
+   ```bash
+   git clone https://github.com/yourusername/AbouSchedule.git
+   ```
+
+2. **Create a feature branch**
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+
+3. **Make your changes**
+   - Follow the existing code style
+   - Add tests for new features
+   - Update documentation as needed
+
+4. **Test thoroughly**
+   ```bash
+   # Frontend tests
+   cd frontend && pnpm test
+
+   # Backend tests
+   cd backend && pnpm test
+   ```
+
+5. **Submit a pull request**
+   - Provide a clear description of changes
+   - Include screenshots for UI changes
+   - Reference any related issues
+
+### Code Style Guidelines
+
+- **TypeScript**: Use strict mode and proper typing
+- **React Native**: Follow Expo best practices
+- **Backend**: Use Fastify plugins and proper error handling
+- **Database**: Use Prisma migrations for schema changes
 
 ### Key Directories
 
@@ -449,12 +568,42 @@ The application uses Prisma with PostgreSQL, featuring:
 - `prisma/` - Database schema and migrations
 - `src/lib/` - Utility functions and helpers
 - `src/server.ts` - Main server file
+- `src/firebase-admin.ts` - Firebase configuration
 
 **Frontend:**
 - `app/` - Expo Router screens and navigation
 - `src/` - Core utilities and API integration
 - `assets/` - App icons and images
+- `src/firebaseNotifications.ts` - Notification helpers
+
+### API Examples
+
+**Create a Task**
+```bash
+curl -X POST https://your-railway-app.up.railway.app/tasks \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "New Task",
+    "description": "Task description",
+    "priority": "ONE",
+    "status": "ACTIVE"
+  }'
+```
+
+**Get User Tasks**
+```bash
+curl -X GET https://your-railway-app.up.railway.app/tasks \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## 🙏 Acknowledgments
+
+- [Expo](https://expo.dev/) for the amazing React Native platform
+- [Prisma](https://www.prisma.io/) for the excellent ORM
+- [Firebase](https://firebase.google.com/) for push notifications
+- [Railway](https://railway.app/) for seamless deployment
 
 ---
 
-**Built with ❤️ using React Native, Expo, and Node.js**
+**Built with ❤️ by [Selim Abouleila](https://github.com/selimabouleila) using React Native, Expo, and Node.js**
