@@ -358,7 +358,7 @@ export default function AdminPanel() {
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>
-              Admin {currentUserInfo?.username || currentUserInfo?.email || 'Admin'}
+              (Admin) {currentUserInfo?.username || currentUserInfo?.email || 'Admin'}
             </Text>
             <Text style={styles.headerSubtitle}>Manage taskers and their tasks</Text>
           </View>

@@ -32,6 +32,9 @@ export default function AppDrawerLayout() {
       screenOptions={{
         drawerType: 'slide',
         headerLeft: () => <DrawerToggleButton />, // hamburger icon
+        drawerStyle: {
+          width: 230, // Reduced from default ~320px
+        },
       }}
     >
 

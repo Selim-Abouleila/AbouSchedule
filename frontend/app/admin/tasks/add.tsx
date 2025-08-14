@@ -545,13 +545,21 @@ const scrollRef = useRef<ScrollView>(null);
 
   /* Recuurrance Confirmation */
   const confirmRecurring = () => {
+    // For Android, swap the button positions (Yes first, then Back)
+    const buttons = Platform.OS === 'android' 
+      ? [
+          { text: "Yes", onPress: () => setRecurring(true) },
+          { text: "Back", style: "cancel" }
+        ]
+      : [
+          { text: "Back", style: "cancel" },
+          { text: "Yes", onPress: () => setRecurring(true) }
+        ];
+
     Alert.alert(
-      "Recurring task",
+      "RECURRING TASK!",
       "Are you sure you want this task to be recurring?",
-      [
-        { text: "Back", style: "cancel" },                
-        { text: "Yes", onPress: () => setRecurring(true) } 
-      ]
+      buttons
     );
   };
 
@@ -803,118 +811,156 @@ const scrollRef = useRef<ScrollView>(null);
           <View style={{ marginTop: 8 }}>
             {/* First row: ONE TWO THREE */}
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-              {(['ONE', 'TWO', 'THREE'] as const).map(p => (
-                <Pressable
-                  key={p}
-                  onPress={() => setPrio(p)}
-                  style={{
-                    flex: 1,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    borderRadius: 8,
-                    borderWidth: 2,
-                    borderColor: priority === p ? '#0A84FF' : '#e9ecef',
-                    backgroundColor: priority === p ? '#0A84FF' : 'white',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{
-                    fontSize: 14,
-                    fontWeight: '600',
-                    color: priority === p ? 'white' : '#1a1a1a',
-                  }}>
-                    {p}
-                  </Text>
-                </Pressable>
-              ))}
+              {(['ONE', 'TWO', 'THREE'] as const).map(p => {
+                // Define colors for priority gradient: orange (highest) to green (lowest)
+                const priorityColors = {
+                  'ONE': '#FFB366',   // Significantly less potent orange - highest priority
+                  'TWO': '#F4D03F',   // Less potent yellow - medium priority  
+                  'THREE': '#90EE90',  // Light green - lowest priority
+                };
+                const selectedColor = priorityColors[p];
+                
+                return (
+                  <Pressable
+                    key={p}
+                    onPress={() => setPrio(p)}
+                    style={{
+                      flex: 1,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      borderColor: priority === p ? selectedColor : '#e9ecef',
+                      backgroundColor: priority === p ? selectedColor : 'white',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      color: priority === p ? 'white' : '#1a1a1a',
+                    }}>
+                      {p}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
             {/* Second row: NONE IMMEDIATE */}
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              {(['NONE', 'IMMEDIATE'] as const).map(p => (
-                <Pressable
-                  key={p}
-                  onPress={() => setPrio(p)}
-                  style={{
-                    flex: 1,
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    borderRadius: 8,
-                    borderWidth: 2,
-                    borderColor: priority === p ? (p === 'IMMEDIATE' ? '#dc3545' : '#0A84FF') : '#e9ecef',
-                    backgroundColor: priority === p ? (p === 'IMMEDIATE' ? '#dc3545' : '#0A84FF') : 'white',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{
-                    fontSize: 14,
-                    fontWeight: '600',
-                    color: priority === p ? 'white' : '#1a1a1a',
-                  }}>
-                    {p}
-                  </Text>
-                </Pressable>
-              ))}
+              {(['NONE', 'IMMEDIATE'] as const).map(p => {
+                // Define colors for NONE and IMMEDIATE
+                const specialPriorityColors = {
+                  'NONE': '#66BB6A',      // Less potent green for NONE (still distinguishable from light green)
+                  'IMMEDIATE': '#FF6B6B',  // Lighter red for IMMEDIATE
+                };
+                const selectedColor = specialPriorityColors[p];
+                
+                return (
+                  <Pressable
+                    key={p}
+                    onPress={() => setPrio(p)}
+                    style={{
+                      flex: 1,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      borderColor: priority === p ? selectedColor : '#e9ecef',
+                      backgroundColor: priority === p ? selectedColor : 'white',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 14,
+                      fontWeight: '600',
+                      color: priority === p ? 'white' : '#1a1a1a',
+                    }}>
+                      {p}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
           {/* Status */}
           <Text style={{ fontWeight: "bold", marginTop: 8 }}>STATUS</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            {STATUSES.map(s => (
-              <Pressable
-                key={s}
-                onPress={() => setStat(s)}
-                style={{
-                  flex: 1,
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  borderRadius: 8,
-                  borderWidth: 2,
-                  borderColor: status === s ? '#0A84FF' : '#e9ecef',
-                  backgroundColor: status === s ? '#0A84FF' : 'white',
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{
-                  fontSize: 14,
-                  fontWeight: '600',
-                  color: status === s ? 'white' : '#1a1a1a',
-                }}>
-                  {s}
-                </Text>
-              </Pressable>
-            ))}
+            {STATUSES.map(s => {
+              // Define colors for status buttons - same as priority colors
+              const statusColors = {
+                'ACTIVE': '#66BB6A',   // Same green as NONE
+                'PENDING': '#FFB366',  // Orange (was yellow)
+              };
+              const selectedColor = statusColors[s];
+              
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => setStat(s)}
+                  style={{
+                    flex: 1,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 8,
+                    borderWidth: 2,
+                    borderColor: status === s ? selectedColor : '#e9ecef',
+                    backgroundColor: status === s ? selectedColor : 'white',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: status === s ? 'white' : '#1a1a1a',
+                  }}>
+                    {s}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           {/* Size */}
           <Text style={{ fontWeight: "bold", marginTop: 8 }}>SIZE</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-            {SIZES.map(s => (
-              <Pressable
-                key={s}
-                onPress={() => setSize(s)}
-                style={{
-                  flex: 1,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  borderRadius: 8,
-                  borderWidth: 2,
-                  borderColor: size === s ? '#0A84FF' : '#e9ecef',
-                  backgroundColor: size === s ? '#0A84FF' : 'white',
-                  alignItems: 'center',
-                  minWidth: 0,
-                }}
-              >
-                <Text style={{
-                  fontSize: 13,
-                  fontWeight: '600',
-                  color: size === s ? 'white' : '#1a1a1a',
-                  textAlign: 'center',
-                }}>
-                  {s}
-                </Text>
-              </Pressable>
-            ))}
+            {SIZES.map(s => {
+              // Define colors for size buttons - same as status colors
+              const sizeColors = {
+                'SMALL': '#FFB366',   // Same orange as PENDING
+                'NORMAL': '#66BB6A',  // Same green as ACTIVE
+                'LARGE': '#FFB366',   // Same orange as PENDING
+              };
+              const selectedColor = sizeColors[s];
+              
+              return (
+                <Pressable
+                  key={s}
+                  onPress={() => setSize(s)}
+                  style={{
+                    flex: 1,
+                    paddingHorizontal: 12,
+                    paddingVertical: 12,
+                    borderRadius: 8,
+                    borderWidth: 2,
+                    borderColor: size === s ? selectedColor : '#e9ecef',
+                    backgroundColor: size === s ? selectedColor : 'white',
+                    alignItems: 'center',
+                    minWidth: 0,
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 13,
+                    fontWeight: '600',
+                    color: size === s ? 'white' : '#1a1a1a',
+                    textAlign: 'center',
+                  }}>
+                    {s}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
                                {/* Time-cap */}

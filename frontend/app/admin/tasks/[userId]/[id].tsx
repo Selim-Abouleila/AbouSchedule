@@ -981,8 +981,22 @@ export default function AdminTaskDetail() {
           </View>
         )}
 
-        {/* Action Buttons */}
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+      </ScrollView>
+
+      {/* Pinned Action Buttons */}
+      <View style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'white',
+        borderTopWidth: 1,
+        borderTopColor: '#e9ecef',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        paddingBottom: Platform.OS === 'android' ? 50 : 16,
+      }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable
             onPress={() => router.push(`/admin/tasks/${userId}/edit?id=${id}`)}
             style={{
@@ -1021,7 +1035,7 @@ export default function AdminTaskDetail() {
             <Text style={{ color: 'white', fontWeight: '600', fontSize: 14 }}>Delete Task</Text>
           </Pressable>
         </View>
-      </ScrollView>
+      </View>
 
       {/* Image Viewer */}
       {task.images.length > 0 && (

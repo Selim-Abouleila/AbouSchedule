@@ -49,7 +49,33 @@ A comprehensive task management application built with React Native/Expo and a N
 
 ## Screenshots
 
-*[Add screenshots of your app here]*
+### Admin Panel
+![Admin Panel](screenshots/admin-panel.png)
+
+The Admin Panel is the central hub for administrators to manage taskers and their tasks. This interface provides comprehensive user management capabilities with an intuitive design.
+
+#### Key Features:
+
+**Header Section:**
+- **Admin Identification**: Displays "(Admin) [Username]" with a blue shield icon indicating admin privileges
+- **Role Description**: "Manage taskers and their tasks" subtitle explains the panel's purpose
+
+**Tasker Selection:**
+- **User List**: Shows all available taskers with their role badges ("TASKER")
+- **Visual Selection**: Selected tasker is highlighted with a blue left border and checkmark icon
+- **User Icons**: Each tasker has a person icon for easy identification
+
+**Task Management Actions:**
+- **Add Task Button**: Green button with plus icon to create new tasks for the selected tasker
+- **View/Edit Tasks Button**: Blue button with eye icon to manage existing tasks
+- **Settings Gear**: Blue gear icon for advanced user management options
+
+**Design Elements:**
+- **Card-based Layout**: Clean white cards with rounded corners for organized content
+- **Color-coded Actions**: Green for creation, blue for viewing/editing
+- **Responsive Design**: Adapts to different screen sizes with proper spacing
+
+This panel serves as the primary interface for administrators to oversee task distribution and user management across the entire system.
 
 ## API Endpoints
 

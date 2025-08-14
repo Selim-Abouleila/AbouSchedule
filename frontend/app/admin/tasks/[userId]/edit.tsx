@@ -1657,10 +1657,29 @@ const handleBack = useCallback(() => {
 
 
 
-                    {/* Action buttons */}
-                    <Button title={loading ? "Saving…" : "Save"} onPress={save} disabled={loading} />
                 </View>
             </ScrollView>
+
+            {/* Pinned Save Button */}
+            <View style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                backgroundColor: 'white',
+                borderTopWidth: 1,
+                borderTopColor: '#e9ecef',
+                paddingHorizontal: 24,
+                paddingVertical: 16,
+                paddingBottom: Platform.OS === 'android' ? 50 : 16,
+            }}>
+                <Button 
+                    title={loading ? "Saving…" : "Save"} 
+                    onPress={save} 
+                    disabled={loading}
+                    color="#0A84FF"
+                />
+            </View>
 
             {/* Video Playback Modal */}
             <Modal
