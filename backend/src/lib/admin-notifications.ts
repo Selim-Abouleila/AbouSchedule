@@ -61,7 +61,7 @@ export function startAdminNotificationChecker() {
                              // Send notification to all admins
                const expoMessages = adminPushTokens.map(pt => ({
                  to: pt.token,
-                 sound: 'alarm.wav', // More aggressive built-in alarm sound
+                 sound: 'default', // Use default sound for Expo Go compatibility
                  title: '🚨 IMMEDIATE TASK ALERT 🚨',
                  body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
                 data: {

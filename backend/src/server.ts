@@ -2186,7 +2186,7 @@ app.post('/test/admin-notifications', { preHandler: app.auth }, async (req, rep)
             // Send notification to all admins
             const expoMessages = adminPushTokens.map((pt: any) => ({
               to: pt.token,
-              sound: 'alarm.wav',
+              sound: 'default',
               title: '🚨 IMMEDIATE TASK ALERT 🚨',
               body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
               data: {
