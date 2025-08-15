@@ -2094,6 +2094,33 @@ app.delete('/push-tokens/unregister', { preHandler: app.auth }, async (req, rep)
 });
 
 /* ───── Test Admin Notifications ───── */
+app.get('/test/admin-tokens', { preHandler: app.auth }, async (req, rep) => {
+  try {
+    const userRole = (req.user as any).role as string;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const adminUsers = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      include: { pushTokens: true }
+    });
+
+    return {
+      adminUsers: adminUsers.map(user => ({
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        pushTokensCount: user.pushTokens.length,
+        pushTokens: user.pushTokens.map(pt => pt.token.substring(0, 20) + '...')
+      }))
+    };
+  } catch (error) {
+    console.error('Error checking admin tokens:', error);
+    return rep.code(500).send({ error: 'Failed to check admin tokens' });
+  }
+});
+
 app.post('/test/admin-notifications', { preHandler: app.auth }, async (req, rep) => {
   try {
     const userRole = (req.user as any).role as string;

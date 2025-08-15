@@ -217,6 +217,44 @@ export default function AdminPanel() {
     });
   };
 
+  const handleCheckAdminTokens = async () => {
+    try {
+      const token = await getToken();
+      if (!token) {
+        Alert.alert('Error', 'No authentication token found');
+        return;
+      }
+
+      const response = await fetch(`${API_BASE}/test/admin-tokens`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        let message = '📱 Admin Device Status:\n\n';
+        result.adminUsers.forEach((user: any) => {
+          message += `👤 ${user.username || user.email}\n`;
+          message += `📱 Devices: ${user.pushTokensCount}\n`;
+          if (user.pushTokensCount > 0) {
+            message += `🔑 Tokens: ${user.pushTokens.join(', ')}\n`;
+          }
+          message += '\n';
+        });
+        
+        Alert.alert('Admin Tokens Check', message);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to check admin tokens');
+      }
+    } catch (error) {
+      console.error('Error checking admin tokens:', error);
+      Alert.alert('Error', 'Failed to check admin tokens');
+    }
+  };
+
   const handleTestNotifications = async () => {
     try {
       const token = await getToken();
@@ -414,7 +452,7 @@ export default function AdminPanel() {
         </View>
       </View>
 
-      {/* Test Notification Button */}
+      {/* Test Buttons */}
       <View style={styles.testSection}>
         <Pressable
           style={({ pressed }) => [
@@ -425,6 +463,18 @@ export default function AdminPanel() {
         >
           <Ionicons name="notifications" size={20} color="#FF6B35" />
           <Text style={styles.testButtonText}>Test Admin Notifications</Text>
+        </Pressable>
+        
+        <Pressable
+          style={({ pressed }) => [
+            styles.testButton,
+            { marginTop: 8 },
+            pressed && styles.buttonPressed
+          ]}
+          onPress={handleCheckAdminTokens}
+        >
+          <Ionicons name="phone-portrait" size={20} color="#0A84FF" />
+          <Text style={[styles.testButtonText, { color: '#0A84FF' }]}>Check Admin Devices</Text>
         </Pressable>
       </View>
 
