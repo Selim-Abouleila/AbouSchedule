@@ -847,12 +847,14 @@ const save = async () => {
     setUploadProgress('');
   }
 
-  router.push('/tasks');
+  router.push(`/tasks/${id}`);
 };
 
 const handleBack = useCallback(() => {
-    if (!hasUnsavedChanges) {           // If no changes, go back to tasks list
-      router.push('/tasks');
+    console.log('🔙 handleBack called in edit.tsx, hasUnsavedChanges:', hasUnsavedChanges, 'id:', id);
+    if (!hasUnsavedChanges) {           // If no changes, go back to task detail
+      console.log('🔙 Navigating to /tasks/${id}');
+      router.push(`/tasks/${id}`);
       return;
     }
 
@@ -873,7 +875,7 @@ const handleBack = useCallback(() => {
                   text: "Delete",
                   style: "destructive",
                   onPress: () => {
-                    router.push('/tasks');
+                    router.push(`/tasks/${id}`);
                   },
                 },
               ],
@@ -883,21 +885,19 @@ const handleBack = useCallback(() => {
         { text: "Cancel", style: "cancel" },
       ],
     );
-  }, [hasUnsavedChanges, save]);
+  }, [hasUnsavedChanges, save, id]);
 
   // Android back button handler
   useEffect(() => {
     const backAction = () => {
-      if (hasUnsavedChanges) {
-        handleBack();
-        return true; // Prevent default behavior
-      }
-      return false; // Allow default behavior
+      console.log('🔙 Android back button pressed in edit.tsx');
+      handleBack();
+      return true; // Always prevent default behavior and use custom navigation
     };
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, [hasUnsavedChanges, handleBack]);
+  }, [handleBack]);
 
   /* ------------- UI --------------------------------------- */
     if (initialLoading) {

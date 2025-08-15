@@ -217,6 +217,56 @@ export default function AdminPanel() {
     });
   };
 
+  const handleTestNotifications = async () => {
+    try {
+      const token = await getToken();
+      if (!token) {
+        Alert.alert('Error', 'No authentication token found');
+        return;
+      }
+
+      Alert.alert(
+        'Test Notifications',
+        'This will test the admin notification system. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Test',
+            onPress: async () => {
+              try {
+                const response = await fetch(`${API_BASE}/test/admin-notifications`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                  Alert.alert(
+                    'Test Completed',
+                    `✅ Test completed successfully!\n\n📋 Tasks checked: ${result.tasksChecked}\n📱 Admin devices: ${result.adminDevices}\n📤 Notifications sent: ${result.notificationsSent}`,
+                    [{ text: 'OK' }]
+                  );
+                } else {
+                  Alert.alert('Test Failed', result.error || 'Unknown error occurred');
+                }
+              } catch (error) {
+                console.error('Error testing notifications:', error);
+                Alert.alert('Error', 'Failed to test notifications');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in test notifications:', error);
+      Alert.alert('Error', 'Failed to test notifications');
+    }
+  };
+
   const getSelectedUser = () => {
     return users.find(user => user.id === selectedUserId);
   };
@@ -358,11 +408,25 @@ export default function AdminPanel() {
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>
-              (Admin) {currentUserInfo?.username || currentUserInfo?.email || 'Admin'}
+              {currentUserInfo?.username || currentUserInfo?.email || 'Admin'} (Admin)
             </Text>
             <Text style={styles.headerSubtitle}>Manage taskers and their tasks</Text>
           </View>
         </View>
+      </View>
+
+      {/* Test Notification Button */}
+      <View style={styles.testSection}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.testButton,
+            pressed && styles.buttonPressed
+          ]}
+          onPress={handleTestNotifications}
+        >
+          <Ionicons name="notifications" size={20} color="#FF6B35" />
+          <Text style={styles.testButtonText}>Test Admin Notifications</Text>
+        </Pressable>
       </View>
 
       {/* Scrollable Content Area */}
@@ -387,46 +451,98 @@ export default function AdminPanel() {
                 <Text style={styles.dropdownLabel}>Select Tasker</Text>
                 <View style={styles.dropdownContainer}>
                   {sortedUsers.map((user) => (
-                    <Pressable
-                      key={user.id}
-                      style={({ pressed }) => [
-                        styles.userListItem,
-                        selectedUserId === user.id && styles.selectedUserListItem,
-                        pressed && styles.userListItemPressed
-                      ]}
-                      onPress={() => handleUserSelect(user.id)}
-                    >
-                      <View style={styles.userListItemContent}>
-                        <View style={styles.userListItemAvatar}>
-                          <Ionicons 
-                            name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                            size={20} 
-                            color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
-                          />
-                        </View>
-                        <View style={styles.userListItemDetails}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <View style={[
-                              styles.roleBadge,
-                              { backgroundColor: user.role === 'ADMIN' ? '#0A84FF20' : '#6c757d20' }
-                            ]}>
-                              <Text style={[
-                                styles.userRole,
-                                { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
+                    <View key={user.id}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.userListItem,
+                          selectedUserId === user.id && styles.selectedUserListItem,
+                          pressed && styles.userListItemPressed
+                        ]}
+                        onPress={() => handleUserSelect(user.id)}
+                      >
+                        <View style={styles.userListItemContent}>
+                          <View style={styles.userListItemAvatar}>
+                            <Ionicons 
+                              name={user.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
+                              size={20} 
+                              color={user.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
+                            />
+                          </View>
+                          <View style={styles.userListItemDetails}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <View style={[
+                                styles.roleBadge,
+                                { backgroundColor: user.role === 'ADMIN' ? '#0A84FF20' : '#6c757d20' }
                               ]}>
-                                {user.role === 'EMPLOYEE' ? 'tasker' : user.role}
+                                <Text style={[
+                                  styles.userRole,
+                                  { color: user.role === 'ADMIN' ? '#0A84FF' : '#6c757d' }
+                                ]}>
+                                  {user.role === 'EMPLOYEE' ? 'tasker' : user.role}
+                                </Text>
+                              </View>
+                              <Text style={styles.userListItemName}>
+                                {user.username || user.email}
                               </Text>
                             </View>
-                            <Text style={styles.userListItemName}>
-                              {user.username || user.email}
-                            </Text>
+                          </View>
+                          {selectedUserId === user.id && (
+                            <Ionicons name="checkmark-circle" size={24} color="#0A84FF" />
+                          )}
+                        </View>
+                      </Pressable>
+                      
+                      {/* Expanded Action Buttons */}
+                      {selectedUserId === user.id && user.id !== currentUserId && (
+                        <View style={styles.expandedActions}>
+                          <View style={styles.userCard}>
+                            {/* Task Management Buttons */}
+                            <View style={styles.taskButtonsContainer}>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.taskButton,
+                                  styles.addTaskButton,
+                                  pressed && styles.buttonPressed
+                                ]}
+                                onPress={() => handleAddTask(user.id, user.email, user.username)}
+                              >
+                                <Ionicons name="add-circle-outline" size={18} color="#28a745" />
+                                <Text style={styles.addTaskButtonText}>Add Task</Text>
+                              </Pressable>
+                              
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.taskButton,
+                                  styles.viewTasksButton,
+                                  pressed && styles.buttonPressed
+                                ]}
+                                onPress={() => handleViewTasks(user.id, user.email)}
+                              >
+                                <Ionicons name="eye-outline" size={18} color="#000000" />
+                                <Text style={styles.viewTasksButtonText}>View / Edit Tasks</Text>
+                              </Pressable>
+                            </View>
+                            
+                            {/* Settings Button Row */}
+                            <View style={styles.settingsButtonRow}>
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.settingsButton,
+                                  pressed && styles.buttonPressed
+                                ]}
+                                onPress={() => {
+                                  setPendingAction({ type: 'user-actions', userId: user.id });
+                                  setShowPasswordModal(true);
+                                }}
+                              >
+                                <Ionicons name="settings-outline" size={18} color="#6c757d" />
+                                <Text style={styles.settingsButtonText}>Settings</Text>
+                              </Pressable>
+                            </View>
                           </View>
                         </View>
-                        {selectedUserId === user.id && (
-                          <Ionicons name="checkmark-circle" size={24} color="#0A84FF" />
-                        )}
-                      </View>
-                    </Pressable>
+                      )}
+                    </View>
                   ))}
                 </View>
               </View>
@@ -443,68 +559,7 @@ export default function AdminPanel() {
         </ScrollView>
       </View>
 
-      {/* Sticky User Actions Section */}
-      {selectedUser && selectedUser.id !== currentUserId && (
-        <View style={styles.stickyUserActions}>
-          <View style={styles.userCard}>
-            <View style={styles.userInfoSection}>
-              <View style={styles.userAvatar}>
-                <Ionicons 
-                  name={selectedUser.role === 'ADMIN' ? 'shield-checkmark' : 'person'} 
-                  size={24} 
-                  color={selectedUser.role === 'ADMIN' ? '#0A84FF' : '#6c757d'} 
-                />
-              </View>
-              <View style={styles.userDetails}>
-                <Text style={styles.userEmail}>
-                  {selectedUser.username || selectedUser.email}
-                </Text>
-              </View>
-              
-              {/* Advanced Options Gear Icon */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.advancedOptionsGear,
-                  pressed && styles.advancedOptionsGearPressed
-                ]}
-                onPress={() => {
-                  setPendingAction({ type: 'user-actions', userId: selectedUser.id });
-                  setShowPasswordModal(true);
-                }}
-              >
-                <Ionicons name="settings-outline" size={20} color="#0A84FF" />
-              </Pressable>
-            </View>
-            
-            {/* Task Management Buttons */}
-            <View style={styles.taskButtonsContainer}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.taskButton,
-                  styles.addTaskButton,
-                  pressed && styles.buttonPressed
-                ]}
-                onPress={() => handleAddTask(selectedUser.id, selectedUser.email, selectedUser.username)}
-              >
-                <Ionicons name="add-circle-outline" size={18} color="#28a745" />
-                <Text style={styles.addTaskButtonText}>Add Task</Text>
-              </Pressable>
-              
-              <Pressable
-                style={({ pressed }) => [
-                  styles.taskButton,
-                  styles.viewTasksButton,
-                  pressed && styles.buttonPressed
-                ]}
-                onPress={() => handleViewTasks(selectedUser.id, selectedUser.email)}
-              >
-                <Ionicons name="eye-outline" size={18} color="#0A84FF" />
-                <Text style={styles.viewTasksButtonText}>View / Edit Tasks</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      )}
+
 
       {/* Password Verification Modal */}
       {showPasswordModal && (
@@ -889,14 +944,8 @@ const styles = StyleSheet.create({
       elevation: 8,
     },
     userCard: {
-      backgroundColor: 'white',
-      borderRadius: 16,
+      backgroundColor: 'transparent',
       padding: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 3,
     },
     userInfoSection: {
       flexDirection: 'row',
@@ -949,8 +998,8 @@ const styles = StyleSheet.create({
       gap: 4,
     },
     viewTasksButton: {
-      backgroundColor: '#0A84FF10',
-      borderColor: '#0A84FF30',
+      backgroundColor: '#00000010',
+      borderColor: '#00000030',
     },
     addTaskButton: {
       backgroundColor: '#28a74510',
@@ -959,7 +1008,7 @@ const styles = StyleSheet.create({
     viewTasksButtonText: {
       fontSize: 16,
       fontWeight: '600',
-      color: '#0A84FF',
+      color: '#000000',
       marginLeft: 0,
       textAlign: 'center',
     },
@@ -1208,5 +1257,64 @@ const styles = StyleSheet.create({
       fontWeight: '600',
       color: '#000000',
       flex: 1,
+    },
+    expandedActions: {
+      backgroundColor: '#0A84FF10',
+      paddingVertical: 8,
+      paddingHorizontal: 20,
+      marginTop: 8,
+      borderRadius: 12,
+    },
+    settingsButton: {
+      borderColor: '#6c757d',
+      backgroundColor: '#6c757d10',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 4,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      borderWidth: 1,
+      gap: 6,
+      minHeight: 28,
+    },
+    settingsButtonRow: {
+      marginTop: 8,
+      alignItems: 'center',
+    },
+    settingsButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#6c757d',
+    },
+    testSection: {
+      backgroundColor: 'white',
+      marginHorizontal: 20,
+      marginTop: 16,
+      marginBottom: 8,
+      borderRadius: 16,
+      padding: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    testButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#FFF5F5',
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#FF6B35',
+      gap: 12,
+    },
+    testButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#FF6B35',
     },
   }); 

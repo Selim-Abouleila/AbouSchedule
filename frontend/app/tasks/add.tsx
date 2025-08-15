@@ -31,9 +31,11 @@ import { useFocusEffect } from 'expo-router';
 import { StyleSheet } from 'react-native';
 import { useMemo, useRef } from "react";
 import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import { getDefaultLabelDone } from "../../src/settings";
 import { getCurrentUserId } from "../../src/auth";
 import { compressImages } from "../../src/imageCompression";
+import { compressVideos } from "../../src/videoCompression";
 
 
 const PRIORITIES = [
@@ -676,7 +678,9 @@ const scrollRef = useRef<ScrollView>(null);
   };
 
   const handleBack = useCallback(() => {
+    console.log('🔙 handleBack called in add.tsx, hasUnsavedChanges:', hasUnsavedChanges);
     if (!hasUnsavedChanges) {           // If no changes, go back to tasks list
+      console.log('🔙 Navigating to /tasks');
       router.push('/tasks');
       return;
     }
@@ -714,16 +718,14 @@ const scrollRef = useRef<ScrollView>(null);
   // Android back button handler
   useEffect(() => {
     const backAction = () => {
-      if (hasUnsavedChanges) {
-        handleBack();
-        return true; // Prevent default behavior
-      }
-      return false; // Allow default behavior
+      console.log('🔙 Android back button pressed in add.tsx');
+      handleBack();
+      return true; // Always prevent default behavior and use custom navigation
     };
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, [hasUnsavedChanges, handleBack]);
+  }, [handleBack]);
 
   /* UI */
   return (
@@ -1214,7 +1216,7 @@ const scrollRef = useRef<ScrollView>(null);
                       borderRadius: 4,
                     }}>
                       <Text style={{ color: '#fff', fontSize: 10 }}>
-                        {Math.round(v.duration / 1000)}s
+                        {v.duration ? Math.round(v.duration / 1000) : 0}s
                       </Text>
                     </View>
                   )}
@@ -1238,8 +1240,18 @@ const scrollRef = useRef<ScrollView>(null);
                                       {pickingCamera ? (
                                         <ActivityIndicator size="small" color="#555" />
                                       ) : (
-                                        <Text style={styles.pickerIcon}>📷</Text>
+                                        <Ionicons name="camera" size={28} color="#555" />
                                       )}
+                                      <Ionicons 
+                                        name="add-circle" 
+                                        size={16} 
+                                        color="#0A84FF" 
+                                        style={{ 
+                                          position: 'absolute', 
+                                          top: 2, 
+                                          left: 2 
+                                        }} 
+                                      />
                                     </Pressable>
                                     <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Camera</Text>
                                   </View>
@@ -1253,8 +1265,18 @@ const scrollRef = useRef<ScrollView>(null);
                                       {pickingGallery ? (
                                         <ActivityIndicator size="small" color="#555" />
                                       ) : (
-                                        <Text style={styles.pickerIcon}>🖼</Text>
+                                        <Ionicons name="image" size={28} color="#555" />
                                       )}
+                                      <Ionicons 
+                                        name="add-circle" 
+                                        size={16} 
+                                        color="#0A84FF" 
+                                        style={{ 
+                                          position: 'absolute', 
+                                          top: 2, 
+                                          left: 2 
+                                        }} 
+                                      />
                                     </Pressable>
                                     <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Gallery</Text>
                                   </View>
@@ -1268,8 +1290,18 @@ const scrollRef = useRef<ScrollView>(null);
                                       {pickingDocs ? (
                                         <ActivityIndicator size="small" color="#555" />
                                       ) : (
-                                        <Text style={styles.pickerIcon}>📄</Text>
+                                        <Ionicons name="document" size={28} color="#555" />
                                       )}
+                                      <Ionicons 
+                                        name="add-circle" 
+                                        size={16} 
+                                        color="#0A84FF" 
+                                        style={{ 
+                                          position: 'absolute', 
+                                          top: 2, 
+                                          left: 2 
+                                        }} 
+                                      />
                                     </Pressable>
                                     <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Document</Text>
                                   </View>
@@ -1307,7 +1339,7 @@ const scrollRef = useRef<ScrollView>(null);
                       },
                     ]}
                   >
-                    <Text style={styles.pickerIcon}>📄</Text>
+                    <Ionicons name="document" size={28} color="#555" />
                     {/* Document name preview */}
                     <Text style={{
                       fontSize: 10,

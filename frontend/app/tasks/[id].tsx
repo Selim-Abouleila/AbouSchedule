@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   Modal,
+  BackHandler,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -110,6 +111,24 @@ export default function TaskDetail() {
   // Loading states
   const [openingDocument, setOpeningDocument] = useState(false);
   const [openingDocumentName, setOpeningDocumentName] = useState('');
+
+  // Handle back navigation
+  const handleBack = useCallback(() => {
+    console.log('🔙 handleBack called in [id].tsx, navigating to /tasks');
+    router.push('/tasks');
+  }, []);
+
+  // Android back button handler
+  useEffect(() => {
+    const backAction = () => {
+      console.log('🔙 Android back button pressed in [id].tsx');
+      handleBack();
+      return true; // Always prevent default behavior and use custom navigation
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [handleBack]);
 
   // helper so the thumbnail onPress is cleaner
   const openViewer = (idx: number) => {
