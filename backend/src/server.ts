@@ -2174,24 +2174,26 @@ app.post('/test/admin-notifications', { preHandler: app.auth }, async (req, rep)
         let notificationsSent = 0;
 
         for (const task of unreadImmediateTasks) {
-          const hoursElapsed = Math.floor((now.getTime() - task.createdAt.getTime()) / (1000 * 60 * 60));
+          const minutesElapsed = Math.floor((now.getTime() - task.createdAt.getTime()) / (1000 * 60));
           
-          console.log(`⏰ [TEST] Task ${task.id} has been unread for ${hoursElapsed} hours`);
+          console.log(`⏰ [TEST] Task ${task.id} has been unread for ${minutesElapsed} minutes`);
           
-          if (adminPushTokens.length > 0) {
+          // Only send notification if at least 1 minute has passed (for testing)
+          if (minutesElapsed >= 1) {
+            if (adminPushTokens.length > 0) {
             const taskerName = task.user?.username || task.user?.email || 'Unknown Tasker';
             
             // Send notification to all admins
             const expoMessages = adminPushTokens.map((pt: any) => ({
               to: pt.token,
-              sound: 'default',
-              title: 'IMMEDIATE TASK ALERT',
+              sound: 'alarm.wav',
+              title: '🚨 IMMEDIATE TASK ALERT 🚨',
               body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
               data: {
                 taskId: task.id.toString(),
                 type: 'unread_immediate_task',
                 taskerName: taskerName,
-                hoursElapsed: hoursElapsed.toString()
+                minutesElapsed: minutesElapsed.toString()
               }
             }));
 
@@ -2218,6 +2220,9 @@ app.post('/test/admin-notifications', { preHandler: app.auth }, async (req, rep)
             }
           } else {
             console.log('⚠️ [TEST] No admin push tokens found - skipping notification');
+          }
+          } else {
+            console.log(`⏳ [TEST] Task ${task.id} has only been unread for ${minutesElapsed} minutes - not enough time elapsed`);
           }
         }
 
