@@ -6,9 +6,9 @@ import { differenceInHours } from 'date-fns';
 const prisma = new PrismaClient();
 
 export function startAdminNotificationChecker() {
-  /* "0 * * * *" = every hour at minute 0 */
+  // "*/10 * * * *" = every 10 minutes
   cron.schedule(
-    '0 * * * *',
+    '*/10 * * * *',
     async () => {
       const now = new Date();
       console.log('🔔 [Admin Notifications] Checking for unread immediate tasks...');
@@ -36,11 +36,11 @@ export function startAdminNotificationChecker() {
         console.log(`📋 Found ${unreadImmediateTasks.length} unread immediate tasks`);
 
         for (const task of unreadImmediateTasks) {
-          const hoursElapsed = differenceInHours(now, task.createdAt);
+          const minutesElapsed = Math.floor((now.getTime() - task.createdAt.getTime()) / (1000 * 60));
           
-          // Only send notification if at least 1 hour has passed
-          if (hoursElapsed >= 1) {
-            console.log(`⏰ Task ${task.id} has been unread for ${hoursElapsed} hours`);
+          // Only send notification if at least 10 minutes have passed
+          if (minutesElapsed >= 10) {
+            console.log(`⏰ Task ${task.id} has been unread for ${minutesElapsed} minutes`);
             
             // Get all admin users' push tokens
             const adminUsers = await prisma.user.findMany({
@@ -68,7 +68,7 @@ export function startAdminNotificationChecker() {
                   taskId: task.id.toString(),
                   type: 'unread_immediate_task',
                   taskerName: taskerName,
-                  hoursElapsed: hoursElapsed.toString()
+                  minutesElapsed: minutesElapsed.toString()
                 }
               }));
 
@@ -96,7 +96,7 @@ export function startAdminNotificationChecker() {
               console.log('⚠️ No admin push tokens found - skipping notification');
             }
           } else {
-            console.log(`⏳ Task ${task.id} has only been unread for ${hoursElapsed} hours - not enough time elapsed`);
+            console.log(`⏳ Task ${task.id} has only been unread for ${minutesElapsed} minutes - not enough time elapsed`);
           }
         }
 
@@ -108,5 +108,5 @@ export function startAdminNotificationChecker() {
     { timezone: 'Africa/Cairo' }
   );
 
-  console.log('🔔 Admin notification checker scheduled to run every hour');
+  console.log('🔔 Admin notification checker scheduled to run every 10 minutes');
 }
