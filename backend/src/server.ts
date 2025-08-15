@@ -2178,15 +2178,15 @@ app.post('/test/admin-notifications', { preHandler: app.auth }, async (req, rep)
           
           console.log(`⏰ [TEST] Task ${task.id} has been unread for ${minutesElapsed} minutes`);
           
-          // Only send notification if at least 1 minute has passed (for testing)
-          if (minutesElapsed >= 1) {
+          // Only send notification if at least 10 minutes have passed
+          if (minutesElapsed >= 10) {
             if (adminPushTokens.length > 0) {
             const taskerName = task.user?.username || task.user?.email || 'Unknown Tasker';
             
             // Send notification to all admins
             const expoMessages = adminPushTokens.map((pt: any) => ({
               to: pt.token,
-              sound: 'default',
+              sound: 'alarm.wav',
               title: '🚨 IMMEDIATE TASK ALERT 🚨',
               body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
               data: {

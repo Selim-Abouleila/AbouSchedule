@@ -6,9 +6,9 @@ import { differenceInHours } from 'date-fns';
 const prisma = new PrismaClient();
 
 export function startAdminNotificationChecker() {
-  // "*/30 * * * * *" = every 30 seconds (for testing)
+  // "*/10 * * * *" = every 10 minutes
   cron.schedule(
-    '*/30 * * * * *',
+    '*/10 * * * *',
     async () => {
       const now = new Date();
       console.log('🔔 [Admin Notifications] Checking for unread immediate tasks...');
@@ -38,8 +38,8 @@ export function startAdminNotificationChecker() {
         for (const task of unreadImmediateTasks) {
           const minutesElapsed = Math.floor((now.getTime() - task.createdAt.getTime()) / (1000 * 60));
           
-          // Only send notification if at least 1 minute has passed (for testing)
-          if (minutesElapsed >= 1) {
+          // Only send notification if at least 10 minutes have passed
+          if (minutesElapsed >= 10) {
             console.log(`⏰ Task ${task.id} has been unread for ${minutesElapsed} minutes`);
             
             // Get all admin users' push tokens
@@ -61,7 +61,7 @@ export function startAdminNotificationChecker() {
                              // Send notification to all admins
                const expoMessages = adminPushTokens.map(pt => ({
                  to: pt.token,
-                 sound: 'default', // Use default sound for Expo Go compatibility
+                 sound: 'alarm.wav', // Aggressive alarm sound
                  title: '🚨 IMMEDIATE TASK ALERT 🚨',
                  body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
                 data: {
@@ -108,5 +108,5 @@ export function startAdminNotificationChecker() {
     { timezone: 'Africa/Cairo' }
   );
 
-  console.log('🔔 Admin notification checker scheduled to run every 30 seconds (for testing)');
+  console.log('🔔 Admin notification checker scheduled to run every 10 minutes');
 }
