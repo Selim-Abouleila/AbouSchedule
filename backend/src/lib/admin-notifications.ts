@@ -6,9 +6,9 @@ import { differenceInHours } from 'date-fns';
 const prisma = new PrismaClient();
 
 export function startAdminNotificationChecker() {
-  // "*/10 * * * *" = every 10 minutes
+  // "*/30 * * * * *" = every 30 seconds (for testing)
   cron.schedule(
-    '*/10 * * * *',
+    '*/30 * * * * *',
     async () => {
       const now = new Date();
       console.log('🔔 [Admin Notifications] Checking for unread immediate tasks...');
@@ -108,5 +108,5 @@ export function startAdminNotificationChecker() {
     { timezone: 'Africa/Cairo' }
   );
 
-  console.log('🔔 Admin notification checker scheduled to run every 10 minutes');
+  console.log('🔔 Admin notification checker scheduled to run every 30 seconds (for testing)');
 }

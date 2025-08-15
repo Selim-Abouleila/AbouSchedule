@@ -217,6 +217,35 @@ export default function AdminPanel() {
     });
   };
 
+  const handleRegisterDevice = async () => {
+    try {
+      Alert.alert(
+        'Register Device',
+        'This will attempt to register your device for push notifications. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Register',
+            onPress: async () => {
+              try {
+                // Import and call the notification initialization
+                const { initializeNotifications } = await import('../src/firebaseNotifications');
+                await initializeNotifications();
+                Alert.alert('Success', 'Device registration attempted. Check "Admin Devices" to verify.');
+              } catch (error) {
+                console.error('Error registering device:', error);
+                Alert.alert('Error', 'Failed to register device');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in device registration:', error);
+      Alert.alert('Error', 'Failed to register device');
+    }
+  };
+
   const handleCheckAdminTokens = async () => {
     try {
       const token = await getToken();
@@ -475,6 +504,18 @@ export default function AdminPanel() {
         >
           <Ionicons name="phone-portrait" size={20} color="#0A84FF" />
           <Text style={[styles.testButtonText, { color: '#0A84FF' }]}>Check Admin Devices</Text>
+        </Pressable>
+        
+        <Pressable
+          style={({ pressed }) => [
+            styles.testButton,
+            { marginTop: 8 },
+            pressed && styles.buttonPressed
+          ]}
+          onPress={handleRegisterDevice}
+        >
+          <Ionicons name="add-circle" size={20} color="#28a745" />
+          <Text style={[styles.testButtonText, { color: '#28a745' }]}>Register This Device</Text>
         </Pressable>
       </View>
 
