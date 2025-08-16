@@ -653,11 +653,11 @@ f.get('/:id', async (req: any, rep) => {
     const {
       title, description, priority, status, size,
       dueAt, timeCapMinutes, recurrence, recurrenceDow, recurrenceDom, recurrenceMonth, recurrenceEvery,
-      recurrenceEnd, labelDone, keep, keepDocs, keepVideos
+      recurrenceEnd, labelDone, runNotification, keep, keepDocs, keepVideos
     } = fields as Partial<{
       title: string; description: string; priority: Priority; status: Status; size: Size;
       dueAt: string; timeCapMinutes: string; recurrence: Recurrence; recurrenceDow: string; recurrenceDom: string; recurrenceMonth: string;
-      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string; keepVideos: string;
+      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; runNotification: string; keep: string; keepDocs: string; keepVideos: string;
     }>;
 
     /* ❸ Build `data` dynamically */
