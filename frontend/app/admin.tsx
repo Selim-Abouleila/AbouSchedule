@@ -43,7 +43,18 @@ export default function AdminPanel() {
 
   useEffect(() => {
     checkAdminStatus();
+    // Initialize notifications for admin users
+    initializeNotifications();
   }, []);
+
+  const initializeNotifications = async () => {
+    try {
+      const { initializeNotifications: initNotifs } = await import('../src/firebaseNotifications');
+      await initNotifs();
+    } catch (error) {
+      console.error('Error initializing notifications:', error);
+    }
+  };
 
   const checkAdminStatus = async () => {
     try {
@@ -217,121 +228,7 @@ export default function AdminPanel() {
     });
   };
 
-  const handleRegisterDevice = async () => {
-    try {
-      Alert.alert(
-        'Register Device',
-        'This will attempt to register your device for push notifications. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Register',
-            onPress: async () => {
-              try {
-                // Import and call the notification initialization
-                const { initializeNotifications } = await import('../src/firebaseNotifications');
-                await initializeNotifications();
-                Alert.alert('Success', 'Device registration attempted. Check "Admin Devices" to verify.');
-              } catch (error) {
-                console.error('Error registering device:', error);
-                Alert.alert('Error', 'Failed to register device');
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('Error in device registration:', error);
-      Alert.alert('Error', 'Failed to register device');
-    }
-  };
 
-  const handleCheckAdminTokens = async () => {
-    try {
-      const token = await getToken();
-      if (!token) {
-        Alert.alert('Error', 'No authentication token found');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE}/test/admin-tokens`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        let message = '📱 Admin Device Status:\n\n';
-        result.adminUsers.forEach((user: any) => {
-          message += `👤 ${user.username || user.email}\n`;
-          message += `📱 Devices: ${user.pushTokensCount}\n`;
-          if (user.pushTokensCount > 0) {
-            message += `🔑 Tokens: ${user.pushTokens.join(', ')}\n`;
-          }
-          message += '\n';
-        });
-        
-        Alert.alert('Admin Tokens Check', message);
-      } else {
-        Alert.alert('Error', result.error || 'Failed to check admin tokens');
-      }
-    } catch (error) {
-      console.error('Error checking admin tokens:', error);
-      Alert.alert('Error', 'Failed to check admin tokens');
-    }
-  };
-
-  const handleTestNotifications = async () => {
-    try {
-      const token = await getToken();
-      if (!token) {
-        Alert.alert('Error', 'No authentication token found');
-        return;
-      }
-
-      Alert.alert(
-        'Test Notifications',
-        'This will test the admin notification system. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Test',
-            onPress: async () => {
-              try {
-                const response = await fetch(`${API_BASE}/test/admin-notifications`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                  },
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                  Alert.alert(
-                    'Test Completed',
-                    `✅ Test completed successfully!\n\n📋 Tasks checked: ${result.tasksChecked}\n📱 Admin devices: ${result.adminDevices}\n📤 Notifications sent: ${result.notificationsSent}`,
-                    [{ text: 'OK' }]
-                  );
-                } else {
-                  Alert.alert('Test Failed', result.error || 'Unknown error occurred');
-                }
-              } catch (error) {
-                console.error('Error testing notifications:', error);
-                Alert.alert('Error', 'Failed to test notifications');
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      console.error('Error in test notifications:', error);
-      Alert.alert('Error', 'Failed to test notifications');
-    }
-  };
 
   const getSelectedUser = () => {
     return users.find(user => user.id === selectedUserId);
@@ -481,43 +378,7 @@ export default function AdminPanel() {
         </View>
       </View>
 
-      {/* Test Buttons */}
-      <View style={styles.testSection}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.testButton,
-            pressed && styles.buttonPressed
-          ]}
-          onPress={handleTestNotifications}
-        >
-          <Ionicons name="notifications" size={20} color="#FF6B35" />
-          <Text style={styles.testButtonText}>Test Admin Notifications</Text>
-        </Pressable>
-        
-        <Pressable
-          style={({ pressed }) => [
-            styles.testButton,
-            { marginTop: 8 },
-            pressed && styles.buttonPressed
-          ]}
-          onPress={handleCheckAdminTokens}
-        >
-          <Ionicons name="phone-portrait" size={20} color="#0A84FF" />
-          <Text style={[styles.testButtonText, { color: '#0A84FF' }]}>Check Admin Devices</Text>
-        </Pressable>
-        
-        <Pressable
-          style={({ pressed }) => [
-            styles.testButton,
-            { marginTop: 8 },
-            pressed && styles.buttonPressed
-          ]}
-          onPress={handleRegisterDevice}
-        >
-          <Ionicons name="add-circle" size={20} color="#28a745" />
-          <Text style={[styles.testButtonText, { color: '#28a745' }]}>Register This Device</Text>
-        </Pressable>
-      </View>
+
 
       {/* Scrollable Content Area */}
       <View style={styles.scrollContainer}>
@@ -1377,34 +1238,5 @@ const styles = StyleSheet.create({
       fontWeight: '600',
       color: '#6c757d',
     },
-    testSection: {
-      backgroundColor: 'white',
-      marginHorizontal: 20,
-      marginTop: 16,
-      marginBottom: 8,
-      borderRadius: 16,
-      padding: 16,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 3,
-    },
-    testButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#FFF5F5',
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: '#FF6B35',
-      gap: 12,
-    },
-    testButtonText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: '#FF6B35',
-    },
+
   }); 
