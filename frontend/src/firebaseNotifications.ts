@@ -2,6 +2,7 @@ import { getToken as getAuthToken } from './auth';
 import { API_BASE } from './api';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import { handleNotificationAction } from './notificationActions';
 
 // Request notification permissions and get push token
 export const requestNotificationPermissions = async (): Promise<string | null> => {
@@ -122,6 +123,34 @@ export const setupForegroundHandler = (): void => {
   console.log('Foreground handler setup - notifications will be handled by Expo');
 };
 
+// Handle notification responses (when user taps notification or action buttons)
+export const setupNotificationResponseHandler = (): void => {
+  const { addNotificationResponseReceivedListener } = require('expo-notifications');
+  
+  const subscription = addNotificationResponseReceivedListener((response: any) => {
+    console.log('🔔 Notification response received:', response);
+    
+    const { actionIdentifier, notification } = response;
+    const data = notification.request.content.data;
+    
+    // Handle action buttons
+    if (actionIdentifier === 'ignore' || actionIdentifier === 'view') {
+      handleNotificationAction(actionIdentifier, data);
+    } else if (actionIdentifier === 'default') {
+      // User tapped the notification itself (not an action button)
+      // Navigate to the task if it's an immediate task alert
+      if (data?.type === 'unread_immediate_task' && data?.taskId) {
+        handleNotificationAction('view', data);
+      }
+    }
+  });
+  
+  console.log('✅ Notification response handler setup complete');
+  
+  // Return the subscription for cleanup
+  return subscription;
+};
+
 // Initialize notifications
 export const initializeNotifications = async (): Promise<void> => {
   try {
@@ -131,6 +160,8 @@ export const initializeNotifications = async (): Promise<void> => {
     if (token) {
       // Setup foreground message handler
       setupForegroundHandler();
+      // Setup notification response handler
+      setupNotificationResponseHandler();
       console.log('Expo notifications initialized successfully');
     } else {
       console.log('Failed to initialize Expo notifications');

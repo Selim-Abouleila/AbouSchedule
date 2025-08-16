@@ -676,6 +676,7 @@ f.get('/:id', async (req: any, rep) => {
     if (recurrenceDom !== undefined) data.recurrenceDom = Number(recurrenceDom);
     if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
     if (labelDone !== undefined) data.labelDone = labelDone === "true";
+    if (runNotification !== undefined) data.runNotification = runNotification === "true";
 
 
 
@@ -1325,11 +1326,11 @@ app.register(async (f) => {
     const {
       title, description, priority, status, size,
       dueAt, timeCapMinutes, recurrence, recurrenceDow, recurrenceDom, recurrenceMonth, recurrenceEvery,
-      recurrenceEnd, labelDone, keep, keepDocs, keepVideos
+      recurrenceEnd, labelDone, runNotification, keep, keepDocs, keepVideos
     } = fields as Partial<{
       title: string; description: string; priority: Priority; status: Status; size: Size;
       dueAt: string; timeCapMinutes: string; recurrence: Recurrence; recurrenceDow: string; recurrenceDom: string; recurrenceMonth: string;
-      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; keep: string; keepDocs: string; keepVideos: string;
+      recurrenceEvery: string; recurrenceEnd: string; labelDone: string; runNotification: string; keep: string; keepDocs: string; keepVideos: string;
     }>;
 
     /* ❸ Build `data` dynamically */
@@ -1814,6 +1815,53 @@ app.register(async (f) => {
     } catch (error) {
       console.error('Error in /media/all endpoint:', error);
       return rep.code(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  // Admin notification ignore endpoint - disable notifications for a specific task
+  f.post('/tasks/:id/ignore-notifications', async (req: any, rep) => {
+    const userRole = req.user.role;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const taskId = parseInt(req.params.id);
+    if (isNaN(taskId)) {
+      return rep.code(400).send({ error: 'Invalid task ID' });
+    }
+
+    try {
+      // Check if task exists
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: {
+          id: true,
+          title: true,
+          runNotification: true,
+        },
+      });
+
+      if (!task) {
+        return rep.code(404).send({ error: 'Task not found' });
+      }
+
+      // Update the task to disable notifications
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { runNotification: false },
+      });
+
+      console.log(`🔕 Admin disabled notifications for task ${taskId} (${task.title})`);
+
+      return { 
+        success: true, 
+        message: 'Notifications disabled for this task',
+        taskId: taskId,
+        taskTitle: task.title
+      };
+    } catch (error) {
+      console.error('Error disabling notifications for task:', error);
+      return rep.code(500).send({ error: 'Failed to disable notifications' });
     }
   });
 

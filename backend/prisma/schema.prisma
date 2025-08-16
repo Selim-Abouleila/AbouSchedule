@@ -50,6 +50,7 @@ model Task {
   readByUser      Boolean?   @default(false) @map("read_by_user")
   wasAddedByAdmin Boolean?   @default(false) @map("was_added_by_admin")
   requiresCompletionApproval Boolean?   @default(false) @map("requires_completion_approval")
+  runNotification Boolean?   @default(true) @map("run_notification")
   size            Size       @default(NORMAL)
   documents       Document[]
   images          Image[]

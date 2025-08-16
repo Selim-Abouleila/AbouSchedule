@@ -15,5 +15,6 @@ export const endpoints = {
     userTask: (userId: number, taskId: number) => `${API_BASE}/admin/users/${userId}/tasks/${taskId}`,
     settings: (userId: number) => `${API_BASE}/admin/settings/${userId}`,
     globalSettings: `${API_BASE}/admin/settings/global`,
+    ignoreTaskNotifications: (taskId: number) => `${API_BASE}/admin/tasks/${taskId}/ignore-notifications`,
   },
 };

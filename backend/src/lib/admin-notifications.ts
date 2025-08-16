@@ -20,7 +20,8 @@ export function startAdminNotificationChecker() {
             priority: 'IMMEDIATE',
             readByUser: false,
             wasAddedByAdmin: true,
-            status: { not: 'DONE' } // Only active tasks
+            status: { not: 'DONE' }, // Only active tasks
+            runNotification: true // Only tasks where notifications are enabled
           },
           include: {
             user: {
@@ -38,9 +39,9 @@ export function startAdminNotificationChecker() {
         for (const task of unreadImmediateTasks) {
           const minutesElapsed = Math.floor((now.getTime() - task.createdAt.getTime()) / (1000 * 60));
           
-          // Only send notification if at least 10 minutes have passed
-          if (minutesElapsed >= 10) {
-            console.log(`⏰ Task ${task.id} has been unread for ${minutesElapsed} minutes`);
+          // Only send notification if at least 10 minutes have passed AND run_notification is TRUE
+          if (minutesElapsed >= 10 && task.runNotification === true) {
+            console.log(`⏰ Task ${task.id} has been unread for ${minutesElapsed} minutes and notifications are enabled`);
             
             // Get all admin users' push tokens
             const adminUsers = await prisma.user.findMany({
@@ -64,13 +65,35 @@ export function startAdminNotificationChecker() {
                  sound: 'alarm.wav', // Aggressive alarm sound
                  title: '🚨 IMMEDIATE TASK ALERT 🚨',
                  body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
-                data: {
-                  taskId: task.id.toString(),
-                  type: 'unread_immediate_task',
-                  taskerName: taskerName,
-                  minutesElapsed: minutesElapsed.toString()
-                }
-              }));
+                 data: {
+                   taskId: task.id.toString(),
+                   type: 'unread_immediate_task',
+                   taskerName: taskerName,
+                   minutesElapsed: minutesElapsed.toString()
+                 },
+                 // Add action buttons for the notification
+                 _displayInForeground: true,
+                 categoryId: 'immediate_task_alert',
+                 // Add action buttons
+                 _actions: [
+                   {
+                     identifier: 'ignore',
+                     buttonTitle: 'Ignore',
+                     options: {
+                       isDestructive: true,
+                       isAuthenticationRequired: false
+                     }
+                   },
+                   {
+                     identifier: 'view',
+                     buttonTitle: 'View Task',
+                     options: {
+                       isDestructive: false,
+                       isAuthenticationRequired: false
+                     }
+                   }
+                 ]
+               }));
 
               console.log(`📤 Sending notifications to ${adminPushTokens.length} admin devices...`);
 
@@ -96,7 +119,11 @@ export function startAdminNotificationChecker() {
               console.log('⚠️ No admin push tokens found - skipping notification');
             }
           } else {
-            console.log(`⏳ Task ${task.id} has only been unread for ${minutesElapsed} minutes - not enough time elapsed`);
+            if (minutesElapsed < 10) {
+              console.log(`⏳ Task ${task.id} has only been unread for ${minutesElapsed} minutes - not enough time elapsed`);
+            } else if (task.runNotification !== true) {
+              console.log(`🔕 Task ${task.id} has notifications disabled (runNotification: ${task.runNotification})`);
+            }
           }
         }
 
