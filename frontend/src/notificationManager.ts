@@ -1,14 +1,14 @@
-import { 
-  initializeNotifications as initializeExpoNotifications,
-  cleanupNotifications as cleanupExpoNotifications,
-  requestNotificationPermissions as requestExpoPermissions
-} from './firebaseNotifications';
+import { Platform } from 'react-native';
+import {
+  initializeNativeFirebaseNotifications,
+  cleanupNativeFirebaseNotifications,
+  requestNotificationPermissions as requestNativePermissions
+} from './nativeFirebaseNotifications';
 
-// Hybrid notification manager - handles both Expo and Firebase tokens
+// Firebase-only notification manager
 export class NotificationManager {
   private static instance: NotificationManager;
   private isInitialized = false;
-  private isUsingNativeFirebase = false;
 
   private constructor() {}
 
@@ -19,20 +19,25 @@ export class NotificationManager {
     return NotificationManager.instance;
   }
 
-  // Initialize notifications (uses Expo notifications for now)
+  // Initialize Firebase notifications
   async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.log('🔔 Notifications already initialized');
+      console.log('🔔 Firebase notifications already initialized');
       return;
     }
 
     try {
-      console.log('🔔 Initializing Expo notifications...');
-      await initializeExpoNotifications();
-      this.isInitialized = true;
-      console.log('✅ Notification manager initialized successfully');
+      if (Platform.OS === 'android') {
+        console.log('🔔 Initializing Firebase notifications...');
+        await initializeNativeFirebaseNotifications();
+        this.isInitialized = true;
+        console.log('✅ Firebase notification manager initialized successfully');
+      } else {
+        console.log('⚠️ Firebase notifications only supported on Android');
+        this.isInitialized = true;
+      }
     } catch (error) {
-      console.error('❌ Error initializing notification manager:', error);
+      console.error('❌ Error initializing Firebase notification manager:', error);
       throw error;
     }
   }
@@ -40,7 +45,12 @@ export class NotificationManager {
   // Request notification permissions
   async requestPermissions(): Promise<string | null> {
     try {
-      return await requestExpoPermissions();
+      if (Platform.OS === 'android') {
+        return await requestNativePermissions();
+      } else {
+        console.log('⚠️ Firebase notifications only supported on Android');
+        return null;
+      }
     } catch (error) {
       console.error('❌ Error requesting notification permissions:', error);
       return null;
@@ -50,11 +60,13 @@ export class NotificationManager {
   // Cleanup notifications
   async cleanup(): Promise<void> {
     try {
-      await cleanupExpoNotifications();
+      if (Platform.OS === 'android') {
+        await cleanupNativeFirebaseNotifications();
+      }
       this.isInitialized = false;
-      console.log('✅ Notification manager cleaned up successfully');
+      console.log('✅ Firebase notification manager cleaned up successfully');
     } catch (error) {
-      console.error('❌ Error cleaning up notification manager:', error);
+      console.error('❌ Error cleaning up Firebase notification manager:', error);
     }
   }
 
@@ -65,12 +77,12 @@ export class NotificationManager {
 
   // Get current notification method
   getCurrentMethod(): string {
-    return this.isUsingNativeFirebase ? 'Native Firebase' : 'Expo';
+    return 'Firebase';
   }
 
   // Check if using native Firebase
   isUsingNativeFirebaseNotifications(): boolean {
-    return this.isUsingNativeFirebase;
+    return Platform.OS === 'android';
   }
 }
 
