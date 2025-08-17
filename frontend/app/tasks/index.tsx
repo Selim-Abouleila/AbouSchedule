@@ -7,7 +7,7 @@ import { getToken }  from '../../src/auth';
 import { Platform } from 'react-native';
 import { ActionSheetIOS } from 'react-native';   // iOS native sheet
 import { Modal } from 'react-native';
-import { initializeNotifications, cleanupNotifications } from '../../src/firebaseNotifications';
+import { initializeNotifications, cleanupNotifications } from '../../src/notificationManager';
 
 /** Page size we request from the API */
 const PAGE_SIZE = 50;

@@ -1,13 +1,14 @@
 import { 
-  initializeNativeFirebaseNotifications,
-  cleanupNativeFirebaseNotifications,
-  requestNotificationPermissions as requestNativePermissions
-} from './nativeFirebaseNotifications';
+  initializeNotifications as initializeExpoNotifications,
+  cleanupNotifications as cleanupExpoNotifications,
+  requestNotificationPermissions as requestExpoPermissions
+} from './firebaseNotifications';
 
-// Simplified notification manager - always uses native Firebase
+// Hybrid notification manager - handles both Expo and Firebase tokens
 export class NotificationManager {
   private static instance: NotificationManager;
   private isInitialized = false;
+  private isUsingNativeFirebase = false;
 
   private constructor() {}
 
@@ -18,7 +19,7 @@ export class NotificationManager {
     return NotificationManager.instance;
   }
 
-  // Initialize notifications (always uses native Firebase)
+  // Initialize notifications (uses Expo notifications for now)
   async initialize(): Promise<void> {
     if (this.isInitialized) {
       console.log('🔔 Notifications already initialized');
@@ -26,8 +27,8 @@ export class NotificationManager {
     }
 
     try {
-      console.log('🔔 Initializing native Firebase notifications...');
-      await initializeNativeFirebaseNotifications();
+      console.log('🔔 Initializing Expo notifications...');
+      await initializeExpoNotifications();
       this.isInitialized = true;
       console.log('✅ Notification manager initialized successfully');
     } catch (error) {
@@ -39,7 +40,7 @@ export class NotificationManager {
   // Request notification permissions
   async requestPermissions(): Promise<string | null> {
     try {
-      return await requestNativePermissions();
+      return await requestExpoPermissions();
     } catch (error) {
       console.error('❌ Error requesting notification permissions:', error);
       return null;
@@ -49,7 +50,7 @@ export class NotificationManager {
   // Cleanup notifications
   async cleanup(): Promise<void> {
     try {
-      await cleanupNativeFirebaseNotifications();
+      await cleanupExpoNotifications();
       this.isInitialized = false;
       console.log('✅ Notification manager cleaned up successfully');
     } catch (error) {
@@ -62,9 +63,14 @@ export class NotificationManager {
     return this.isInitialized;
   }
 
-  // Get current notification method (always native Firebase now)
+  // Get current notification method
   getCurrentMethod(): string {
-    return 'Native Firebase';
+    return this.isUsingNativeFirebase ? 'Native Firebase' : 'Expo';
+  }
+
+  // Check if using native Firebase
+  isUsingNativeFirebaseNotifications(): boolean {
+    return this.isUsingNativeFirebase;
   }
 }
 
@@ -75,5 +81,5 @@ export const notificationManager = NotificationManager.getInstance();
 export const initializeNotifications = () => notificationManager.initialize();
 export const requestNotificationPermissions = () => notificationManager.requestPermissions();
 export const cleanupNotifications = () => notificationManager.cleanup();
-export const isUsingNativeFirebase = () => true; // Always true now
+export const isUsingNativeFirebase = () => notificationManager.isUsingNativeFirebaseNotifications();
 export const getNotificationMethod = () => notificationManager.getCurrentMethod();

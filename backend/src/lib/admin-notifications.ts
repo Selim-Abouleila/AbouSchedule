@@ -6,6 +6,16 @@ import admin from '../firebase-admin.js';
 
 const prisma = new PrismaClient();
 
+// Helper function to detect token type
+function isExpoToken(token: string): boolean {
+  return token.startsWith('ExponentPushToken[') || token.startsWith('ExpoPushToken[');
+}
+
+// Helper function to detect Firebase token
+function isFirebaseToken(token: string): boolean {
+  return token.length > 100 && !isExpoToken(token);
+}
+
 export function startAdminNotificationChecker() {
   // "*/10 * * * *" = every 10 minutes
   cron.schedule(
@@ -60,68 +70,20 @@ export function startAdminNotificationChecker() {
             if (adminPushTokens.length > 0) {
               const taskerName = task.user?.username || task.user?.email || 'Unknown Tasker';
               
-              // Prepare Firebase notification message
-              const message = {
-                notification: {
-                  title: '🚨 IMMEDIATE TASK ALERT 🚨',
-                  body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`
-                },
-                data: {
-                  taskId: task.id.toString(),
-                  type: 'unread_immediate_task',
-                  taskerName: taskerName,
-                  minutesElapsed: minutesElapsed.toString()
-                },
-                android: {
-                  notification: {
-                    channelId: 'immediate_task_alert',
-                    sound: 'alarm.wav',
-                    priority: 'high' as 'high',
-                    clickAction: 'FLUTTER_NOTIFICATION_CLICK'
-                  }
-                },
-                apns: {
-                  payload: {
-                    aps: {
-                      sound: 'alarm.wav',
-                      category: 'immediate_task_alert',
-                      'mutable-content': 1
-                    }
-                  }
-                }
-              };
+              // Separate tokens by type
+              const expoTokens = adminPushTokens.filter(pt => isExpoToken(pt.token)).map(pt => pt.token);
+              const firebaseTokens = adminPushTokens.filter(pt => isFirebaseToken(pt.token)).map(pt => pt.token);
 
-              // Extract tokens for Firebase Admin SDK
-              const tokens = adminPushTokens.map(pt => pt.token);
+              console.log(`📱 Found ${expoTokens.length} Expo tokens and ${firebaseTokens.length} Firebase tokens`);
 
-              console.log(`📤 Sending Firebase notifications to ${tokens.length} admin devices...`);
+              // Send Expo notifications
+              if (expoTokens.length > 0) {
+                await sendExpoNotifications(expoTokens, task, taskerName, minutesElapsed);
+              }
 
-              try {
-                // Send notifications using Firebase Admin SDK - send one by one
-                let successCount = 0;
-                let failureCount = 0;
-
-                for (const token of tokens) {
-                  try {
-                    await admin.messaging().send({
-                      token: token,
-                      notification: message.notification,
-                      data: message.data,
-                      android: message.android,
-                      apns: message.apns
-                    });
-                    successCount++;
-                  } catch (error) {
-                    console.error(`❌ Failed to send to token ${token}:`, error);
-                    failureCount++;
-                  }
-                }
-                
-                console.log(`✅ Firebase admin notifications sent successfully for task ${task.id}`);
-                console.log(`📱 Notified ${tokens.length} admin devices`);
-                console.log(`📊 Success count: ${successCount}, Failure count: ${failureCount}`);
-              } catch (firebaseError) {
-                console.error(`❌ Firebase error sending admin notifications for task ${task.id}:`, firebaseError);
+              // Send Firebase notifications
+              if (firebaseTokens.length > 0) {
+                await sendFirebaseNotifications(firebaseTokens, task, taskerName, minutesElapsed);
               }
             } else {
               console.log('⚠️ No admin push tokens found - skipping notification');
@@ -144,4 +106,125 @@ export function startAdminNotificationChecker() {
   );
 
   console.log('🔔 Admin notification checker scheduled to run every 10 minutes');
+}
+
+// Send notifications via Expo push service
+async function sendExpoNotifications(tokens: string[], task: any, taskerName: string, minutesElapsed: number) {
+  try {
+    const expoMessages = tokens.map(token => ({
+      to: token,
+      sound: 'alarm.wav',
+      title: '🚨 IMMEDIATE TASK ALERT 🚨',
+      body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
+      data: {
+        taskId: task.id.toString(),
+        type: 'unread_immediate_task',
+        taskerName: taskerName,
+        minutesElapsed: minutesElapsed.toString()
+      },
+      _displayInForeground: true,
+      categoryId: 'immediate_task_alert',
+      _actions: [
+        {
+          identifier: 'ignore',
+          buttonTitle: 'Ignore',
+          options: {
+            isDestructive: true,
+            isAuthenticationRequired: false
+          }
+        },
+        {
+          identifier: 'view',
+          buttonTitle: 'View Task',
+          options: {
+            isDestructive: false,
+            isAuthenticationRequired: false
+          }
+        }
+      ]
+    }));
+
+    console.log(`📤 Sending Expo notifications to ${tokens.length} devices...`);
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(expoMessages)
+    });
+
+    const result = await response.json();
+    
+    if (response.ok) {
+      console.log(`✅ Expo notifications sent successfully for task ${task.id}`);
+    } else {
+      console.error(`❌ Failed to send Expo notifications for task ${task.id}:`, result);
+    }
+  } catch (error) {
+    console.error(`❌ Error sending Expo notifications for task ${task.id}:`, error);
+  }
+}
+
+// Send notifications via Firebase Admin SDK
+async function sendFirebaseNotifications(tokens: string[], task: any, taskerName: string, minutesElapsed: number) {
+  try {
+    const message = {
+      notification: {
+        title: '🚨 IMMEDIATE TASK ALERT 🚨',
+        body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`
+      },
+      data: {
+        taskId: task.id.toString(),
+        type: 'unread_immediate_task',
+        taskerName: taskerName,
+        minutesElapsed: minutesElapsed.toString()
+      },
+      android: {
+        notification: {
+          channelId: 'immediate_task_alert',
+          sound: 'alarm.wav',
+          priority: 'high' as 'high',
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'alarm.wav',
+            category: 'immediate_task_alert',
+            'mutable-content': 1
+          }
+        }
+      }
+    };
+
+    console.log(`📤 Sending Firebase notifications to ${tokens.length} devices...`);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const token of tokens) {
+      try {
+        await admin.messaging().send({
+          token: token,
+          notification: message.notification,
+          data: message.data,
+          android: message.android,
+          apns: message.apns
+        });
+        successCount++;
+      } catch (error) {
+        console.error(`❌ Failed to send to Firebase token ${token}:`, error);
+        failureCount++;
+      }
+    }
+    
+    console.log(`✅ Firebase notifications sent successfully for task ${task.id}`);
+    console.log(`📊 Success count: ${successCount}, Failure count: ${failureCount}`);
+  } catch (error) {
+    console.error(`❌ Error sending Firebase notifications for task ${task.id}:`, error);
+  }
 }

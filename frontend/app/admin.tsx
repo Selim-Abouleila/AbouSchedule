@@ -62,7 +62,7 @@ export default function AdminPanel() {
 
   const initializeNotifications = async () => {
     try {
-      const { initializeNotifications: initNotifs } = await import('../src/firebaseNotifications');
+      const { initializeNotifications: initNotifs } = await import('../src/notificationManager');
       await initNotifs();
     } catch (error) {
       console.error('Error initializing notifications:', error);
