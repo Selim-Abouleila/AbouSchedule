@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,10 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { isAdmin } from '../src/auth';
 import { endpoints, API_BASE } from '../src/api';
 import { getToken } from '../src/auth';
@@ -46,6 +47,18 @@ export default function AdminPanel() {
     // Initialize notifications for admin users
     initializeNotifications();
   }, []);
+
+  // Android back button handler - prevents default back behavior to stay on same page
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        console.log('🔙 Android back button pressed - staying on admin page');
+        return true; // Prevent default back behavior - stay on same page
+      });
+
+      return () => backHandler.remove();
+    }, [])
+  );
 
   const initializeNotifications = async () => {
     try {

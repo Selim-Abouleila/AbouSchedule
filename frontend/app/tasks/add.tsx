@@ -154,6 +154,7 @@ export default function AddTask() {
   const [uploadProgress, setUploadProgress] = useState<string>('');
       const [pickingPhotos, setPickingPhotos] = useState(false);
     const [pickingCamera, setPickingCamera] = useState(false);
+    const [pickingVideo, setPickingVideo] = useState(false);
     const [pickingGallery, setPickingGallery] = useState(false);
     const [pickingDocs, setPickingDocs] = useState(false);
 
@@ -315,8 +316,8 @@ const scrollRef = useRef<ScrollView>(null);
   };
 
   /** open device camera, then push the result into `photos` or `videos` */
+  /** launch device camera for photos */
   const takePhoto = async () => {
-    
     const { granted } = await ImagePicker.requestCameraPermissionsAsync();
     if (!granted) {
       Alert.alert('Camera access was denied');
@@ -332,60 +333,67 @@ const scrollRef = useRef<ScrollView>(null);
       }
     }
 
-    // Show option to choose between photo and video for camera
-    Alert.alert(
-      'Camera Mode',
-      'Choose what you want to capture:',
-      [
-        {
-          text: 'Photo',
-          onPress: async () => {
-            if (photos.length >= 6) { Alert.alert('Maximum 6 pictures'); return; }
-            setPickingCamera(true);
-            try {
-              const res = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                quality: 0.9,        
-                allowsEditing: false, 
-                exif: false,               
-              });
+    if (photos.length >= 6) { 
+      Alert.alert('Maximum 6 pictures'); 
+      return; 
+    }
+    
+    setPickingCamera(true);
+    try {
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.9,        
+        allowsEditing: false, 
+        exif: false,
+      });
 
-              if (!res.canceled && res.assets?.length) {
-                setPhotos(prev => [...prev, ...res.assets]);
-              }
-            } finally {
-              setPickingCamera(false);
-            }
-          }
-        },
-        {
-          text: 'Video',
-          onPress: async () => {
-            if (videos.length >= 3) { Alert.alert('Maximum 3 videos'); return; }
-            setPickingCamera(true);
-            try {
-              const res = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-                quality: 0.9,
-                allowsEditing: false,
-                videoMaxDuration: 60, // 60 seconds max
-              });
+      if (!res.canceled && res.assets?.length) {
+        console.log('📸 Photo captured:', res.assets[0]);
+        setPhotos(prev => [...prev, res.assets[0]]);
+      }
+    } finally {
+      setPickingCamera(false);
+    }
+  };
 
-              if (!res.canceled && res.assets?.length) {
-                console.log('📹 Video captured:', res.assets);
-                setVideos(prev => [...prev, ...res.assets]);
-              }
-            } finally {
-              setPickingCamera(false);
-            }
-          }
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        }
-      ]
-    );
+  /** launch device camera for videos */
+  const takeVideo = async () => {
+    const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+    if (!granted) {
+      Alert.alert('Camera access was denied');
+      return;
+    }
+
+    // Also check photo library permissions for iOS
+    if (Platform.OS === 'ios') {
+      const { granted: libraryGranted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!libraryGranted) {
+        Alert.alert('Photo library access was denied');
+        return;
+      }
+    }
+
+    if (videos.length >= 3) { 
+      Alert.alert('Maximum 3 videos'); 
+      return; 
+    }
+    
+    setPickingVideo(true);
+    try {
+      const res = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        quality: 0.9,
+        allowsEditing: false,
+        videoMaxDuration: 60, // 60 seconds max
+      });
+
+      if (!res.canceled && res.assets?.length) {
+        console.log('📹 Video captured:', res.assets[0]);
+        setVideos(prev => [...prev, res.assets[0]]);
+      }
+    } finally {
+      setPickingVideo(false);
+    }
   };
 
   /* pick image(s) and video(s) */
@@ -1229,83 +1237,108 @@ const scrollRef = useRef<ScrollView>(null);
 
 
 
-          {/* PICKERS  (camera / gallery / doc) ----------------------------- */}
-                                          <View style={styles.pickerRow}>
-                                  <View style={{ alignItems: 'center' }}>
-                                    <Pressable 
-                                      onPress={takePhoto} 
-                                      style={[styles.pickerBox, pickingCamera && { opacity: 0.5 }]}
-                                      disabled={pickingCamera}
-                                    >
-                                      {pickingCamera ? (
-                                        <ActivityIndicator size="small" color="#555" />
-                                      ) : (
-                                        <Ionicons name="camera" size={28} color="#555" />
-                                      )}
-                                      <Ionicons 
-                                        name="add-circle" 
-                                        size={16} 
-                                        color="#0A84FF" 
-                                        style={{ 
-                                          position: 'absolute', 
-                                          top: 2, 
-                                          left: 2 
-                                        }} 
-                                      />
-                                    </Pressable>
-                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Camera</Text>
-                                  </View>
-                      
-                                  <View style={{ alignItems: 'center' }}>
-                                    <Pressable 
-                                      onPress={pickImages} 
-                                      style={[styles.pickerBox, pickingGallery && { opacity: 0.5 }]}
-                                      disabled={pickingGallery}
-                                    >
-                                      {pickingGallery ? (
-                                        <ActivityIndicator size="small" color="#555" />
-                                      ) : (
-                                        <Ionicons name="image" size={28} color="#555" />
-                                      )}
-                                      <Ionicons 
-                                        name="add-circle" 
-                                        size={16} 
-                                        color="#0A84FF" 
-                                        style={{ 
-                                          position: 'absolute', 
-                                          top: 2, 
-                                          left: 2 
-                                        }} 
-                                      />
-                                    </Pressable>
-                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Gallery</Text>
-                                  </View>
-                      
-                                  <View style={{ alignItems: 'center' }}>
-                                    <Pressable 
-                                      onPress={pickDocs} 
-                                      style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
-                                      disabled={pickingDocs}
-                                    >
-                                      {pickingDocs ? (
-                                        <ActivityIndicator size="small" color="#555" />
-                                      ) : (
-                                        <Ionicons name="document" size={28} color="#555" />
-                                      )}
-                                      <Ionicons 
-                                        name="add-circle" 
-                                        size={16} 
-                                        color="#0A84FF" 
-                                        style={{ 
-                                          position: 'absolute', 
-                                          top: 2, 
-                                          left: 2 
-                                        }} 
-                                      />
-                                    </Pressable>
-                                    <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Document</Text>
-                                  </View>
-                                </View>
+          {/* PICKERS  (camera / video / gallery / doc) ----------------------------- */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ alignItems: 'center' }}>
+              <Pressable 
+                onPress={takePhoto} 
+                style={[styles.pickerBox, pickingCamera && { opacity: 0.5 }]}
+                disabled={pickingCamera}
+              >
+                {pickingCamera ? (
+                  <ActivityIndicator size="small" color="#555" />
+                ) : (
+                  <Ionicons name="camera" size={28} color="#555" />
+                )}
+                <Ionicons 
+                  name="add-circle" 
+                  size={16} 
+                  color="#0A84FF" 
+                  style={{ 
+                    position: 'absolute', 
+                    top: 2, 
+                    left: 2 
+                  }} 
+                />
+              </Pressable>
+              <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Camera</Text>
+            </View>
+
+            <View style={{ alignItems: 'center' }}>
+              <Pressable 
+                onPress={takeVideo} 
+                style={[styles.pickerBox, pickingVideo && { opacity: 0.5 }]}
+                disabled={pickingVideo}
+              >
+                {pickingVideo ? (
+                  <ActivityIndicator size="small" color="#555" />
+                ) : (
+                  <Ionicons name="videocam" size={28} color="#555" />
+                )}
+                <Ionicons 
+                  name="add-circle" 
+                  size={16} 
+                  color="#0A84FF" 
+                  style={{ 
+                    position: 'absolute', 
+                    top: 2, 
+                    left: 2 
+                  }} 
+                />
+              </Pressable>
+              <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Video</Text>
+            </View>
+                
+            <View style={{ alignItems: 'center' }}>
+              <Pressable 
+                onPress={pickImages} 
+                style={[styles.pickerBox, pickingGallery && { opacity: 0.5 }]}
+                disabled={pickingGallery}
+              >
+                {pickingGallery ? (
+                  <ActivityIndicator size="small" color="#555" />
+                ) : (
+                  <Ionicons name="image" size={28} color="#555" />
+                )}
+                <Ionicons 
+                  name="add-circle" 
+                  size={16} 
+                  color="#0A84FF" 
+                  style={{ 
+                    position: 'absolute', 
+                    top: 2, 
+                    left: 2 
+                  }} 
+                />
+              </Pressable>
+              <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Gallery</Text>
+            </View>
+                
+            <View style={{ alignItems: 'center' }}>
+              <Pressable 
+                onPress={pickDocs} 
+                style={[styles.pickerBox, pickingDocs && { opacity: 0.5 }]}
+                disabled={pickingDocs}
+              >
+                {pickingDocs ? (
+                  <ActivityIndicator size="small" color="#555" />
+                ) : (
+                  <Ionicons name="document" size={28} color="#555" />
+                )}
+                <Ionicons 
+                  name="add-circle" 
+                  size={16} 
+                  color="#0A84FF" 
+                  style={{ 
+                    position: 'absolute', 
+                    top: 2, 
+                    left: 2 
+                  }} 
+                />
+              </Pressable>
+              <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>Document</Text>
+            </View>
+          </View>
 
           {/* Docs shown a single time ------------------------------------------------ */}
           <View style={styles.docRow}>

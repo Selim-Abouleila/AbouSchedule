@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { View, FlatList, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, FlatList, Text, Pressable, ActivityIndicator, Alert, BackHandler } from 'react-native';
 import { useFocusEffect, router, useNavigation, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { endpoints, API_BASE } from '../../../../src/api';
@@ -226,6 +226,19 @@ export default function AdminUserTasks() {
     React.useCallback(() => {
       reload();
     }, [reload])
+  );
+
+  // Android back button handler - behaves exactly like the pressable back button
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        console.log('🔙 Android back button pressed - navigating to admin');
+        router.push('/admin');
+        return true; // Prevent default back behavior
+      });
+
+      return () => backHandler.remove();
+    }, [])
   );
 
   /** onEndReached → load next page if available */

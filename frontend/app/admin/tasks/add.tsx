@@ -733,19 +733,22 @@ const scrollRef = useRef<ScrollView>(null);
     );
   }, [hasUnsavedChanges, save, resetForm]);
 
-  // Android back button handler
-  useEffect(() => {
-    const backAction = () => {
-      if (hasUnsavedChanges) {
-        handleBack();
-        return true; // Prevent default behavior
-      }
-      return false; // Allow default behavior
-    };
+  // Android back button handler - behaves exactly like the pressable back button
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        console.log('🔙 Android back button pressed - navigating to admin');
+        if (hasUnsavedChanges) {
+          handleBack();
+          return true; // Prevent default back behavior
+        }
+        router.push('/admin');
+        return true; // Prevent default back behavior
+      });
 
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-    return () => backHandler.remove();
-  }, [hasUnsavedChanges, handleBack]);
+      return () => backHandler.remove();
+    }, [hasUnsavedChanges, handleBack])
+  );
 
   /* UI */
   return (

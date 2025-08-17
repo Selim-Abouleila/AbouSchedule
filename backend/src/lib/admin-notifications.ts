@@ -2,6 +2,7 @@
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 import { differenceInHours } from 'date-fns';
+import admin from '../firebase-admin.js';
 
 const prisma = new PrismaClient();
 
@@ -59,61 +60,68 @@ export function startAdminNotificationChecker() {
             if (adminPushTokens.length > 0) {
               const taskerName = task.user?.username || task.user?.email || 'Unknown Tasker';
               
-                             // Send notification to all admins
-               const expoMessages = adminPushTokens.map(pt => ({
-                 to: pt.token,
-                 sound: 'alarm.wav', // Aggressive alarm sound
-                 title: '🚨 IMMEDIATE TASK ALERT 🚨',
-                 body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
-                 data: {
-                   taskId: task.id.toString(),
-                   type: 'unread_immediate_task',
-                   taskerName: taskerName,
-                   minutesElapsed: minutesElapsed.toString()
-                 },
-                 // Add action buttons for the notification
-                 _displayInForeground: true,
-                 categoryId: 'immediate_task_alert',
-                 // Add action buttons
-                 _actions: [
-                   {
-                     identifier: 'ignore',
-                     buttonTitle: 'Ignore',
-                     options: {
-                       isDestructive: true,
-                       isAuthenticationRequired: false
-                     }
-                   },
-                   {
-                     identifier: 'view',
-                     buttonTitle: 'View Task',
-                     options: {
-                       isDestructive: false,
-                       isAuthenticationRequired: false
-                     }
-                   }
-                 ]
-               }));
-
-              console.log(`📤 Sending notifications to ${adminPushTokens.length} admin devices...`);
-
-              const response = await fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: {
-                  'Accept': 'application/json',
-                  'Accept-encoding': 'gzip, deflate',
-                  'Content-Type': 'application/json',
+              // Prepare Firebase notification message
+              const message = {
+                notification: {
+                  title: '🚨 IMMEDIATE TASK ALERT 🚨',
+                  body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`
                 },
-                body: JSON.stringify(expoMessages)
-              });
+                data: {
+                  taskId: task.id.toString(),
+                  type: 'unread_immediate_task',
+                  taskerName: taskerName,
+                  minutesElapsed: minutesElapsed.toString()
+                },
+                android: {
+                  notification: {
+                    channelId: 'immediate_task_alert',
+                    sound: 'alarm.wav',
+                    priority: 'high' as 'high',
+                    clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+                  }
+                },
+                apns: {
+                  payload: {
+                    aps: {
+                      sound: 'alarm.wav',
+                      category: 'immediate_task_alert',
+                      'mutable-content': 1
+                    }
+                  }
+                }
+              };
 
-              const result = await response.json();
-              
-              if (response.ok) {
-                console.log(`✅ Admin notifications sent successfully for task ${task.id}`);
-                console.log(`📱 Notified ${adminPushTokens.length} admin devices`);
-              } else {
-                console.error(`❌ Failed to send admin notifications for task ${task.id}:`, result);
+              // Extract tokens for Firebase Admin SDK
+              const tokens = adminPushTokens.map(pt => pt.token);
+
+              console.log(`📤 Sending Firebase notifications to ${tokens.length} admin devices...`);
+
+              try {
+                // Send notifications using Firebase Admin SDK - send one by one
+                let successCount = 0;
+                let failureCount = 0;
+
+                for (const token of tokens) {
+                  try {
+                    await admin.messaging().send({
+                      token: token,
+                      notification: message.notification,
+                      data: message.data,
+                      android: message.android,
+                      apns: message.apns
+                    });
+                    successCount++;
+                  } catch (error) {
+                    console.error(`❌ Failed to send to token ${token}:`, error);
+                    failureCount++;
+                  }
+                }
+                
+                console.log(`✅ Firebase admin notifications sent successfully for task ${task.id}`);
+                console.log(`📱 Notified ${tokens.length} admin devices`);
+                console.log(`📊 Success count: ${successCount}, Failure count: ${failureCount}`);
+              } catch (firebaseError) {
+                console.error(`❌ Firebase error sending admin notifications for task ${task.id}:`, firebaseError);
               }
             } else {
               console.log('⚠️ No admin push tokens found - skipping notification');

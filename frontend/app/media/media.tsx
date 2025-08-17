@@ -1,6 +1,6 @@
 // src/screens/Media.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, FlatList, Image, Text, Pressable, ActivityIndicator, StyleSheet, Share, Button, Platform, Alert, ScrollView} from 'react-native';
+import { View, FlatList, Image, Text, Pressable, ActivityIndicator, StyleSheet, Share, Button, Platform, Alert, ScrollView, BackHandler} from 'react-native';
 import ImageViewing from 'react-native-image-viewing';
 import { syncMedia, getLocalMediaUris, getLocalDocumentUris, clearMediaCache, syncAllMedia, getAllLocalMediaUris, getAllLocalDocumentUris } from '../../src/mediaCache';
 import { Ionicons } from '@expo/vector-icons'
@@ -331,6 +331,16 @@ export default function MediaScreen() {
       }
     }, [checkAdminStatus, loadMedia, uris.length])
   );
+
+  // Android back button handler - prevents default back behavior to stay on same page
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      console.log('🔙 Android back button pressed - staying on media page');
+      return true; // Prevent default back behavior - stay on same page
+    });
+
+    return () => backHandler.remove();
+  }, []);
 
   useEffect(() => {
     loadMedia();

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "306741580359",
+    "project_id": "abouschedule",
+    "storage_bucket": "abouschedule.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:306741580359:android:0290a87a45eb500b189762",
+        "android_client_info": {
+          "package_name": "com.selax215.abouschedule"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCG4YkPB9xB8Dl2zd73xN4VzuN1Ijo0sEo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

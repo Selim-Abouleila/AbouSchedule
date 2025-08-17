@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   Modal,
+  BackHandler,
 } from 'react-native';
 
 import { useLocalSearchParams, router } from 'expo-router';
@@ -375,6 +376,17 @@ export default function AdminTaskDetail() {
     setTask(null);
     setError(null);
   }, []);
+
+  // Android back button handler - behaves exactly like the pressable back button
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      console.log('🔙 Android back button pressed - navigating to admin tasks list');
+      router.push(`/admin/tasks/${userId}`);
+      return true; // Prevent default back behavior
+    });
+
+    return () => backHandler.remove();
+  }, [userId]);
 
   const deleteTask = () => {
     Alert.alert(

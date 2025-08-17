@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getSettings, saveSettings, getSettingsForUser, getUserSettings } from '../src/settings';
 import { getToken, getCurrentUserId } from '../src/auth';
@@ -36,6 +36,16 @@ export default function Settings() {
     loadSettings();
     checkAdminStatus();
   }, [selectedUserId]);
+
+  // Android back button handler - prevents default back behavior to stay on same page
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      console.log('🔙 Android back button pressed - staying on settings page');
+      return true; // Prevent default back behavior - stay on same page
+    });
+
+    return () => backHandler.remove();
+  }, []);
 
   const checkAdminStatus = async () => {
     try {
