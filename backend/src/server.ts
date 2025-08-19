@@ -1381,6 +1381,16 @@ app.register(async (f) => {
       recurrenceEvery: string; recurrenceEnd: string; labelDone: string; runNotification: string; keep: string; keepDocs: string; keepVideos: string;
     }>;
 
+    console.log('🔍 DEBUG - Backend received fields:', {
+      recurrence,
+      recurrenceEvery,
+      recurrenceDow,
+      recurrenceDom,
+      recurrenceMonth,
+      recurrenceEnd,
+      fields
+    });
+
     /* ❸ Build `data` dynamically */
     const data: Record<string, any> = {};
     if (title !== undefined) data.title = title;
@@ -1415,6 +1425,16 @@ app.register(async (f) => {
     }
     if (recurrenceEnd !== undefined) data.recurrenceEnd = recurrenceEnd ? new Date(recurrenceEnd) : null;
     if (labelDone !== undefined) data.labelDone = labelDone === "true";
+
+    console.log('🔍 DEBUG - Backend built data object:', {
+      dataRecurrence: data.recurrence,
+      dataRecurrenceEvery: data.recurrenceEvery,
+      dataRecurrenceDow: data.recurrenceDow,
+      dataRecurrenceDom: data.recurrenceDom,
+      dataRecurrenceMonth: data.recurrenceMonth,
+      dataRecurrenceEnd: data.recurrenceEnd,
+      fullData: data
+    });
 
     // set previous status
     /* ── previousStatus logic ─────────────────────────── */

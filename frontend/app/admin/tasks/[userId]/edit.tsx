@@ -131,7 +131,7 @@ export default function EditTask() {
     const [timeCapM, setTimeCapM] = useState(0);     // minutes (0-59)
     const [showCapIOS, setShowCapIOS] = useState(false);           // string for TextInput
     const [recurring, setRecurring] = useState(false);
-    const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number]>("DAILY");
+    const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number] | "NONE">("NONE");
     const [recEvery, setRecEvery] = useState("1");
     const [recEnd, setRecEnd] = useState<Date | null>(null);
     const [labelDone, setLabelDone] = useState<boolean | null>(null);
@@ -214,6 +214,15 @@ export default function EditTask() {
                 }
 
                 // Recurrence
+                console.log('🔍 DEBUG - Loading recurrence from server:', {
+                  serverRecurrence: t.recurrence,
+                  serverRecurrenceEvery: t.recurrenceEvery,
+                  serverRecurrenceDow: t.recurrenceDow,
+                  serverRecurrenceDom: t.recurrenceDom,
+                  serverRecurrenceMonth: t.recurrenceMonth,
+                  serverRecurrenceEnd: t.recurrenceEnd
+                });
+                
                 setRecurring(t.recurrence !== 'NONE');
                 setRecurrence(t.recurrence);
                 setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : '1');
@@ -221,6 +230,12 @@ export default function EditTask() {
                 setRecurrenceDom(t.recurrenceDom ? String(t.recurrenceDom) : "1");
                 setRecurrenceDow(t.recurrenceDow ? String(t.recurrenceDow) : "1");
                 setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
+                
+                console.log('🔍 DEBUG - Set recurrence state:', {
+                  setRecurring: t.recurrence !== 'NONE',
+                  setRecurrence: t.recurrence,
+                  setRecEvery: t.recurrenceEvery ? String(t.recurrenceEvery) : '1'
+                });
 
                 // Label done
                 console.log('🔧 Loading labelDone from task:', t.labelDone, 'type:', typeof t.labelDone);
@@ -913,6 +928,17 @@ const save = async () => {
         recurrenceMonth,
         recEnd,
         body
+      });
+      
+      // Debug: Check if recurrence is properly set
+      console.log('🔍 DEBUG - Recurrence check:', {
+        recurring: recurring,
+        recurrence: recurrence,
+        recurrenceType: typeof recurrence,
+        recEvery: recEvery,
+        recEveryType: typeof recEvery,
+        bodyRecurrence: body.recurrence,
+        bodyRecurrenceEvery: body.recurrenceEvery
       });
 
 
