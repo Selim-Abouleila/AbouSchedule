@@ -33,11 +33,20 @@ async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   const Notifications = await getNotifications();
   if (!Notifications) return;
+  // Default channel
   await Notifications.setNotificationChannelAsync('default', {
     name: 'Default',
     importance: Notifications.AndroidImportance.MAX,
     sound: 'default',
     vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#FF231F7C',
+  });
+  // Admin alert channel (used by server for unread immediate task alerts)
+  await Notifications.setNotificationChannelAsync('immediate_task_alert', {
+    name: 'Immediate Task Alerts',
+    importance: Notifications.AndroidImportance.MAX,
+    sound: 'default',
+    vibrationPattern: [0, 500, 500, 500],
     lightColor: '#FF231F7C',
   });
 }

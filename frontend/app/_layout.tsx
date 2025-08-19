@@ -20,15 +20,32 @@ export default function AppDrawerLayout() {
     // Handle cold start
     (async () => {
       const data = await getInitialNotificationData();
-      if (data?.type === 'immediate_task' && data.taskId) {
-        router.replace(`/tasks/${data.taskId}`);
+      if (data) {
+        console.log('🔔 Initial notification data:', data);
+      }
+      if (data?.taskId) {
+        // Defer a tick to ensure router is ready on cold start
+        setTimeout(() => {
+          if (data.type === 'unread_immediate_task' && data.userId) {
+            router.replace(`/admin/tasks/${data.userId}/${data.taskId}`);
+          } else if (data.type === 'immediate_task') {
+            router.replace(`/tasks/${data.taskId}`);
+          }
+        }, 0);
       }
     })();
 
     // Subscribe to taps
     const unsub = setupNotificationResponseHandler((data: any) => {
-      if (data?.type === 'immediate_task' && data.taskId) {
-        router.push(`/tasks/${data.taskId}`);
+      console.log('🔔 Notification tap data:', data);
+      if (data?.taskId) {
+        setTimeout(() => {
+          if (data.type === 'unread_immediate_task' && data.userId) {
+            router.push(`/admin/tasks/${data.userId}/${data.taskId}`);
+          } else if (data.type === 'immediate_task') {
+            router.push(`/tasks/${data.taskId}`);
+          }
+        }, 0);
       }
     });
 

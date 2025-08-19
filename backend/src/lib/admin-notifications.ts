@@ -119,6 +119,7 @@ async function sendExpoNotifications(tokens: string[], task: any, taskerName: st
       body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
       data: {
         taskId: task.id.toString(),
+        userId: (task.user?.id ?? (task as any).userId)?.toString?.() ?? String((task as any).userId),
         type: 'unread_immediate_task',
         taskerName: taskerName,
         minutesElapsed: minutesElapsed.toString()
@@ -179,6 +180,7 @@ async function sendFirebaseNotifications(tokens: string[], task: any, taskerName
       },
       data: {
         taskId: task.id.toString(),
+        userId: (task.user?.id ?? (task as any).userId)?.toString?.() ?? String((task as any).userId),
         type: 'unread_immediate_task',
         taskerName: taskerName,
         minutesElapsed: minutesElapsed.toString()

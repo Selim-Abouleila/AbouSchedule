@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import { getInitialNotificationData } from '../src/expoNotifications';
 import { isAdmin } from '../src/auth';
 import { endpoints, API_BASE } from '../src/api';
 import { getToken } from '../src/auth';
@@ -43,6 +44,17 @@ export default function AdminPanel() {
 
 
   useEffect(() => {
+    (async () => {
+      const data = await getInitialNotificationData();
+      if (data?.type === 'unread_immediate_task' && data.userId && data.taskId) {
+        console.log('🔔 Admin cold-start notification data:', data);
+        setTimeout(() => {
+          router.replace(`/admin/tasks/${data.userId}/${data.taskId}`);
+        }, 0);
+        return;
+      }
+    })();
+
     checkAdminStatus();
     // Initialize notifications for admin users
     initializeNotifications();
