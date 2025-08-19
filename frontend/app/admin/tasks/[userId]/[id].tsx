@@ -651,7 +651,46 @@ export default function AdminTaskDetail() {
           </View>
         </View>
 
-
+        {/* Mute Notifications Button - Only for IMMEDIATE tasks */}
+        {task.priority === 'IMMEDIATE' && (
+          <View style={{
+            backgroundColor: 'white',
+            padding: 8,
+            borderRadius: 8,
+            marginBottom: 12,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 2,
+            elevation: 1,
+          }}>
+            <Pressable
+              onPress={toggleNotifications}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                backgroundColor: task.runNotification ? '#FF6B6B' : '#4ECDC4',
+                borderRadius: 6,
+              }}>
+              <Ionicons 
+                name={task.runNotification ? "notifications-off" : "notifications"} 
+                size={16} 
+                color="white" 
+                style={{ marginRight: 6 }}
+              />
+              <Text style={{ 
+                fontSize: 14, 
+                fontWeight: '600', 
+                color: 'white' 
+              }}>
+                {task.runNotification ? "Mute notifications for this task" : "Unmute notifications for this task"}
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* Description */}
         {task.description && (
@@ -768,7 +807,7 @@ export default function AdminTaskDetail() {
           )}
           
           {task.requiresCompletionApproval && (
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
               <Text style={{ fontWeight: '600', color: '#666' }}>Approval</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <View
@@ -780,19 +819,21 @@ export default function AdminTaskDetail() {
                     marginRight: 8,
                   }}
                 />
-                <Text style={{ 
-                  color: '#FFD60A',
-                  fontWeight: '600',
-                  fontSize: 12,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5,
-                }}>
-                  REQUIRES APPROVAL
-                </Text>
+                                  <Text style={{ 
+                    color: '#FFD60A',
+                    fontWeight: '600',
+                    fontSize: 12,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                  }}>
+                    REQUIRES APPROVAL
+                  </Text>
+                </View>
               </View>
-            </View>
-          )}
-        </View>
+            )}
+            
+
+          </View>
 
         {/* Recurrence (only when the task is a template) */}
         {task.recurrence !== 'NONE' && (
@@ -1024,60 +1065,7 @@ export default function AdminTaskDetail() {
           </View>
         )}
 
-        {/* Notification Toggle */}
-        <View style={{
-          backgroundColor: 'white',
-          padding: 12,
-          borderRadius: 8,
-          marginBottom: 16,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.05,
-          shadowRadius: 2,
-          elevation: 1,
-        }}>
-          <Pressable
-            onPress={toggleNotifications}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons 
-                name={task.runNotification ? "notifications" : "notifications-off"} 
-                size={16} 
-                color={task.runNotification ? "#0A84FF" : "#6c757d"} 
-                style={{ marginRight: 8 }}
-              />
-              <Text style={{ 
-                fontSize: 14, 
-                fontWeight: '500', 
-                color: '#1a1a1a' 
-              }}>
-                {task.runNotification ? "Notifications enabled" : "Notifications disabled"}
-              </Text>
-            </View>
-            <View style={{
-              width: 40,
-              height: 24,
-              borderRadius: 12,
-              backgroundColor: task.runNotification ? "#0A84FF" : "#CCC",
-              justifyContent: "center",
-            }}>
-              <View
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 9,
-                  backgroundColor: "white",
-                  alignSelf: task.runNotification ? "flex-end" : "flex-start",
-                  margin: 3,
-                }}
-              />
-            </View>
-          </Pressable>
-        </View>
+
 
       </ScrollView>
 

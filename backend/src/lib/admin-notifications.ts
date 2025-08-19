@@ -116,7 +116,7 @@ async function sendExpoNotifications(tokens: string[], task: any, taskerName: st
       sound: 'alarm.wav',
       channelId: 'immediate_task_alert',
       title: '🚨 IMMEDIATE TASK ALERT 🚨',
-      body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
+      body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK\n\n💡 Tap to mute future notifications for this task`,
       data: {
         taskId: task.id.toString(),
         userId: (task.user?.id ?? (task as any).userId)?.toString?.() ?? String((task as any).userId),
