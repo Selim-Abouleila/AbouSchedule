@@ -1221,8 +1221,8 @@ app.register(async (f) => {
           // Send notification using Expo's push service
           const expoMessages = expoTokens.map(token => ({
             to: token,
-            sound: 'default',
-            channelId: 'default',
+            sound: 'alarm.wav',
+            channelId: 'immediate_task_alert',
             title: 'New Task Assigned',
             body: `You have a new immediate task: ${full.title}`,
             data: {

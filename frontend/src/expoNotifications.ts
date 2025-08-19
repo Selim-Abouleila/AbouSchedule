@@ -45,7 +45,7 @@ async function ensureAndroidChannel(): Promise<void> {
   await Notifications.setNotificationChannelAsync('immediate_task_alert', {
     name: 'Immediate Task Alerts',
     importance: Notifications.AndroidImportance.MAX,
-    sound: 'default',
+    sound: 'alarm',
     vibrationPattern: [0, 500, 500, 500],
     lightColor: '#FF231F7C',
   });
