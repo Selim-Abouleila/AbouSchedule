@@ -553,6 +553,7 @@ f.get('/:id', async (req: any, rep) => {
       where: { id, userId },
       select: {
         id: true,
+        userId: true,
         status: true,
         labelDone: true,
         requiresCompletionApproval: true,

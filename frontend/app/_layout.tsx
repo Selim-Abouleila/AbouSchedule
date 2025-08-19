@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function AppDrawerLayout() {
   const [showAdminPanel, setShowAdminPanel] = useState<boolean>(false);
-  const [hasHandledInitialNotification, setHasHandledInitialNotification] = useState<boolean>(false);
   const rootNav = useRootNavigationState();
 
   useEffect(() => {
@@ -22,27 +21,18 @@ export default function AppDrawerLayout() {
     checkAdminStatus();
     // Handle cold start - ONLY if the app was actually launched from a notification
     (async () => {
-      // Only handle initial notification once per app session
-      if (hasHandledInitialNotification) {
-        console.log('🔔 Initial notification already handled this session - skipping');
-        return;
-      }
-
+      // Get notification data first, then immediately clear it to prevent future redirects
       const data = await getInitialNotificationData();
+      
+      // Always clear notification data immediately to prevent stale redirects
+      await clearLastNotificationResponse();
+      
       if (data) {
         console.log('🔔 Initial notification data:', data);
         
-        // Mark that we've handled the initial notification for this session
-        setHasHandledInitialNotification(true);
-        
-        // Check if this notification was actually tapped to launch the app
-        // We can detect this by checking if the notification is very recent (within 2 seconds)
-        const now = Date.now();
-        const notificationTime = parseInt(data.timestamp || '0');
-        const timeDiff = now - notificationTime;
-        
-        // If notification is very recent (within 2 seconds), it was likely tapped to launch the app
-        if (timeDiff < 2000 && data?.taskId) { // 2 seconds - much tighter window
+        // If we have notification data with a taskId, it means the app was launched by tapping a notification
+        // The presence of data from getLastNotificationResponseAsync() indicates a notification was tapped
+        if (data?.taskId) {
           console.log('🔔 App launched from notification tap - redirecting');
           // Check admin status before deciding where to redirect
           const adminStatus = await isAdmin();
@@ -60,11 +50,10 @@ export default function AppDrawerLayout() {
             }
           }, 0);
         } else {
-          console.log('🔔 App launched normally - ignoring notification data (age:', timeDiff, 'ms)');
+          console.log('🔔 App launched normally - no valid notification data');
         }
-        
-        // Always clear the notification data after handling it
-        await clearLastNotificationResponse();
+      } else {
+        console.log('🔔 App launched normally - no notification data');
       }
     })();
 
