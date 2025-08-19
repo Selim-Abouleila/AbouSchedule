@@ -1296,6 +1296,15 @@ const handleBack = useCallback(() => {
                                     }}
                                 />
                             )}
+                            
+                            {/* Clear end date button - only show when end date is set */}
+                            {recEnd && (
+                                <Button
+                                    title="Clear end date"
+                                    color="#FF3B30"
+                                    onPress={() => setRecEnd(null)}
+                                />
+                            )}
                         </>
                     )}
 

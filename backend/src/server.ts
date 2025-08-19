@@ -1268,7 +1268,8 @@ app.register(async (f) => {
             body: `You have a new immediate task: ${full.title}`,
             data: {
               taskId: full.id.toString(),
-              type: 'immediate_task'
+              type: 'immediate_task',
+              timestamp: Date.now().toString()
             }
           }));
 

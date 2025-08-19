@@ -184,6 +184,17 @@ export const getInitialNotificationData = async (): Promise<Record<string, any> 
   return data ?? null;
 };
 
+export const clearLastNotificationResponse = async (): Promise<void> => {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
+  try {
+    // Clear the last notification response to prevent stale redirects
+    await Notifications.dismissAllNotificationsAsync();
+  } catch (error) {
+    console.log('Failed to clear notification response:', error);
+  }
+};
+
 export const cleanupExpoNotifications = async (): Promise<void> => {
   // There is no concept of unregistering an Expo token from the device side.
   // If you need to remove it on the backend, you can fetch the token again and call your delete endpoint.

@@ -1,4 +1,4 @@
-import { getInitialNotificationData, setupNotificationResponseHandler } from '../src/expoNotifications';
+import { getInitialNotificationData, setupNotificationResponseHandler, clearLastNotificationResponse } from '../src/expoNotifications';
 import { router, useRootNavigationState } from 'expo-router';
 export const unstable_settings = {
   initialRouteName: 'index',   // Start with index which handles auth
@@ -14,38 +14,76 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function AppDrawerLayout() {
   const [showAdminPanel, setShowAdminPanel] = useState<boolean>(false);
+  const [hasHandledInitialNotification, setHasHandledInitialNotification] = useState<boolean>(false);
   const rootNav = useRootNavigationState();
 
   useEffect(() => {
     if (!rootNav?.key) return;
     checkAdminStatus();
-    // Handle cold start
+    // Handle cold start - ONLY if the app was actually launched from a notification
     (async () => {
+      // Only handle initial notification once per app session
+      if (hasHandledInitialNotification) {
+        console.log('🔔 Initial notification already handled this session - skipping');
+        return;
+      }
+
       const data = await getInitialNotificationData();
       if (data) {
         console.log('🔔 Initial notification data:', data);
-      }
-      if (data?.taskId) {
-        // Defer a tick to ensure router is ready on cold start
-        setTimeout(() => {
-          if (data.type === 'unread_immediate_task' && data.userId) {
-            router.replace(`/admin/tasks/${data.userId}/${data.taskId}`);
-          } else if (data.type === 'immediate_task') {
-            router.replace(`/tasks/${data.taskId}`);
-          }
-        }, 0);
+        
+        // Mark that we've handled the initial notification for this session
+        setHasHandledInitialNotification(true);
+        
+        // Check if this notification was actually tapped to launch the app
+        // We can detect this by checking if the notification is very recent (within 2 seconds)
+        const now = Date.now();
+        const notificationTime = parseInt(data.timestamp || '0');
+        const timeDiff = now - notificationTime;
+        
+        // If notification is very recent (within 2 seconds), it was likely tapped to launch the app
+        if (timeDiff < 2000 && data?.taskId) { // 2 seconds - much tighter window
+          console.log('🔔 App launched from notification tap - redirecting');
+          // Check admin status before deciding where to redirect
+          const adminStatus = await isAdmin();
+          // Defer a tick to ensure router is ready on cold start
+          setTimeout(() => {
+            if (data.type === 'unread_immediate_task' && data.userId) {
+              router.replace(`/admin/tasks/${data.userId}/${data.taskId}`);
+            } else if (data.type === 'immediate_task') {
+              // If user is admin, redirect to admin task view instead of regular task view
+              if (adminStatus) {
+                router.replace(`/admin/tasks/${data.userId || 'unknown'}/${data.taskId}`);
+              } else {
+                router.replace(`/tasks/${data.taskId}`);
+              }
+            }
+          }, 0);
+        } else {
+          console.log('🔔 App launched normally - ignoring notification data (age:', timeDiff, 'ms)');
+        }
+        
+        // Always clear the notification data after handling it
+        await clearLastNotificationResponse();
       }
     })();
 
     // Subscribe to taps
-    const unsub = setupNotificationResponseHandler((data: any) => {
+    const unsub = setupNotificationResponseHandler(async (data: any) => {
       console.log('🔔 Notification tap data:', data);
       if (data?.taskId) {
+        // Check admin status before deciding where to redirect
+        const adminStatus = await isAdmin();
         setTimeout(() => {
           if (data.type === 'unread_immediate_task' && data.userId) {
             router.push(`/admin/tasks/${data.userId}/${data.taskId}`);
           } else if (data.type === 'immediate_task') {
-            router.push(`/tasks/${data.taskId}`);
+            // If user is admin, redirect to admin task view instead of regular task view
+            if (adminStatus) {
+              router.push(`/admin/tasks/${data.userId || 'unknown'}/${data.taskId}`);
+            } else {
+              router.push(`/tasks/${data.taskId}`);
+            }
           }
         }, 0);
       }
@@ -65,6 +103,8 @@ export default function AppDrawerLayout() {
       setShowAdminPanel(false);
     }
   };
+
+
 
   return (
     <Drawer

@@ -1138,6 +1138,15 @@ const scrollRef = useRef<ScrollView>(null);
                   }}
                 />
               )}
+              
+              {/* Clear end date button - only show when end date is set */}
+              {recurrenceEnd && (
+                <Button
+                  title="Clear end date"
+                  color="#FF3B30"
+                  onPress={() => setRecurrenceEnd(null)}
+                />
+              )}
             </>
           )}
 

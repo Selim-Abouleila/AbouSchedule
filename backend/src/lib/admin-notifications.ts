@@ -44,6 +44,7 @@ export async function sendPriorityBypassNotification(task: any, taskerName: stri
           taskerName: taskerName,
           attemptedTask: task.title,
           firstTask: firstTask.title,
+          timestamp: Date.now().toString()
         }
       }));
 
@@ -170,7 +171,8 @@ async function sendExpoNotifications(tokens: string[], task: any, taskerName: st
         userId: (task.user?.id ?? (task as any).userId)?.toString?.() ?? String((task as any).userId),
         type: 'unread_immediate_task',
         taskerName: taskerName,
-        minutesElapsed: minutesElapsed.toString()
+        minutesElapsed: minutesElapsed.toString(),
+        timestamp: Date.now().toString()
       },
       _displayInForeground: true,
       categoryId: 'immediate_task_alert',
@@ -231,7 +233,8 @@ async function sendFirebaseNotifications(tokens: string[], task: any, taskerName
         userId: (task.user?.id ?? (task as any).userId)?.toString?.() ?? String((task as any).userId),
         type: 'unread_immediate_task',
         taskerName: taskerName,
-        minutesElapsed: minutesElapsed.toString()
+        minutesElapsed: minutesElapsed.toString(),
+        timestamp: Date.now().toString()
       },
       android: {
         notification: {
