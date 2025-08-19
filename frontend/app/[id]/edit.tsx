@@ -119,6 +119,8 @@ const InfoBadge = ({ onPress }: { onPress: () => void }) => (
 
 export default function EditTask() {
     const { id } = useLocalSearchParams<{ id: string }>();
+    
+    console.log('🔧 EditTask component loaded, id:', id);
 
     /* ------- state (same shape as AddTask) ------------------ */
     const [title, setTitle] = useState("");
@@ -134,7 +136,7 @@ export default function EditTask() {
     const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number]>("DAILY");
     const [recEvery, setRecEvery] = useState("1");
     const [recEnd, setRecEnd] = useState<Date | null>(null);
-    const [labelDone, setLabelDone] = useState(false);
+    const [labelDone, setLabelDone] = useState<boolean | null>(null);
     const [showIOS, setShowIOS] = useState(false);
     const [showIOSRecEnd, setShowIOSRecEnd] = useState(false);
     const [photos, setPhotos] = useState<TaskPhoto[]>([]);
@@ -222,6 +224,7 @@ export default function EditTask() {
         dueAt: Date | null;
         timeCapH: number;
         timeCapM: number;
+        labelDone: boolean;
         photosIds: number[];   // ids only!
         docsIds: number[];
         videosIds: number[];   // ids only!
@@ -253,6 +256,7 @@ export default function EditTask() {
         ) return true;
 
         if (timeCapH !== snap.timeCapH || timeCapM !== snap.timeCapM) return true;
+        if (labelDone === null || labelDone !== snap.labelDone) return true;
 
         // pictures / docs: ids that remain + new ones
         const currentImgIds = photos.filter(p => p.id).map(p => p.id as number).sort();
@@ -268,7 +272,7 @@ export default function EditTask() {
         return false;                               // nothing changed
     }, [
         title, description, status, priority, size,
-        dueAt, timeCapH, timeCapM,
+        dueAt, timeCapH, timeCapM, labelDone,
         photos, docs,
     ]);
 
@@ -551,6 +555,7 @@ export default function EditTask() {
                 setRecurrenceDom(  t.recurrenceDom   ? String(t.recurrenceDom)   : "1");
                 setRecurrenceDow(  t.recurrenceDow   ? String(t.recurrenceDow)   : "1");
                 setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
+                console.log('🔧 Loading labelDone from task:', t.labelDone, 'type:', typeof t.labelDone);
                 setLabelDone(Boolean(t.labelDone));
                 setSelectedPhotos(new Set());
                 setSelectedDocs(new Set());
@@ -647,6 +652,7 @@ export default function EditTask() {
                     dueAt: t.dueAt ? new Date(t.dueAt) : null,
                     timeCapH: capH,
                     timeCapM: capM,
+                    labelDone: Boolean(t.labelDone ?? false),
                     photosIds: (t.images ?? []).map((img: any) => img.id).sort(),
                     docsIds: (t.documents ?? []).map((d: any) => d.id).sort(),
                     videosIds: (t.videos ?? []).map((v: any) => v.id).sort(),
@@ -716,6 +722,7 @@ const save = async () => {
 
   if (isOnlyScalars) {
     /* ❶ simple JSON PATCH */
+    console.log('🔧 Saving labelDone (JSON):', labelDone, 'type:', typeof labelDone);
     const body: any = {
       title, description, priority, status, size,
       dueAt: dueAt ? dueAt.toISOString() : null,
@@ -723,7 +730,7 @@ const save = async () => {
       recurrence: recurring ? recurrence : 'NONE',
       recurrenceEvery: recurring ? Number(recEvery) : null,
       recurrenceEnd: recurring && recEnd ? recEnd.toISOString() : null,
-      labelDone,
+             labelDone: String(labelDone ?? false),
       keep:      keepImgIds.join(','),     // images
       keepDocs:  keepDocIds.join(','),     // documents
       keepVideos: keepVideoIds.join(','),  // videos
@@ -783,7 +790,8 @@ const save = async () => {
 
 
 
-    form.append('labelDone', String(labelDone));
+    console.log('🔧 Saving labelDone:', labelDone, 'type:', typeof labelDone);
+         form.append('labelDone', String(labelDone ?? false));
 
     form.append('keep',     keepImgIds.join(','));   // images to keep
     form.append('keepDocs', keepDocIds.join(','));   // docs to keep

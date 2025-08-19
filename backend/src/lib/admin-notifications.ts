@@ -36,7 +36,7 @@ export async function sendPriorityBypassNotification(task: any, taskerName: stri
         sound: 'default',
         channelId: 'default',
         title: '⚠️ Priority Bypass Alert',
-        body: `Tasker ${taskerName} attempted to complete a task out of priority order`,
+        body: `Tasker ${taskerName} attempted to complete "${task.title}" out of priority order`,
         data: {
           taskId: task.id.toString(),
           userId: task.userId.toString(),

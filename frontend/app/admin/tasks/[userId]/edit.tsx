@@ -134,7 +134,7 @@ export default function EditTask() {
     const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number]>("DAILY");
     const [recEvery, setRecEvery] = useState("1");
     const [recEnd, setRecEnd] = useState<Date | null>(null);
-    const [labelDone, setLabelDone] = useState(false);
+    const [labelDone, setLabelDone] = useState<boolean | null>(null);
     const [showIOS, setShowIOS] = useState(false);
     const [showIOSRecEnd, setShowIOSRecEnd] = useState(false);
     const [photos, setPhotos] = useState<TaskPhoto[]>([]);
@@ -178,6 +178,119 @@ export default function EditTask() {
     useEffect(() => {
         fetchUserInfo();
     }, [fetchUserInfo]);
+
+    // Load task data when component mounts
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                /* Clear stale state immediately */
+                setPhotos([]);
+                setDocs([]);
+                setVideos([]);
+                setRemovedDocs(false);
+                setRemovedVideos(false);
+
+                const jwt = await getToken();
+                const res = await fetch(endpoints.admin.userTask(parseInt(userId), parseInt(id)), {
+                    headers: { Authorization: `Bearer ${jwt}` },
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const t = await res.json();
+                if (cancelled) return;
+
+                /* Prefill scalars */
+                setTitle(t.title);
+                setDescription(t.description ?? '');
+                setPriority(t.priority);
+                setStatus(t.status);
+                setSize(t.size);
+                setDueAt(t.dueAt ? new Date(t.dueAt) : null);
+
+                // Time cap
+                if (t.timeCapMinutes) {
+                    setTimeCapH(Math.floor(t.timeCapMinutes / 60));
+                    setTimeCapM(t.timeCapMinutes % 60);
+                }
+
+                // Recurrence
+                setRecurring(t.recurrence !== 'NONE');
+                setRecurrence(t.recurrence);
+                setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : '1');
+                setRecurrenceMonth(t.recurrenceMonth ? String(t.recurrenceMonth) : "1");
+                setRecurrenceDom(t.recurrenceDom ? String(t.recurrenceDom) : "1");
+                setRecurrenceDow(t.recurrenceDow ? String(t.recurrenceDow) : "1");
+                setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
+
+                // Label done
+                console.log('🔧 Loading labelDone from task:', t.labelDone, 'type:', typeof t.labelDone);
+                setLabelDone(Boolean(t.labelDone ?? false));
+
+                setSelectedPhotos(new Set());
+                setSelectedDocs(new Set());
+                setSelectedVideos(new Set());
+
+                /* Images from the server */
+                setPhotos(
+                    (Array.isArray(t.images) ? t.images : []).map(
+                        (img: { id: number; url: string; mime: string }) => ({
+                            id: img.id,
+                            uri: img.url,
+                            mimeType: img.mime,
+                        }) as TaskPhoto
+                    )
+                );
+
+                /* Documents from the server */
+                setDocs(
+                    (Array.isArray(t.documents) ? t.documents : []).map(
+                        (d: { id: number; url: string; mime: string; name?: string }) => ({
+                            id: d.id,
+                            uri: d.url,
+                            mimeType: d.mime,
+                            name: d.name,
+                        }) as TaskDoc
+                    )
+                );
+
+                /* Videos from the server */
+                setVideos(
+                    (Array.isArray(t.videos) ? t.videos : []).map(
+                        (v: { id: number; url: string; mime: string; name?: string }) => ({
+                            id: v.id,
+                            uri: v.url,
+                            mimeType: v.mime,
+                            fileName: v.name,
+                        }) as TaskVideo
+                    )
+                );
+
+                /* Store initial state for change detection */
+                initial.current = {
+                    title: t.title,
+                    description: t.description ?? '',
+                    status: t.status,
+                    priority: t.priority,
+                    size: t.size,
+                    dueAt: t.dueAt ? new Date(t.dueAt) : null,
+                    timeCapH: Math.floor((t.timeCapMinutes || 0) / 60),
+                    timeCapM: (t.timeCapMinutes || 0) % 60,
+                    labelDone: Boolean(t.labelDone ?? false),
+                    photosIds: (Array.isArray(t.images) ? t.images : []).map((img: any) => img.id).sort(),
+                    docsIds: (Array.isArray(t.documents) ? t.documents : []).map((doc: any) => doc.id).sort(),
+                    videosIds: (Array.isArray(t.videos) ? t.videos : []).map((video: any) => video.id).sort(),
+                };
+
+            } catch (error) {
+                console.error('Error loading task:', error);
+                Alert.alert('Error', 'Failed to load task data');
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [id, userId]);
 
     /* For reccurance */
     const [recurrenceDow, setRecurrenceDow] = useState("1");  // 0 = Sun … 6 = Sat; default Monday
@@ -241,19 +354,11 @@ export default function EditTask() {
         dueAt: Date | null;
         timeCapH: number;
         timeCapM: number;
+        labelDone: boolean;
         photosIds: number[];   // ids only!
         docsIds: number[];
         videosIds: number[];
     }>(null);
-
-
-    /* Forbidding negative numbers for reccurence */
-    const handleEveryChange = (txt: string) => {
-        // keep only 0‑9; remove minus signs, spaces, letters, etc.
-        const clean = txt.replace(/[^0-9]/g, '');
-        setRecEvery(clean);
-    };
-
 
     const hasUnsavedChanges = useMemo(() => {
         if (!initial.current) return false;            // still loading
@@ -272,8 +377,9 @@ export default function EditTask() {
         ) return true;
 
         if (timeCapH !== snap.timeCapH || timeCapM !== snap.timeCapM) return true;
+        if (labelDone === null || labelDone !== snap.labelDone) return true;
 
-        // pictures / docs / videos: ids that remain + new ones
+        // pictures / docs: ids that remain + new ones
         const currentImgIds = photos.filter(p => p.id).map(p => p.id as number).sort();
         const currentDocIds = docs.filter(d => d.id).map(d => d.id as number).sort();
         const currentVideoIds = videos.filter(v => v.id).map(v => v.id as number).sort();
@@ -289,9 +395,19 @@ export default function EditTask() {
         return false;                               // nothing changed
     }, [
         title, description, status, priority, size,
-        dueAt, timeCapH, timeCapM,
+        dueAt, timeCapH, timeCapM, labelDone,
         photos, docs, videos,
     ]);
+
+    /* Forbidding negative numbers for reccurence */
+    const handleEveryChange = (txt: string) => {
+        // keep only 0‑9; remove minus signs, spaces, letters, etc.
+        const clean = txt.replace(/[^0-9]/g, '');
+        setRecEvery(clean);
+    };
+
+
+
 
 
     /* toggle helpers */
@@ -589,6 +705,7 @@ export default function EditTask() {
                     recurrenceMonth: t.recurrenceMonth,
                     recurrenceEnd: t.recurrenceEnd
                 });
+                console.log('🔧 Loading labelDone from task:', t.labelDone, 'type:', typeof t.labelDone);
                 setLabelDone(Boolean(t.labelDone));
                 setSelectedPhotos(new Set());
                 setSelectedDocs(new Set());
@@ -686,6 +803,7 @@ export default function EditTask() {
                     dueAt: t.dueAt ? new Date(t.dueAt) : null,
                     timeCapH: capH,
                     timeCapM: capM,
+                    labelDone: Boolean(t.labelDone ?? false),
                     photosIds: (t.images ?? []).map((img: any) => img.id).sort(),
                     docsIds: (t.documents ?? []).map((d: any) => d.id).sort(),
                     videosIds: (t.videos ?? []).map((v: any) => v.id).sort(),
@@ -756,6 +874,7 @@ const save = async () => {
 
       if (isOnlyScalars) {
       /* ❶ simple JSON PATCH */
+      console.log('🔧 Saving labelDone (JSON):', labelDone, 'type:', typeof labelDone);
       const body: any = {
         title, description, priority, status, size,
         dueAt: dueAt ? dueAt.toISOString() : null,
@@ -763,7 +882,7 @@ const save = async () => {
         recurrence: recurring ? recurrence : 'NONE',
         recurrenceEvery: recurring ? Number(recEvery) : null,
         recurrenceEnd: recurring && recEnd ? recEnd.toISOString() : null,
-        labelDone,
+        labelDone: String(labelDone ?? false),
         keep:      keepImgIds.join(','),     // images
         keepDocs:  keepDocIds.join(','),     // documents
         keepVideos: keepVideoIds.join(','),  // videos
@@ -845,7 +964,8 @@ const save = async () => {
 
 
 
-    form.append('labelDone', String(labelDone));
+    console.log('🔧 Saving labelDone:', labelDone, 'type:', typeof labelDone);
+    form.append('labelDone', String(labelDone ?? false));
 
     form.append('keep',     keepImgIds.join(','));   // images to keep
     form.append('keepDocs', keepDocIds.join(','));   // docs to keep
