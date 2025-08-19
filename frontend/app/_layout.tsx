@@ -1,3 +1,5 @@
+import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 export const unstable_settings = {
   initialRouteName: 'index',   // Start with index which handles auth
   statePersistence: false,
@@ -15,6 +17,24 @@ export default function AppDrawerLayout() {
 
   useEffect(() => {
     checkAdminStatus();
+    // Handle cold start
+    (async () => {
+      const initial = await Notifications.getLastNotificationResponseAsync();
+      const data = initial?.notification?.request?.content?.data as any;
+      if (data?.type === 'immediate_task' && data.taskId) {
+        router.replace(`/tasks/${data.taskId}`);
+      }
+    })();
+
+    // Subscribe to taps
+    const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+      const data = resp.notification.request.content.data as any;
+      if (data?.type === 'immediate_task' && data.taskId) {
+        router.push(`/tasks/${data.taskId}`);
+      }
+    });
+
+    return () => sub.remove();
   }, []);
 
   const checkAdminStatus = async () => {

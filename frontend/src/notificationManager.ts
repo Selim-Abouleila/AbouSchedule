@@ -1,9 +1,11 @@
+import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import {
-  initializeNativeFirebaseNotifications,
-  cleanupNativeFirebaseNotifications,
-  requestNotificationPermissions as requestNativePermissions
-} from './nativeFirebaseNotifications';
+  requestPermissionsAndGetExpoToken,
+  setupForegroundHandler,
+  setupNotificationResponseHandler,
+  cleanupExpoNotifications,
+} from './expoNotifications';
 
 // Firebase-only notification manager
 export class NotificationManager {
@@ -19,7 +21,7 @@ export class NotificationManager {
     return NotificationManager.instance;
   }
 
-  // Initialize Firebase notifications
+  // Initialize notifications (expo-notifications)
   async initialize(): Promise<void> {
     if (this.isInitialized) {
       console.log('🔔 Firebase notifications already initialized');
@@ -27,15 +29,20 @@ export class NotificationManager {
     }
 
     try {
-      if (Platform.OS === 'android') {
-        console.log('🔔 Initializing Firebase notifications...');
-        await initializeNativeFirebaseNotifications();
-        this.isInitialized = true;
-        console.log('✅ Firebase notification manager initialized successfully');
-      } else {
-        console.log('⚠️ Firebase notifications only supported on Android');
-        this.isInitialized = true;
-      }
+      console.log('🔔 Initializing Expo notifications...');
+      const token = await requestPermissionsAndGetExpoToken();
+      if (token) console.log('✅ Expo push token:', token);
+
+      // Foreground
+      const unsubFg = setupForegroundHandler();
+      // Tap/click routing hook – consumer can add handler later if needed
+      setupNotificationResponseHandler((data) => {
+        console.log('🔔 Notification tapped with data:', data);
+      });
+
+      // Store unsub if you later want to support teardown
+      this.isInitialized = true;
+      console.log('✅ Expo notification manager initialized successfully');
     } catch (error) {
       console.error('❌ Error initializing Firebase notification manager:', error);
       throw error;
@@ -60,9 +67,7 @@ export class NotificationManager {
   // Cleanup notifications
   async cleanup(): Promise<void> {
     try {
-      if (Platform.OS === 'android') {
-        await cleanupNativeFirebaseNotifications();
-      }
+      await cleanupExpoNotifications();
       this.isInitialized = false;
       console.log('✅ Firebase notification manager cleaned up successfully');
     } catch (error) {
@@ -77,12 +82,12 @@ export class NotificationManager {
 
   // Get current notification method
   getCurrentMethod(): string {
-    return 'Firebase';
+    return 'Expo';
   }
 
   // Check if using native Firebase
   isUsingNativeFirebaseNotifications(): boolean {
-    return Platform.OS === 'android';
+    return true;
   }
 }
 

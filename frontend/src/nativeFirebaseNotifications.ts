@@ -1,22 +1,46 @@
+import '@react-native-firebase/app';
 import { getToken as getAuthToken } from './auth';
 import { API_BASE } from './api';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 import { handleNotificationAction } from './notificationActions';
 import messaging from '@react-native-firebase/messaging';
+
+// Ensure device is ready to receive remote messages
+const ensureFirebaseReady = async (): Promise<void> => {
+  try {
+    await messaging().registerDeviceForRemoteMessages();
+  } catch {}
+};
 
 // Request notification permissions and get push token
 export const requestNotificationPermissions = async (): Promise<string | null> => {
   try {
     console.log('🔔 Starting native Firebase notification permission request...');
     
-    // Request permission for Android
-    const authStatus = await messaging().requestPermission();
-    const enabled = 
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    // Ensure Firebase app + registration is ready
+    await ensureFirebaseReady();
 
-    console.log('📱 Firebase notification status:', authStatus);
-    
+    // Android 13+ requires runtime POST_NOTIFICATIONS permission
+    if (Platform.OS === 'android' && Platform.Version >= 33) {
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
+      if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+        console.log('❌ Notifications permission not granted on Android');
+        return null;
+      }
+    }
+
+    // Only iOS uses messaging().requestPermission()
+    let enabled = true;
+    if (Platform.OS === 'ios') {
+      const authStatus = await messaging().requestPermission();
+      enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      console.log('📱 Firebase notification status:', authStatus);
+    }
+
     if (enabled) {
       console.log('✅ Firebase notification permissions granted, getting push token...');
       
@@ -38,7 +62,7 @@ export const requestNotificationPermissions = async (): Promise<string | null> =
       console.log('❌ Failed to get Firebase push token - permissions not granted');
       return null;
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('❌ Error getting Firebase push token:', error);
     return null;
   }
@@ -67,7 +91,7 @@ export const registerPushToken = async (token: string): Promise<void> => {
     } else {
       console.error('Failed to register Firebase push token:', response.status);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error registering Firebase push token:', error);
   }
 };
@@ -95,7 +119,7 @@ export const unregisterPushToken = async (token: string): Promise<void> => {
     } else {
       console.error('Failed to unregister Firebase push token:', response.status);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error unregistering Firebase push token:', error);
   }
 };
@@ -125,7 +149,7 @@ const showLocalNotificationWithActions = async (remoteMessage: any) => {
     
     // The notification will be displayed automatically by Firebase
     // Action buttons will be handled by the notification response handler
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error showing local notification:', error);
   }
 };
@@ -178,14 +202,12 @@ export const initializeNativeFirebaseNotifications = async (): Promise<void> => 
       
       console.log('✅ Native Firebase notifications initialized successfully');
       
-      // Return cleanup function
-      return () => {
-        unsubscribeForeground();
-      };
+      // Note: We don't return the cleanup function here since this function returns Promise<void>
+      // The cleanup function should be handled separately
     } else {
       console.log('Failed to initialize native Firebase notifications');
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error initializing native Firebase notifications:', error);
   }
 };
@@ -193,12 +215,13 @@ export const initializeNativeFirebaseNotifications = async (): Promise<void> => 
 // Cleanup function for when user logs out
 export const cleanupNativeFirebaseNotifications = async (): Promise<void> => {
   try {
+    await ensureFirebaseReady();
     const token = await messaging().getToken();
     
     if (token) {
       await unregisterPushToken(token);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error cleaning up native Firebase notifications:', error);
   }
 };
@@ -207,7 +230,7 @@ export const cleanupNativeFirebaseNotifications = async (): Promise<void> => {
 export const getCurrentFirebaseToken = async (): Promise<string | null> => {
   try {
     return await messaging().getToken();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error getting current Firebase token:', error);
     return null;
   }

@@ -1210,13 +1210,17 @@ app.register(async (f) => {
           where: { userId: userId }
         });
 
-        console.log('📱 Found push tokens for user:', pushTokens.length);
-        console.log('🔑 Push tokens:', pushTokens.map(pt => pt.token));
+        const expoTokens = pushTokens
+          .map(pt => pt.token)
+          .filter(t => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['));
 
-        if (pushTokens.length > 0) {
+        console.log('📱 Found Expo push tokens for user:', expoTokens.length);
+        console.log('🔑 Expo tokens:', expoTokens);
+
+        if (expoTokens.length > 0) {
           // Send notification using Expo's push service
-          const expoMessages = pushTokens.map(pt => ({
-            to: pt.token,
+          const expoMessages = expoTokens.map(token => ({
+            to: token,
             sound: 'default',
             title: 'New Task Assigned',
             body: `You have a new immediate task: ${full.title}`,
@@ -1241,10 +1245,10 @@ app.register(async (f) => {
 
           const result = await response.json();
           console.log('✅ Expo notification response:', result);
-          console.log('📱 Push tokens used:', pushTokens.map(pt => pt.token));
+          console.log('📱 Push tokens used:', expoTokens);
           console.log('📋 Task details:', { id: full.id, title: full.title, userId: full.userId });
         } else {
-          console.log('❌ No push tokens found for user:', userId);
+          console.log('❌ No Expo push tokens found for user:', userId);
         }
       } catch (error) {
         console.error('❌ Failed to send notification:', error);

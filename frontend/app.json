@@ -8,50 +8,29 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "splash": { "image": "./assets/icon.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
     "ios": {
       "supportsTablet": true,
-      "infoPlist": {
-        "NSCameraUsageDescription": "AbouSchedule needs access to the camera so you can attach photos to a task."
-      }
+      "infoPlist": { "NSCameraUsageDescription": "AbouSchedule needs access to the camera so you can attach photos to a task." }
     },
     "android": {
       "package": "com.selax215.abouschedule",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" },
+      "edgeToEdgeEnabled": true
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "web": { "favicon": "./assets/favicon.png" },
     "extra": {
       "expo-router": {
-        "originWhitelist": [
-          "abouschedule://",
-          "https://abouschedule-production.up.railway.app"
-        ]
+        "originWhitelist": ["abouschedule://","https://abouschedule-production.up.railway.app"]
       },
       "router": {},
-      "eas": {
-        "projectId": "8cffe111-34b6-49d5-8fff-60395880677b"
-      }
+      "eas": { "projectId": "8cffe111-34b6-49d5-8fff-60395880677b" }
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      [
-        "@react-native-firebase/app",
-        {
-          "android_package_name": "com.selax215.abouschedule"
-        }
-      ]
+      "expo-notifications"
     ]
   }
 }
