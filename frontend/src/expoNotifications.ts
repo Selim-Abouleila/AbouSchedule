@@ -49,6 +49,16 @@ async function ensureAndroidChannel(): Promise<void> {
     vibrationPattern: [0, 500, 500, 500],
     lightColor: '#FF231F7C',
   });
+
+  try {
+    const channels = await Notifications.getNotificationChannelsAsync();
+    console.log(
+      '🔔 Android notification channels:',
+      channels?.map((c: any) => ({ id: c.id, name: c.name, sound: c.sound, importance: c.importance }))
+    );
+  } catch (e) {
+    console.log('Failed to list Android notification channels:', e);
+  }
 }
 
 async function registerNotificationCategories(): Promise<void> {

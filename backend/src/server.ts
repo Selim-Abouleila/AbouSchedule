@@ -1929,6 +1929,53 @@ app.put('/settings', { preHandler: app.auth }, async (req, rep) => {
 
 // Admin-only endpoints for managing other users' settings
 
+// Admin toggle notifications endpoint
+app.post('/admin/tasks/:id/toggle-notifications', { preHandler: app.auth }, async (req: any, rep) => {
+  try {
+    const userRole = (req.user as any).role as string;
+    if (userRole !== 'ADMIN') {
+      return rep.code(403).send({ error: 'Admin access required' });
+    }
+
+    const taskId = parseInt(req.params.id as string);
+    if (isNaN(taskId)) {
+      return rep.code(400).send({ error: 'Invalid task ID' });
+    }
+
+    /* Check if task exists */
+    const task = await prisma.task.findFirst({
+      where: { id: taskId },
+      select: {
+        id: true,
+        runNotification: true,
+      },
+    });
+
+    if (!task) {
+      return rep.code(404).send({ error: 'Task not found' });
+    }
+
+    /* Toggle the notification setting */
+    const newNotificationState = !task.runNotification;
+    
+    await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        runNotification: newNotificationState,
+      },
+    });
+
+    return { 
+      success: true, 
+      message: `Notifications ${newNotificationState ? 'enabled' : 'disabled'} for this task`,
+      runNotification: newNotificationState
+    };
+  } catch (error) {
+    console.error('Error toggling notifications:', error);
+    return rep.code(500).send({ error: 'Failed to toggle notifications' });
+  }
+});
+
 // Admin mark-done endpoint - can mark any task as done
 app.post('/admin/tasks/:id/mark-done', { preHandler: app.auth }, async (req: any, rep) => {
   try {

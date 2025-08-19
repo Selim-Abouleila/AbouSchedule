@@ -1,5 +1,5 @@
 import { getInitialNotificationData, setupNotificationResponseHandler } from '../src/expoNotifications';
-import { router } from 'expo-router';
+import { router, useRootNavigationState } from 'expo-router';
 export const unstable_settings = {
   initialRouteName: 'index',   // Start with index which handles auth
   statePersistence: false,
@@ -14,8 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function AppDrawerLayout() {
   const [showAdminPanel, setShowAdminPanel] = useState<boolean>(false);
+  const rootNav = useRootNavigationState();
 
   useEffect(() => {
+    if (!rootNav?.key) return;
     checkAdminStatus();
     // Handle cold start
     (async () => {
@@ -52,7 +54,7 @@ export default function AppDrawerLayout() {
     return () => {
       if (unsub) unsub();
     };
-  }, []);
+  }, [rootNav?.key]);
 
   const checkAdminStatus = async () => {
     try {

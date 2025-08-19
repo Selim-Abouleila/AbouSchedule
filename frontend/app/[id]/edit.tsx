@@ -59,13 +59,13 @@ type TaskVideo = ImagePicker.ImagePickerAsset & {
 const styles = StyleSheet.create({
     /* 70 × 70 square for each picker button */
     pickerBox: {
-        width: 70,
+        width: 55,
         height: 70,
         borderRadius: 8,
         backgroundColor: '#E9E9E9',
         alignItems: 'center',
         justifyContent: 'center',
-        marginHorizontal: 4,
+        marginHorizontal: 2,
     },
     pickerIcon: { fontSize: 28, color: '#555' },
 
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     pickerRow: {
         flexDirection: 'row',
         justifyContent: 'center',
-        gap: 8,
+        gap: 4,
         marginBottom: 8,
     },
 

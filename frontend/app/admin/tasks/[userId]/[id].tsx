@@ -56,6 +56,7 @@ type Task = {
   readByUser?: boolean;
   readAt?: string;
   requiresCompletionApproval?: boolean;
+  runNotification?: boolean;
   images: { id: number; url: string; mime: string }[];
   documents: { id: number; url: string; mime: string; fileName?: string }[];
   videos: { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }[];
@@ -454,6 +455,34 @@ export default function AdminTaskDetail() {
     }
   };
 
+  const toggleNotifications = async () => {
+    if (!task) return;
+    
+    try {
+      const jwt = await getToken();
+      const res = await fetch(`${API_BASE}/admin/tasks/${id}/toggle-notifications`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${jwt}`,
+        },
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+      
+      const result = await res.json();
+      
+      // Update the task state
+      setTask(prev => prev ? { ...prev, runNotification: result.runNotification } : null);
+      
+      Alert.alert("Success", result.message);
+    } catch (e: any) {
+      Alert.alert("Failed to toggle notifications", e.message);
+    }
+  };
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -621,6 +650,8 @@ export default function AdminTaskDetail() {
             )}
           </View>
         </View>
+
+
 
         {/* Description */}
         {task.description && (
@@ -992,6 +1023,61 @@ export default function AdminTaskDetail() {
             ))}
           </View>
         )}
+
+        {/* Notification Toggle */}
+        <View style={{
+          backgroundColor: 'white',
+          padding: 12,
+          borderRadius: 8,
+          marginBottom: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 1,
+        }}>
+          <Pressable
+            onPress={toggleNotifications}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons 
+                name={task.runNotification ? "notifications" : "notifications-off"} 
+                size={16} 
+                color={task.runNotification ? "#0A84FF" : "#6c757d"} 
+                style={{ marginRight: 8 }}
+              />
+              <Text style={{ 
+                fontSize: 14, 
+                fontWeight: '500', 
+                color: '#1a1a1a' 
+              }}>
+                {task.runNotification ? "Notifications enabled" : "Notifications disabled"}
+              </Text>
+            </View>
+            <View style={{
+              width: 40,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: task.runNotification ? "#0A84FF" : "#CCC",
+              justifyContent: "center",
+            }}>
+              <View
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: "white",
+                  alignSelf: task.runNotification ? "flex-end" : "flex-start",
+                  margin: 3,
+                }}
+              />
+            </View>
+          </Pressable>
+        </View>
 
       </ScrollView>
 
