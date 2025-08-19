@@ -20,7 +20,7 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SORT_PRESETS } from './lib/helpers';
 import { nextDate } from "./lib/recur";
 import { startRecurrenceRoller } from "./lib/roll-recurrence"
-import { startAdminNotificationChecker } from "./lib/admin-notifications"
+import { startAdminNotificationChecker, sendPriorityBypassNotification } from "./lib/admin-notifications"
 
 // Import Firebase admin to initialize it
 import './firebase-admin.js';
@@ -556,6 +556,17 @@ f.get('/:id', async (req: any, rep) => {
         status: true,
         labelDone: true,
         requiresCompletionApproval: true,
+        priority: true,
+        size: true,
+        dueAt: true,
+        createdAt: true,
+        title: true,
+        user: {
+          select: {
+            username: true,
+            email: true,
+          }
+        }
       },
     });
 
@@ -573,6 +584,29 @@ f.get('/:id', async (req: any, rep) => {
       return rep.code(400).send({ error: 'Task already requires completion approval' });
     }
 
+    /* Check if user is trying to bypass priority order */
+    const firstTask = await prisma.task.findFirst({
+      where: { 
+        userId,
+        isDone: false,
+        status: { not: 'DONE' }
+      },
+      orderBy: [
+        { priority: 'asc' },
+        { status: 'desc' },
+        { size: 'asc' },
+        { dueAt: 'asc' },
+        { createdAt: 'asc' },
+      ],
+      select: {
+        id: true,
+        priority: true,
+        title: true,
+      }
+    });
+
+    const isBypassingPriority = firstTask && firstTask.id !== task.id;
+
     /* Update task based on labelDone setting */
     if (task.labelDone) {
       // User can mark as done directly
@@ -583,6 +617,13 @@ f.get('/:id', async (req: any, rep) => {
           isDone: true,
         },
       });
+
+      // Send admin notification if bypassing priority
+      if (isBypassingPriority) {
+        const taskerName = task.user?.username || task.user?.email || 'Unknown Tasker';
+        await sendPriorityBypassNotification(task, taskerName, firstTask);
+      }
+
       return { success: true, message: 'Task marked as done' };
     } else {
       // User cannot mark as done, set requires approval

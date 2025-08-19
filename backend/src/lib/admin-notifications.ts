@@ -16,6 +16,54 @@ function isFirebaseToken(token: string): boolean {
   return token.length > 100 && !isExpoToken(token);
 }
 
+// Send priority bypass notification to admins
+export async function sendPriorityBypassNotification(task: any, taskerName: string, firstTask: any) {
+  try {
+    // Get all admin users' push tokens
+    const adminUsers = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      include: { pushTokens: true }
+    });
+
+    const adminPushTokens = adminUsers.flatMap(user => user.pushTokens);
+    const expoTokens = adminPushTokens
+      .filter(pt => pt.token.startsWith('ExponentPushToken[') || pt.token.startsWith('ExpoPushToken['))
+      .map(pt => pt.token);
+
+    if (expoTokens.length > 0) {
+      const expoMessages = expoTokens.map(token => ({
+        to: token,
+        sound: 'default',
+        channelId: 'default',
+        title: '⚠️ Priority Bypass Alert',
+        body: `Tasker ${taskerName} attempted to complete a task out of priority order`,
+        data: {
+          taskId: task.id.toString(),
+          userId: task.userId.toString(),
+          type: 'priority_bypass',
+          taskerName: taskerName,
+          attemptedTask: task.title,
+          firstTask: firstTask.title,
+        }
+      }));
+
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(expoMessages)
+      });
+
+      console.log(`🚨 Priority bypass alert sent for task ${task.id} by ${taskerName}`);
+    }
+  } catch (error) {
+    console.error('Failed to send priority bypass notification:', error);
+  }
+}
+
 export function startAdminNotificationChecker() {
   // "*/10 * * * *" = every 10 minutes
   cron.schedule(
