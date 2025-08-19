@@ -114,6 +114,7 @@ async function sendExpoNotifications(tokens: string[], task: any, taskerName: st
     const expoMessages = tokens.map(token => ({
       to: token,
       sound: 'alarm.wav',
+      channelId: 'immediate_task_alert',
       title: '🚨 IMMEDIATE TASK ALERT 🚨',
       body: `TASKER ${taskerName.toUpperCase()} HAS NOT READ THE IMMEDIATE TASK`,
       data: {

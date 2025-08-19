@@ -1,25 +1,38 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { getToken as getAuthToken } from './auth';
 import { API_BASE } from './api';
 
-// Configure foreground presentation on iOS
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    // Legacy fields
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    // Newer fields required by current NotificationBehavior typings
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+let handlersConfigured = false;
+
+async function getNotifications() {
+  try {
+    const Notifications = await import('expo-notifications');
+    if (!handlersConfigured) {
+      try {
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }),
+        });
+      } catch {}
+      handlersConfigured = true;
+    }
+    return Notifications;
+  } catch {
+    return null;
+  }
+}
 
 async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   await Notifications.setNotificationChannelAsync('default', {
     name: 'Default',
     importance: Notifications.AndroidImportance.MAX,
@@ -31,6 +44,8 @@ async function ensureAndroidChannel(): Promise<void> {
 
 async function registerNotificationCategories(): Promise<void> {
   if (Platform.OS !== 'ios') return;
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   try {
     await Notifications.setNotificationCategoryAsync('immediate_task_alert', [
       {
@@ -50,19 +65,26 @@ async function registerNotificationCategories(): Promise<void> {
 }
 
 export const requestPermissionsAndGetExpoToken = async (): Promise<string | null> => {
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
   if (!Device.isDevice) {
     console.log('Push notifications require a physical device');
     return null;
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  if (finalStatus !== 'granted') {
-    console.log('❌ Notification permission not granted');
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      console.log('❌ Notification permission not granted');
+      return null;
+    }
+  } catch (e) {
+    console.warn('Failed to request notification permissions:', e);
     return null;
   }
 
@@ -70,11 +92,17 @@ export const requestPermissionsAndGetExpoToken = async (): Promise<string | null
   await registerNotificationCategories();
 
   // Get Expo push token (use EAS projectId when available)
-  const projectId = (Constants?.expoConfig as any)?.extra?.eas?.projectId || (Constants as any)?.easConfig?.projectId;
-  const resp = await Notifications.getExpoPushTokenAsync(
-    projectId ? { projectId } : undefined
-  );
-  const token = resp?.data ?? null;
+  let token: string | null = null;
+  try {
+    const projectId = (Constants?.expoConfig as any)?.extra?.eas?.projectId || (Constants as any)?.easConfig?.projectId;
+    const resp = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+    token = resp?.data ?? null;
+  } catch (e) {
+    console.warn('Failed to get Expo push token:', e);
+    return null;
+  }
   if (!token) return null;
 
   // Register token with backend
@@ -97,26 +125,52 @@ export const requestPermissionsAndGetExpoToken = async (): Promise<string | null
 };
 
 export const setupForegroundHandler = (): (() => void) => {
-  const sub = Notifications.addNotificationReceivedListener((n) => {
-    console.log('📱 Expo notification received (foreground):', n.request.content);
-  });
-  return () => sub.remove();
+  let unsub: (() => void) | null = null;
+  (async () => {
+    const Notifications = await getNotifications();
+    if (!Notifications) return;
+    const sub = Notifications.addNotificationReceivedListener((n) => {
+      console.log('📱 Expo notification received (foreground):', n.request.content);
+    });
+    unsub = () => sub.remove();
+  })();
+  return () => {
+    if (unsub) unsub();
+  };
 };
 
 export const setupNotificationResponseHandler = (
   onNavigate: (data: Record<string, any>) => void
 ): (() => void) => {
-  const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
-    const data = resp.notification.request.content.data as Record<string, any>;
-    onNavigate(data);
-  });
-  return () => sub.remove();
+  let unsub: (() => void) | null = null;
+  (async () => {
+    const Notifications = await getNotifications();
+    if (!Notifications) return;
+    const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+      const data = resp.notification.request.content.data as Record<string, any>;
+      onNavigate(data);
+    });
+    unsub = () => sub.remove();
+  })();
+  return () => {
+    if (unsub) unsub();
+  };
+};
+
+export const getInitialNotificationData = async (): Promise<Record<string, any> | null> => {
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
+  const initial = await Notifications.getLastNotificationResponseAsync();
+  const data = initial?.notification?.request?.content?.data as Record<string, any> | undefined;
+  return data ?? null;
 };
 
 export const cleanupExpoNotifications = async (): Promise<void> => {
   // There is no concept of unregistering an Expo token from the device side.
   // If you need to remove it on the backend, you can fetch the token again and call your delete endpoint.
   try {
+    const Notifications = await getNotifications();
+    if (!Notifications) return;
     const projectId = (Constants?.expoConfig as any)?.extra?.eas?.projectId || (Constants as any)?.easConfig?.projectId;
     const token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined))?.data;
     if (token) {

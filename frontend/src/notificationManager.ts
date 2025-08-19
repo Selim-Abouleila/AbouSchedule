@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import {
   requestPermissionsAndGetExpoToken,
@@ -24,12 +23,12 @@ export class NotificationManager {
   // Initialize notifications (expo-notifications)
   async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.log('🔔 Firebase notifications already initialized');
+      console.log('🔔 Notifications already initialized');
       return;
     }
 
     try {
-      console.log('🔔 Initializing Expo notifications...');
+      console.log('🔔 Initializing notifications...');
       const token = await requestPermissionsAndGetExpoToken();
       if (token) console.log('✅ Expo push token:', token);
 
@@ -42,9 +41,9 @@ export class NotificationManager {
 
       // Store unsub if you later want to support teardown
       this.isInitialized = true;
-      console.log('✅ Expo notification manager initialized successfully');
+      console.log('✅ Notification manager initialized successfully');
     } catch (error) {
-      console.error('❌ Error initializing Firebase notification manager:', error);
+      console.error('❌ Error initializing notification manager:', error);
       throw error;
     }
   }
@@ -69,9 +68,9 @@ export class NotificationManager {
     try {
       await cleanupExpoNotifications();
       this.isInitialized = false;
-      console.log('✅ Firebase notification manager cleaned up successfully');
+      console.log('✅ Notification manager cleaned up successfully');
     } catch (error) {
-      console.error('❌ Error cleaning up Firebase notification manager:', error);
+      console.error('❌ Error cleaning up notification manager:', error);
     }
   }
 

@@ -1222,6 +1222,7 @@ app.register(async (f) => {
           const expoMessages = expoTokens.map(token => ({
             to: token,
             sound: 'default',
+            channelId: 'default',
             title: 'New Task Assigned',
             body: `You have a new immediate task: ${full.title}`,
             data: {
