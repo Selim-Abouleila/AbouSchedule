@@ -1,5 +1,5 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
-import { View, FlatList, Text, Pressable, ActivityIndicator, BackHandler, AppState, AppStateStatus } from 'react-native';
+import { useCallback, useState, useEffect } from 'react';
+import { View, FlatList, Text, Pressable, ActivityIndicator, BackHandler } from 'react-native';
 import { useFocusEffect, router, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { endpoints } from '../../src/api';
@@ -213,75 +213,7 @@ useEffect(() => {
   // ✅ Re‑subscribe; no dependency array needed
   useFocusEffect(reload);
 
-  // ───── WebSocket: live task:created events (connect on focus, gate by app state) ─────
-  const wsRef = useRef<WebSocket | null>(null);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState as AppStateStatus);
-
-  const disconnectWs = useCallback(() => {
-    try { wsRef.current?.close(); } catch {}
-    wsRef.current = null;
-  }, []);
-
-  const connectWs = useCallback(async () => {
-    try {
-      if (wsRef.current) return; // already connected
-      const token = await getToken();
-      if (!token) {
-        console.log('🔌 WS skip: no token');
-        return;
-      }
-      const base = endpoints.base;
-      const wsUrl = `${base.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(token)}`;
-      try {
-        const safeHost = base.replace(/^https?:\/\//, '').split('/')[0];
-        console.log(`🔌 WS connecting → ${safeHost}`);
-      } catch {}
-      const sock = new WebSocket(wsUrl);
-      wsRef.current = sock;
-      sock.onopen = () => console.log('🔌 WS connected');
-      sock.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data as any);
-          console.log('📨 WS message:', msg);
-          if (msg?.type === 'task:created') {
-            console.log('🔄 WS task:created → reload()');
-            reload();
-          }
-        } catch {}
-      };
-      sock.onerror = (err) => console.log('⚠️ WS error', err);
-      sock.onclose = (ev) => console.log('🔌 WS closed', { code: (ev as any)?.code, reason: (ev as any)?.reason });
-    } catch (e) {
-      console.log('⚠️ WS setup error', e);
-    }
-  }, [reload]);
-
-  useFocusEffect(
-    useCallback(() => {
-      // Connect when screen focused
-      console.log('🔎 WS focus → connect');
-      connectWs();
-
-      // Gate by app state (disconnect when background, reconnect on active)
-      const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-        appStateRef.current = next;
-        console.log('📱 AppState:', next);
-        if (next !== 'active') {
-          console.log('🔕 App background → disconnect WS');
-          disconnectWs();
-        } else {
-          console.log('🔔 App active → ensure WS connected');
-          connectWs();
-        }
-      });
-
-      return () => {
-        console.log('🚪 WS blur/unmount → cleanup');
-        sub?.remove?.();
-        disconnectWs();
-      };
-    }, [connectWs, disconnectWs])
-  );
+  // WebSocket live updates removed
 
 
   /** onEndReached → load next page if available */
