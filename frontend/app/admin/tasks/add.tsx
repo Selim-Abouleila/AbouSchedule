@@ -25,7 +25,7 @@ import DateTimePicker, {
 import { router, useLocalSearchParams } from "expo-router";
 
 import { endpoints } from "../../../src/api";
-import { getToken } from "../../../src/auth";
+import { getToken, getCurrentUserId } from "../../../src/auth";
 import { useFocusEffect } from 'expo-router';
 import { StyleSheet } from 'react-native';
 import { useMemo, useRef } from "react";
@@ -613,12 +613,16 @@ const scrollRef = useRef<ScrollView>(null);
     const jwt = await getToken();
     const form = new FormData();
 
+    // Get the current admin's user ID
+    const adminUserId = await getCurrentUserId();
+    
     form.append("title", title);
     form.append("description", description);
     form.append("priority", priority);
     form.append("status", status);
     form.append("size", size);
     if (dueAt) form.append("dueAt", dueAt.toISOString());
+    if (adminUserId) form.append("issuedBy", adminUserId.toString());
 
     // Compress images before uploading
     setUploadProgress('Compressing images...');
