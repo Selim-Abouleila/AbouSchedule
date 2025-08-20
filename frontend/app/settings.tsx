@@ -40,7 +40,6 @@ export default function Settings() {
   // Android back button handler - prevents default back behavior to stay on same page
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      console.log('🔙 Android back button pressed - staying on settings page');
       return true; // Prevent default back behavior - stay on same page
     });
 
@@ -80,10 +79,6 @@ export default function Settings() {
         const currentUserId = await getCurrentUserId();
         const settings = await getSettingsForUser(currentUserId || undefined);
         setDefaultLabelDone(settings.defaultLabelDone);
-      } else {
-        // Admin mode: load global settings
-        const settings = await getSettingsForUser(undefined);
-        setDefaultLabelDone(settings.defaultLabelDone);
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -98,34 +93,14 @@ export default function Settings() {
     await saveSettings({ defaultLabelDone: newValue }, selectedUserId || undefined);
   };
 
-  const resetToGlobalSettings = async () => {
-    Alert.alert(
-      'Reset to Global Settings',
-      'This will reset the selected user\'s settings to match the global default. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (selectedUserId) {
-                const globalSettings = await getSettings();
-                await saveSettings(globalSettings, selectedUserId);
-                await loadSettings();
-                Alert.alert('Success', 'User settings reset to global defaults');
-              }
-            } catch (error) {
-              console.error('Error resetting settings:', error);
-              Alert.alert('Error', 'Failed to reset settings');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleUserSelect = async (userId: number | null) => {
+    // If clicking on the same user, deselect them
+    if (selectedUserId === userId) {
+      setSelectedUserId(null);
+      setShowUserSelector(false);
+      return;
+    }
+    
     setSelectedUserId(userId);
     setShowUserSelector(false);
     await loadSettings();
@@ -218,16 +193,19 @@ export default function Settings() {
         <View style={styles.content}>
           <Text style={styles.title}>Settings</Text>
         
-        {/* Admin User Selector */}
+        {/* Admin User Selector and User Settings (combined in one box) */}
         {isAdmin && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Admin Controls</Text>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="people-outline" size={24} color="#0A84FF" />
+              <Text style={styles.sectionTitle}>Manage User Settings</Text>
+            </View>
             
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Manage User Settings</Text>
+                <Text style={styles.settingLabel}>Select User</Text>
                 <Text style={styles.settingDescription}>
-                  Select a user to modify their default settings.
+                  Choose a user to customize their default task settings
                 </Text>
               </View>
               <Pressable
@@ -239,7 +217,7 @@ export default function Settings() {
                     users.find(u => u.id === selectedUserId)?.username || 
                     users.find(u => u.id === selectedUserId)?.email || 
                     `User ${selectedUserId}` : 
-                    'Select User'
+                    'Choose User'
                   }
                 </Text>
                 <Ionicons 
@@ -250,83 +228,56 @@ export default function Settings() {
               </Pressable>
             </View>
 
-                         {showUserSelector && (
-               <View style={styles.userList}>
-                 <Pressable
-                   style={[styles.userItem, !selectedUserId && styles.selectedUserItem]}
-                   onPress={() => handleUserSelect(null)}
-                 >
-                   <Text style={[styles.userItemText, !selectedUserId && styles.selectedUserItemText]}>
-                     Global Settings
-                   </Text>
-                   <Text style={styles.userRoleText}>DEFAULT</Text>
-                 </Pressable>
-                 {users
-                   .filter(user => user.role === 'EMPLOYEE') // Only show regular users, not other admins
-                   .map((user) => (
-                   <Pressable
-                     key={user.id}
-                     style={[styles.userItem, selectedUserId === user.id && styles.selectedUserItem]}
-                     onPress={() => handleUserSelect(user.id)}
-                   >
-                     <Text style={[styles.userItemText, selectedUserId === user.id && styles.selectedUserItemText]}>
-                       {user.username || user.email}
-                     </Text>
-                     <Text style={styles.userRoleText}>
-                       {user.role === 'EMPLOYEE' ? 'USER' : user.role}
-                     </Text>
-                   </Pressable>
-                 ))}
-               </View>
-             )}
+            {showUserSelector && (
+              <View style={styles.userList}>
+                {users
+                  .filter(user => user.role === 'EMPLOYEE')
+                  .map((user) => (
+                  <Pressable
+                    key={user.id}
+                    style={[styles.userItem, selectedUserId === user.id && styles.selectedUserItem]}
+                    onPress={() => handleUserSelect(user.id)}
+                  >
+                    <Text style={[styles.userItemText, selectedUserId === user.id && styles.selectedUserItemText]}>
+                      {user.username || user.email}
+                    </Text>
+                    <Text style={styles.userRoleText}>
+                      {user.role === 'EMPLOYEE' ? 'USER' : user.role}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
 
-                         {selectedUserId && (
-               <Pressable
-                 style={styles.resetButton}
-                 onPress={resetToGlobalSettings}
-               >
-                 <Text style={styles.resetButtonText}>Reset to Global Settings</Text>
-               </Pressable>
-             )}
-             
-
+            {/* User-specific settings toggle (only shown when user is selected) */}
+            {selectedUserId && (
+              <>
+                <View style={[styles.settingRow, { marginTop: 20 }]}>
+                  <View style={styles.settingInfo}>
+                    <Text style={styles.settingLabel}>Default "Label Done" Setting</Text>
+                    <Text style={styles.settingDescription}>
+                      When creating new tasks, this will be the default value for the "Tasker can label done" option for the selected user.
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={toggleDefaultLabelDone}
+                    style={[
+                      styles.toggle,
+                      { backgroundColor: defaultLabelDone ? "#0A84FF" : "#CCC" }
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.toggleThumb,
+                        { alignSelf: defaultLabelDone ? "flex-end" : "flex-start" }
+                      ]}
+                    />
+                  </Pressable>
+                </View>
+              </>
+            )}
           </View>
         )}
-        
-                 {/* Only show settings for admins */}
-         {isAdmin && (
-           <View style={styles.section}>
-             <Text style={styles.sectionTitle}>
-               {selectedUserId ? 'User Settings' : 'Global Settings'}
-             </Text>
-             
-             <View style={styles.settingRow}>
-               <View style={styles.settingInfo}>
-                 <Text style={styles.settingLabel}>Default "Label Done" Setting</Text>
-                 <Text style={styles.settingDescription}>
-                   {selectedUserId 
-                     ? `When creating new tasks, this will be the default value for the "Tasker can label done" option for the selected user.`
-                     : 'When creating new tasks, this will be the default value for the "Tasker can label done" option for all users.'
-                   }
-                 </Text>
-               </View>
-               <Pressable
-                 onPress={toggleDefaultLabelDone}
-                 style={[
-                   styles.toggle,
-                   { backgroundColor: defaultLabelDone ? "#0A84FF" : "#CCC" }
-                 ]}
-               >
-                 <View
-                   style={[
-                     styles.toggleThumb,
-                     { alignSelf: defaultLabelDone ? "flex-end" : "flex-start" }
-                   ]}
-                 />
-               </Pressable>
-             </View>
-           </View>
-         )}
 
                  {/* Admin Registration Form */}
          {isAdmin && (
@@ -496,11 +447,16 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1a1a1a',
-    marginBottom: 16,
+    marginLeft: 8,
   },
   settingRow: {
     flexDirection: 'row',
@@ -700,5 +656,107 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.7,
+  },
+  // Modern styles for user selector and settings
+  modernUserSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  modernUserSelectorText: {
+    fontSize: 14,
+    color: '#0A84FF',
+    fontWeight: '500',
+    marginRight: 8,
+  },
+  modernUserList: {
+    marginTop: 12,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    maxHeight: 200,
+  },
+  modernUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  selectedModernUserItem: {
+    backgroundColor: '#0A84FF',
+  },
+  userItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#0A84FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  userAvatarText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  modernUserItemText: {
+    fontSize: 14,
+    color: '#1a1a1a',
+    fontWeight: '500',
+  },
+  selectedModernUserItemText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  modernUserRoleText: {
+    fontSize: 12,
+    color: '#6c757d',
+    textTransform: 'uppercase',
+  },
+  userSettingsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e9ecef',
+  },
+  modernToggle: {
+    width: 40,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    padding: 2,
+  },
+  modernToggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'white',
+  },
+  modernResetButton: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  modernResetButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });

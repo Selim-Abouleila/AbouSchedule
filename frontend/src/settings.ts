@@ -93,7 +93,21 @@ export const getSettingsForUser = async (userId?: number): Promise<AppSettings> 
     // Get current user's ID to check if this is an admin request
     const currentUserId = await getCurrentUserId();
     
-    if (userId && userId !== currentUserId) {
+    if (userId === undefined) {
+      // Admin requesting global settings
+      const response = await fetch(`${endpoints.admin.globalSettings}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get global settings: ${response.status}`);
+      }
+
+      const settings = await response.json();
+      return { ...defaultSettings, ...settings };
+    } else if (userId !== currentUserId) {
       // Admin requesting another user's settings
       const response = await fetch(`${endpoints.admin.settings(userId)}`, {
         headers: {

@@ -1244,8 +1244,12 @@ app.register(async (f) => {
       include: { images: true, documents: true, videos: true }
     });
 
-    // Send notification for immediate tasks
-    if (full && full.status === 'ACTIVE' && !full.dueAt) {
+    // Send notification only for IMMEDIATE tasks in ACTIVE or PENDING status
+    if (
+      full &&
+      (full.status === 'ACTIVE' || full.status === 'PENDING') &&
+      full.priority === 'IMMEDIATE'
+    ) {
       try {
         console.log('🔔 Checking for immediate task notification...');
         console.log('📋 Task details:', { id: full.id, title: full.title, userId: full.userId, status: full.status, dueAt: full.dueAt });
