@@ -1193,6 +1193,10 @@ app.register(async (f) => {
     const initStatus = status as Status;               // value that came from UI
     const prevStatus = initStatus !== 'DONE' ? initStatus : null;
 
+    // Debug: Log the admin user ID
+    console.log('🔍 Admin creating task - User ID:', req.user.id);
+    console.log('🔍 Admin user object:', req.user);
+
     const task = await prisma.task.create({
       data: {
         title,
@@ -1217,6 +1221,8 @@ app.register(async (f) => {
         userId
       }
     });
+
+    console.log('✅ Task created with issuedBy:', task.issuedBy);
 
     /* --- ❸  Persist image metadata (if any) ---------------------- */
     if (images.length) {
