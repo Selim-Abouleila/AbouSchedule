@@ -133,7 +133,7 @@ export default function EditTask() {
     const [timeCapM, setTimeCapM] = useState(0);     // minutes (0-59)
     const [showCapIOS, setShowCapIOS] = useState(false);           // string for TextInput
     const [recurring, setRecurring] = useState(false);
-    const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number]>("DAILY");
+    const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number] | "NONE">("NONE");
     const [recEvery, setRecEvery] = useState("1");
     const [recEnd, setRecEnd] = useState<Date | null>(null);
     const [labelDone, setLabelDone] = useState<boolean | null>(null);
@@ -193,6 +193,13 @@ export default function EditTask() {
         }
     }, [recurrence]);
 
+    // Ensure we have a valid recurrence when recurring is enabled
+    useEffect(() => {
+        if (recurring && recurrence === "NONE") {
+            setRecurrence("DAILY");
+        }
+    }, [recurring, recurrence]);
+
 
     /* Yearly picker for reccurance */
     const openYearlyPicker = () => {
@@ -236,6 +243,13 @@ export default function EditTask() {
         // keep only 0‑9; remove minus signs, spaces, letters, etc.
         const clean = txt.replace(/[^0-9]/g, '');
         setRecEvery(clean);
+    };
+
+    /* Tool to reset Time cap */
+    const resetTimeCap = () => {
+        setTimeCapH(0);
+        setTimeCapM(0);
+        setShowCapIOS(false);     // make sure the inline spinner disappears
     };
 
 
@@ -507,7 +521,13 @@ export default function EditTask() {
             "Are you sure you want this task to be recurring?",
             [
                 { text: "Back", style: "cancel" },                // stay off
-                { text: "Yes", onPress: () => setRecurring(true) } // enable
+                { text: "Yes", onPress: () => {
+                    setRecurring(true);
+                    // Set a default recurrence value when enabling recurring
+                    if (recurrence === "NONE") {
+                        setRecurrence("DAILY");
+                    }
+                }} // enable
             ]
         );
     };
@@ -1078,6 +1098,14 @@ const handleBack = useCallback(() => {
                          }
                          onPress={showTimeCapPicker}
                      />
+
+                     {(timeCapH !== 0 || timeCapM !== 0) && (
+                         <Button
+                             title="Clear time cap"
+                             color="#FF3B30"          // red, like other destructive actions
+                             onPress={resetTimeCap}
+                         />
+                     )}
 
                     {Platform.OS === 'ios' && showCapIOS && (
                         <DateTimePicker

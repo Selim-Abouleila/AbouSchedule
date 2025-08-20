@@ -5,10 +5,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "abouschedule",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/adaptive-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "splash": { "image": "./assets/icon.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
+    "splash": { "image": "./assets/splash-icon.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
     "ios": {
       "supportsTablet": true,
       "infoPlist": { "NSCameraUsageDescription": "AbouSchedule needs access to the camera so you can attach photos to a task." }
@@ -16,7 +16,11 @@
     "android": {
       "package": "com.selax215.abouschedule",
       "googleServicesFile": "./google-services.json",
-      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
+      },
       "edgeToEdgeEnabled": true
     },
     "web": { "favicon": "./assets/favicon.png" },

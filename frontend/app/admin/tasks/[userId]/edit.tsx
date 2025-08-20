@@ -133,6 +133,23 @@ export default function EditTask() {
     const [recurring, setRecurring] = useState(false);
     const [recurrence, setRecurrence] = useState<typeof RECURRENCES[number] | "NONE">("NONE");
     const [recEvery, setRecEvery] = useState("1");
+    
+    // Debug effect to track state changes
+    useEffect(() => {
+        console.log('🔍 DEBUG - Recurrence state changed:', {
+            recurring,
+            recurrence,
+            recEvery
+        });
+    }, [recurring, recurrence, recEvery]);
+
+    // Ensure we have a valid recurrence when recurring is enabled
+    useEffect(() => {
+        if (recurring && recurrence === "NONE") {
+            console.log('🔍 DEBUG - Recurring enabled but recurrence is NONE, setting to DAILY');
+            setRecurrence("DAILY");
+        }
+    }, [recurring, recurrence]);
     const [recEnd, setRecEnd] = useState<Date | null>(null);
     const [labelDone, setLabelDone] = useState<boolean | null>(null);
     const [showIOS, setShowIOS] = useState(false);
@@ -421,6 +438,13 @@ export default function EditTask() {
         setRecEvery(clean);
     };
 
+    /* Tool to reset Time cap */
+    const resetTimeCap = () => {
+        setTimeCapH(0);
+        setTimeCapM(0);
+        setShowCapIOS(false);     // make sure the inline spinner disappears
+    };
+
 
 
 
@@ -633,12 +657,21 @@ export default function EditTask() {
 
     /* Recuurrance Confirmation */
     const confirmRecurring = () => {
+        console.log('🔍 DEBUG - confirmRecurring called');
         Alert.alert(
             "Recurring task",
             "Are you sure you want this task to be recurring?",
             [
                 { text: "Back", style: "cancel" },                // stay off
-                { text: "Yes", onPress: () => setRecurring(true) } // enable
+                { text: "Yes", onPress: () => {
+                    console.log('🔍 DEBUG - User confirmed recurring, setting recurring to true');
+                    setRecurring(true);
+                    // Set a default recurrence value when enabling recurring
+                    if (recurrence === "NONE") {
+                        console.log('🔍 DEBUG - Setting default recurrence to DAILY');
+                        setRecurrence("DAILY");
+                    }
+                }} // enable
             ]
         );
     };
@@ -858,6 +891,16 @@ export default function EditTask() {
 const save = async () => {
   /* validate inputs here as before … */
 
+  console.log('🔍 DEBUG - Save function called with state:', {
+    recurring,
+    recurrence,
+    recEvery,
+    recurrenceDow,
+    recurrenceDom,
+    recurrenceMonth,
+    recEnd
+  });
+
   setLoad(true);
   setUploadProgress('Preparing upload...');
 
@@ -904,7 +947,15 @@ const save = async () => {
       };
 
       if (recurring) {
+          console.log('🔍 DEBUG - Processing recurring task:', {
+            recurrence,
+            recurrenceType: typeof recurrence,
+            recEvery,
+            recEveryType: typeof recEvery
+          });
+          
           if (recurrence === "DAILY") {
+            console.log('🔍 DEBUG - DAILY recurrence detected, setting body fields');
             // DAILY doesn't need any specific fields, just recurrence and recurrenceEvery
           }
           if (recurrence === "WEEKLY") {
@@ -1312,6 +1363,14 @@ const handleBack = useCallback(() => {
                          onPress={showTimeCapPicker}
                      />
 
+                     {(timeCapH !== 0 || timeCapM !== 0) && (
+                         <Button
+                             title="Clear time cap"
+                             color="#FF3B30"          // red, like other destructive actions
+                             onPress={resetTimeCap}
+                         />
+                     )}
+
                     {Platform.OS === 'ios' && showCapIOS && (
                         <DateTimePicker
                             value={new Date(0, 0, 0, timeCapH, timeCapM)}
@@ -1376,9 +1435,17 @@ const handleBack = useCallback(() => {
                          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                              <Text style={{ fontWeight: "bold", marginRight: 8 }}>RECURRING</Text>
                              <Pressable
-                                 onPress={() =>
-                                     !recurring ? confirmRecurring() : setRecurring(false)
-                                 }
+                                 onPress={() => {
+                                     console.log('🔍 DEBUG - Recurring toggle pressed:', {
+                                         currentRecurring: recurring,
+                                         currentRecurrence: recurrence
+                                     });
+                                     if (!recurring) {
+                                         confirmRecurring();
+                                     } else {
+                                         setRecurring(false);
+                                     }
+                                 }}
                                  style={{
                                      width: 24,
                                      height: 24,
@@ -1408,7 +1475,17 @@ const handleBack = useCallback(() => {
                         <>
                             {/* Frequency */}
                             <Text style={{ fontWeight: "bold", marginTop: 8 }}>FREQUENCY</Text>
-                            <Picker selectedValue={recurrence} onValueChange={setRecurrence}>
+                            <Picker 
+                                selectedValue={recurrence} 
+                                onValueChange={(value) => {
+                                    console.log('🔍 DEBUG - Picker onValueChange:', {
+                                        oldValue: recurrence,
+                                        newValue: value,
+                                        valueType: typeof value
+                                    });
+                                    setRecurrence(value);
+                                }}
+                            >
                                 {RECURRENCES.map((r) => <Picker.Item key={r} label={r} value={r} />)}
                             </Picker>
 

@@ -209,7 +209,7 @@ export default function Login() {
           </View>
         </View>
 
-        {/* Action Buttons Section */}
+        {/* Action Buttons Section (Back only) */}
         <View style={{
           backgroundColor: 'white',
           padding: 20,
@@ -220,32 +220,6 @@ export default function Login() {
           shadowRadius: 8,
           elevation: 4,
         }}>
-          {/* Create Account Button */}
-          <Pressable
-            onPress={() => router.push('/register')}
-            style={({ pressed }) => ({
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingVertical: 14,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: '#0A84FF',
-              backgroundColor: 'transparent',
-              opacity: pressed ? 0.7 : 1,
-              marginBottom: 12,
-            })}
-          >
-            <Ionicons name="person-add-outline" size={18} color="#0A84FF" style={{ marginRight: 8 }} />
-            <Text style={{
-              fontSize: 16,
-              fontWeight: '600',
-              color: '#0A84FF',
-            }}>
-              Create an Account
-            </Text>
-          </Pressable>
-
           {/* Back Button */}
           <Pressable
             onPress={() => router.back()}
