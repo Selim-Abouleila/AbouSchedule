@@ -25,6 +25,7 @@ import { startAdminNotificationChecker, sendPriorityBypassNotification } from ".
 // Import Firebase admin to initialize it
 import './firebase-admin.js';
 import admin from './firebase-admin.js';
+import websocket from '@fastify/websocket';
 
 
 
@@ -33,10 +34,62 @@ dotenv.config();
 
 const prisma = new PrismaClient();
 const app = Fastify({ logger: true });
+app.register(websocket);
+
+// ───── WebSocket connection registry (per-user) ─────
+const userIdToSockets = new Map<number, Set<any>>();
+
+function addSocket(userId: number, socket: any): void {
+  if (!userIdToSockets.has(userId)) userIdToSockets.set(userId, new Set());
+  userIdToSockets.get(userId)!.add(socket);
+
+  socket.on('close', () => {
+    const set = userIdToSockets.get(userId);
+    if (!set) return;
+    set.delete(socket);
+    if (set.size === 0) userIdToSockets.delete(userId);
+  });
+}
+
+function broadcastToUser(userId: number, message: unknown): void {
+  const sockets = userIdToSockets.get(userId);
+  if (!sockets) return;
+  const data = JSON.stringify(message);
+  for (const s of sockets) {
+    try { s.send(data); } catch { /* ignore */ }
+  }
+}
+
+// Optional keepalive to keep connections healthy behind proxies
+setInterval(() => {
+  for (const sockets of userIdToSockets.values()) {
+    for (const s of sockets) {
+      try { s.ping?.(); } catch { /* ignore */ }
+    }
+  }
+}, 30000);
 
 app.setErrorHandler((err, req, rep) => {
   app.log.error(err);                 // ⬅️  this prints the stack trace
   rep.code(500).send({ error: 'Internal error' });
+});
+
+// ───── WebSocket route with JWT verification ─────
+app.get('/ws', { websocket: true }, (connection, req: any) => {
+  try {
+    const token = (req.query?.token as string) || '';
+    const payload = app.jwt.verify(token) as { sub: number };
+    const userId = Number(payload.sub);
+    if (!userId || Number.isNaN(userId)) {
+      connection.socket.close();
+      return;
+    }
+    addSocket(userId, connection.socket);
+    app.log.info({ userId }, 'WebSocket connected');
+  } catch (e) {
+    app.log.warn('WebSocket auth failed');
+    try { connection.socket.close(); } catch {}
+  }
 });
 
 
@@ -282,6 +335,18 @@ app.register(async (f) => {
       where: { id: task.id },
       include: { images: true, documents: true, videos: true }
     });
+
+    // ───── WebSocket broadcast: notify the assigned user about the new task
+    try {
+      if (full?.userId) {
+        app.log.info({ userId: full.userId, taskId: full.id }, 'WS: Broadcasting task:created to user');
+        broadcastToUser(full.userId, { type: 'task:created', taskId: full.id });
+      } else {
+        app.log.warn({ taskId: full?.id }, 'WS: Missing userId on created task, skipping broadcast');
+      }
+    } catch (e) {
+      app.log.error({ err: e }, 'WS: Failed to broadcast task:created');
+    }
 
     return rep.code(201).send(full);
 
@@ -1243,6 +1308,18 @@ app.register(async (f) => {
       where: { id: task.id },
       include: { images: true, documents: true, videos: true }
     });
+
+    // ───── WebSocket broadcast: notify the assigned user about the new task
+    try {
+      if (full?.userId) {
+        app.log.info({ userId: full.userId, taskId: full.id }, 'WS: Broadcasting task:created to user (admin create)');
+        broadcastToUser(full.userId, { type: 'task:created', taskId: full.id });
+      } else {
+        app.log.warn({ taskId: full?.id }, 'WS: Missing userId on created task (admin create), skipping broadcast');
+      }
+    } catch (e) {
+      app.log.error({ err: e }, 'WS: Failed to broadcast task:created (admin create)');
+    }
 
     // Send notification only for IMMEDIATE tasks in ACTIVE or PENDING status
     if (
