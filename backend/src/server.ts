@@ -76,18 +76,23 @@ app.setErrorHandler((err, req, rep) => {
 
 // ───── WebSocket route with JWT verification ─────
 app.get('/ws', { websocket: true }, (connection, req: any) => {
+  // Log incoming handshake (do not log full token)
+  const tokenParam = (req.query?.token as string) || '';
+  const tokenPreview = tokenParam ? `${tokenParam.slice(0, 12)}…(${tokenParam.length})` : '(none)';
+  app.log.info({ tokenPreview }, 'WS: incoming handshake');
+
   try {
-    const token = (req.query?.token as string) || '';
-    const payload = app.jwt.verify(token) as { sub: number };
+    const payload = app.jwt.verify(tokenParam) as { sub: number };
     const userId = Number(payload.sub);
     if (!userId || Number.isNaN(userId)) {
+      app.log.warn({ userId }, 'WS: invalid userId from token');
       connection.socket.close();
       return;
     }
     addSocket(userId, connection.socket);
-    app.log.info({ userId }, 'WebSocket connected');
+    app.log.info({ userId }, 'WS: connected');
   } catch (e) {
-    app.log.warn('WebSocket auth failed');
+    app.log.warn({ err: e instanceof Error ? e.message : e }, 'WS: auth failed');
     try { connection.socket.close(); } catch {}
   }
 });
