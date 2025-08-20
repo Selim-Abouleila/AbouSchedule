@@ -103,17 +103,40 @@ export function startAdminNotificationChecker() {
           if (minutesElapsed >= 10 && task.runNotification === true) {
             console.log(`⏰ Task ${task.id} has been unread for ${minutesElapsed} minutes and notifications are enabled`);
             
-            // Get all admin users' push tokens
-            const adminUsers = await prisma.user.findMany({
-              where: {
-                role: 'ADMIN'
-              },
-              include: {
-                pushTokens: true
-              }
-            });
+            let adminUsers;
+            let notificationTarget;
+            
+            // Check if task has a specific admin who issued it
+            if (task.issuedBy) {
+              console.log(`🎯 Task ${task.id} was issued by admin ${task.issuedBy} - sending notification only to this admin`);
+              notificationTarget = `specific admin (ID: ${task.issuedBy})`;
+              
+              // Get only the admin who issued the task
+              adminUsers = await prisma.user.findMany({
+                where: {
+                  id: task.issuedBy,
+                  role: 'ADMIN'
+                },
+                include: {
+                  pushTokens: true
+                }
+              });
+            } else {
+              console.log(`📢 Task ${task.id} has no specific issuer - sending notification to all admins`);
+              notificationTarget = 'all admins';
+              
+              // Get all admin users' push tokens (fallback behavior)
+              adminUsers = await prisma.user.findMany({
+                where: {
+                  role: 'ADMIN'
+                },
+                include: {
+                  pushTokens: true
+                }
+              });
+            }
 
-            // Collect all admin push tokens
+            // Collect admin push tokens
             const adminPushTokens = adminUsers.flatMap(user => user.pushTokens);
 
             if (adminPushTokens.length > 0) {
@@ -123,7 +146,7 @@ export function startAdminNotificationChecker() {
               const expoTokens = adminPushTokens.filter(pt => isExpoToken(pt.token)).map(pt => pt.token);
               const firebaseTokens = adminPushTokens.filter(pt => isFirebaseToken(pt.token)).map(pt => pt.token);
 
-              console.log(`📱 Found ${expoTokens.length} Expo tokens and ${firebaseTokens.length} Firebase tokens`);
+              console.log(`📱 Sending to ${notificationTarget}: ${expoTokens.length} Expo tokens and ${firebaseTokens.length} Firebase tokens`);
 
               // Send Expo notifications
               if (expoTokens.length > 0) {
@@ -135,7 +158,7 @@ export function startAdminNotificationChecker() {
                 await sendFirebaseNotifications(firebaseTokens, task, taskerName, minutesElapsed);
               }
             } else {
-              console.log('⚠️ No admin push tokens found - skipping notification');
+              console.log(`⚠️ No push tokens found for ${notificationTarget} - skipping notification`);
             }
           } else {
             if (minutesElapsed < 10) {

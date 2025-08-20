@@ -1213,6 +1213,7 @@ app.register(async (f) => {
         lastOccurrence: null,
         nextOccurrence: firstNextOccurrence,
         wasAddedByAdmin: true,
+        issuedBy: req.user.id,
         userId
       }
     });

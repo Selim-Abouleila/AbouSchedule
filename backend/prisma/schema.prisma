@@ -51,6 +51,7 @@ model Task {
   wasAddedByAdmin Boolean?   @default(false) @map("was_added_by_admin")
   requiresCompletionApproval Boolean?   @default(false) @map("requires_completion_approval")
   runNotification Boolean?   @default(true) @map("run_notification")
+  issuedBy        Int?       @map("issued_by")
   size            Size       @default(NORMAL)
   documents       Document[]
   images          Image[]
