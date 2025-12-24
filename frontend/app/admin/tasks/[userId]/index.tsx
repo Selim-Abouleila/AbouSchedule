@@ -1,5 +1,5 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import { View, FlatList, Text, Pressable, ActivityIndicator, Alert, BackHandler } from 'react-native';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { View, FlatList, Text, Pressable, ActivityIndicator, Alert, BackHandler, AppState, AppStateStatus } from 'react-native';
 import { useFocusEffect, router, useNavigation, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { endpoints, API_BASE } from '../../../../src/api';
@@ -91,6 +91,9 @@ export default function AdminUserTasks() {
   const [userEmail, setUserEmail] = useState<string>('');
   const [userInfo, setUserInfo] = useState<{ username?: string; email: string } | null>(null);
   const nav = useNavigation();
+  const [blockInput, setBlockInput] = useState(true);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState as AppStateStatus);
+  const backgroundAtRef = useRef<number | null>(null);
 
   /* Sort MENU STUFF */
   const [menuVisible, setMenuVisible] = useState(false);
@@ -228,17 +231,72 @@ export default function AdminUserTasks() {
     }, [reload])
   );
 
-  // Android back button handler - behaves exactly like the pressable back button
+  // Short safety window: block taps for the first 0.5s on focus
+  useFocusEffect(
+    useCallback(() => {
+      setBlockInput(true);
+      const t = setTimeout(() => setBlockInput(false), 700);
+      return () => clearTimeout(t);
+    }, [])
+  );
+
+  // 1‑minute polling only when screen is focused and app is active (not minimized)
+  useFocusEffect(
+    useCallback(() => {
+      // Capture current app state at focus time
+      appStateRef.current = AppState.currentState as AppStateStatus;
+      try { console.log('📱 AppState at focus (admin):', appStateRef.current); } catch {}
+
+      const onAppStateChange = (next: AppStateStatus) => {
+        const prev = appStateRef.current;
+        appStateRef.current = next;
+        if (next !== 'active') {
+          // App went to background/inactive: record timestamp
+          backgroundAtRef.current = Date.now();
+        } else {
+          // App became active: if background >= 1s, force a refresh
+          const bgAt = backgroundAtRef.current;
+          if (bgAt && Date.now() - bgAt >= 1000) {
+            try { console.log('⏱️ Resume after >=1s (admin) → reload()'); } catch {}
+            reload();
+          }
+          backgroundAtRef.current = null;
+        }
+      };
+      const subscription = AppState.addEventListener('change', onAppStateChange);
+
+      const intervalId = setInterval(() => {
+        if (appStateRef.current === 'active') {
+          console.log('⏱️ Poll (admin): app active → reload()');
+          reload();
+        } else {
+          try { console.log('⏱️ Poll (admin): skipped (app state =', appStateRef.current, ')'); } catch {}
+        }
+      }, 60000); // 1 minute
+
+      return () => {
+        clearInterval(intervalId);
+        subscription.remove();
+      };
+    }, [reload])
+  );
+
+  // Android back button handler - close modal first, else navigate to admin (replace)
   useFocusEffect(
     useCallback(() => {
       const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-        console.log('🔙 Android back button pressed - navigating to admin');
-        router.push('/admin');
+        if (menuVisible) {
+          console.log('🔙 Back pressed: closing sort menu');
+          setMenuVisible(false);
+          return true;
+        }
+        console.log('🔙 Android back button pressed - navigating to admin (replace)');
+        router.replace('/admin');
         return true; // Prevent default back behavior
       });
 
       return () => backHandler.remove();
-    }, [])
+    }, [menuVisible])
   );
 
   /** onEndReached → load next page if available */
@@ -253,6 +311,17 @@ export default function AdminUserTasks() {
     const docCount = item.documents?.length ?? 0;
     const videoCount = item.videos?.length ?? 0;
     const label = statusLabel[item.status];
+    const showGenericPriority = !isImmediate && !isDone && item.priority !== 'NONE';
+    const isNonePriority = item.priority === 'NONE';
+    const isNumberedPriority = item.priority === 'ONE' || item.priority === 'TWO' || item.priority === 'THREE';
+    const priorityTextColor = isNonePriority ? '#32D74B' : '#6c757d';
+    const priorityBgColor = isNonePriority ? '#32D74B20' : '#f0f1f2';
+    const priorityBorderColor = isNonePriority ? '#32D74B' : '#e9ecef';
+    const priorityLabel = isNonePriority
+      ? 'NONE'
+      : isNumberedPriority
+        ? `PRIORITY ${item.priority === 'ONE' ? '1' : item.priority === 'TWO' ? '2' : '3'}`
+        : item.priority;
 
     return (
       <Pressable
@@ -339,29 +408,31 @@ export default function AdminUserTasks() {
         <View style={{ flex: 1, marginLeft: 12, marginRight: 32 }}>
           {/* line 1: badges */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-            {/* status badge */}
+            {/* status badge (slightly smaller, with contour) */}
             <View
               style={{
                 paddingHorizontal: 8,
-                paddingVertical: 4,
-                borderRadius: 6,
+                paddingVertical: 5,
+                borderRadius: 7,
                 marginRight: 8,
                 backgroundColor: label.color + '20',
+                borderWidth: 1,
+                borderColor: label.color,
               }}>
               <Text style={{ fontSize: 10, fontWeight: '700', color: label.color }}>
                 {label.caption}
               </Text>
             </View>
 
-            {/* IMMEDIATE badge */}
+            {/* IMMEDIATE badge (slightly smaller) */}
             {isImmediate && !isDone && (
               <View
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 8,
+                  paddingHorizontal: 8,
+                  paddingVertical: 5,
+                  borderRadius: 7,
                   backgroundColor: '#FF453A',
                   shadowColor: '#FF453A',
                   shadowOffset: { width: 0, height: 2 },
@@ -369,9 +440,29 @@ export default function AdminUserTasks() {
                   shadowRadius: 4,
                   elevation: 3,
                 }}>
-                <Ionicons name="flame" size={12} color="white" style={{ marginRight: 4 }} />
-                <Text style={{ fontSize: 11, fontWeight: '700', color: 'white' }}>
+                <Ionicons name="flame" size={11} color="white" style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: 'white' }}>
                   IMMEDIATE
+                </Text>
+              </View>
+            )}
+
+            {/* Generic priority badge for ONE/TWO/THREE (gray); NONE hidden */}
+            {showGenericPriority && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 8,
+                  paddingVertical: 5,
+                  borderRadius: 7,
+                  backgroundColor: priorityBgColor,
+                  borderWidth: 1,
+                  borderColor: priorityBorderColor,
+                }}>
+                <Ionicons name={isNonePriority ? 'checkmark-circle' : 'flag'} size={11} color={priorityTextColor} style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: priorityTextColor }}>
+                  {priorityLabel}
                 </Text>
               </View>
             )}
@@ -557,7 +648,7 @@ export default function AdminUserTasks() {
       </Pressable>
 
       {/* Android / fallback sort-menu modal */}
-      <Modal transparent visible={menuVisible} animationType="fade">
+      <Modal transparent visible={menuVisible} animationType="fade" onRequestClose={() => setMenuVisible(false)}>
         <Pressable style={{ flex: 1 }} onPress={() => setMenuVisible(false)}>
           <View
             style={{
@@ -592,6 +683,26 @@ export default function AdminUserTasks() {
           </View>
         </Pressable>
       </Modal>
+      {blockInput && (
+        <View
+          pointerEvents="auto"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(248,249,250,0.6)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <View style={{ backgroundColor: 'white', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e9ecef' }}>
+            <Text style={{ color: '#1a1a1a', fontWeight: '600' }}>Please wait for page to load first</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 } 

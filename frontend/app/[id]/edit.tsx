@@ -28,7 +28,7 @@ import { Picker } from "@react-native-picker/picker";
 import { useLocalSearchParams, router } from "expo-router";
 import { endpoints } from "../../src/api";
 import { getToken } from "../../src/auth";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { compressImages } from "../../src/imageCompression";
 import { compressVideos } from "../../src/videoCompression";
 import { Ionicons } from "@expo/vector-icons";
@@ -119,6 +119,7 @@ const InfoBadge = ({ onPress }: { onPress: () => void }) => (
 
 export default function EditTask() {
     const { id } = useLocalSearchParams<{ id: string }>();
+    const scrollRef = useRef<any>(null);
     
     console.log('🔧 EditTask component loaded, id:', id);
 
@@ -695,6 +696,85 @@ export default function EditTask() {
         };
     }, [id]);            // ← runs every time you navigate to /tasks/[other‑id]/edit
 
+    // Refetch on focus and scroll to top
+    useFocusEffect(
+      useCallback(() => {
+        let cancelled = false;
+        try { scrollRef.current?.scrollTo?.({ y: 0, animated: false }); } catch {}
+        (async () => {
+          try {
+            const jwt = await getToken();
+            const res = await fetch(`${endpoints.tasks}/${id}`, {
+              headers: { Authorization: `Bearer ${jwt}` },
+            });
+            if (!res.ok) return;
+            const t = await res.json();
+            if (cancelled) return;
+            setTitle(t.title);
+            setDescription(t.description ?? '');
+            setPriority(t.priority);
+            setStatus(t.status);
+            setSize(t.size);
+            setDueAt(t.dueAt ? new Date(t.dueAt) : null);
+
+            // Reset time cap
+            if (t.timeCapMinutes) {
+              setTimeCapH(Math.floor(t.timeCapMinutes / 60));
+              setTimeCapM(t.timeCapMinutes % 60);
+            } else {
+              setTimeCapH(0);
+              setTimeCapM(0);
+            }
+
+            // Reset labelDone
+            setLabelDone(Boolean(t.labelDone ?? false));
+
+            // Reset recurrence
+            setRecurring(t.recurrence !== 'NONE');
+            setRecurrence(t.recurrence);
+            setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : '1');
+            setRecurrenceMonth(t.recurrenceMonth ? String(t.recurrenceMonth) : '1');
+            setRecurrenceDom(t.recurrenceDom ? String(t.recurrenceDom) : '1');
+            setRecurrenceDow(t.recurrenceDow ? String(t.recurrenceDow) : '1');
+            setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
+
+            // Reset media lists
+            setPhotos(
+              (Array.isArray(t.images) ? t.images : []).map(
+                (img: { id: number; url: string; mime: string }) => ({
+                  id: img.id,
+                  uri: img.url,
+                  mimeType: img.mime,
+                }) as TaskPhoto
+              )
+            );
+            setDocs(
+              (Array.isArray(t.documents) ? t.documents : []).map(
+                (d: { id: number; url: string; mime: string; name?: string }) => ({
+                  id: d.id,
+                  uri: d.url,
+                  name: d.name,
+                  mimeType: d.mime,
+                }) as TaskDoc
+              )
+            );
+            setVideos(
+              (Array.isArray(t.videos) ? t.videos : []).map(
+                (v: { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }) => ({
+                  id: v.id,
+                  uri: v.url,
+                  mimeType: v.mime,
+                  fileName: v.fileName,
+                  duration: v.duration,
+                }) as TaskVideo
+              )
+            );
+          } catch {}
+        })();
+        return () => { cancelled = true; };
+      }, [id])
+    );
+
 
 
 
@@ -872,14 +952,14 @@ const save = async () => {
     setUploadProgress('');
   }
 
-  router.push(`/tasks/${id}`);
+  router.replace(`/tasks/${id}`);
 };
 
 const handleBack = useCallback(() => {
     console.log('🔙 handleBack called in edit.tsx, hasUnsavedChanges:', hasUnsavedChanges, 'id:', id);
     if (!hasUnsavedChanges) {           // If no changes, go back to task detail
-      console.log('🔙 Navigating to /tasks/${id}');
-      router.push(`/tasks/${id}`);
+      console.log('🔙 Navigating to /tasks/${id} (replace)');
+      router.replace(`/tasks/${id}`);
       return;
     }
 
@@ -900,7 +980,7 @@ const handleBack = useCallback(() => {
                   text: "Delete",
                   style: "destructive",
                   onPress: () => {
-                    router.push(`/tasks/${id}`);
+                    router.replace(`/tasks/${id}`);
                   },
                 },
               ],
@@ -912,17 +992,17 @@ const handleBack = useCallback(() => {
     );
   }, [hasUnsavedChanges, save, id]);
 
-  // Android back button handler
-  useEffect(() => {
-    const backAction = () => {
-      console.log('🔙 Android back button pressed in edit.tsx');
-      handleBack();
-      return true; // Always prevent default behavior and use custom navigation
-    };
-
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-    return () => backHandler.remove();
-  }, [handleBack]);
+  // Android back button handler – attach only while focused
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        console.log('🔙 Android back button pressed in edit.tsx');
+        handleBack();
+        return true; // consume
+      });
+      return () => backHandler.remove();
+    }, [handleBack])
+  );
 
   /* ------------- UI --------------------------------------- */
     if (initialLoading) {
@@ -942,6 +1022,7 @@ const handleBack = useCallback(() => {
             <ScrollView
                 contentContainerStyle={{ padding: 24, gap: 12, paddingBottom: Platform.OS === 'android' ? 120 : 100 }}
                 keyboardShouldPersistTaps="handled"
+                ref={scrollRef}
             >
                 <View style={{ padding: 24, gap: 12 }}>
                     {/* Title */}

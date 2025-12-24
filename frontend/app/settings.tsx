@@ -189,6 +189,7 @@ export default function Settings() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
       >
         <View style={styles.content}>
           <Text style={styles.title}>Settings</Text>
@@ -229,7 +230,7 @@ export default function Settings() {
             </View>
 
             {showUserSelector && (
-              <View style={styles.userList}>
+              <ScrollView style={styles.userList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                 {users
                   .filter(user => user.role === 'EMPLOYEE')
                   .map((user) => (
@@ -246,7 +247,7 @@ export default function Settings() {
                     </Text>
                   </Pressable>
                 ))}
-              </View>
+              </ScrollView>
             )}
 
             {/* User-specific settings toggle (only shown when user is selected) */}

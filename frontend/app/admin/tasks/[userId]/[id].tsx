@@ -378,11 +378,11 @@ export default function AdminTaskDetail() {
     setError(null);
   }, []);
 
-  // Android back button handler - behaves exactly like the pressable back button
+  // Android back button handler - navigate back to admin tasks list (replace)
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      console.log('🔙 Android back button pressed - navigating to admin tasks list');
-      router.push(`/admin/tasks/${userId}`);
+      console.log('🔙 Android back button pressed - navigating to admin tasks list (replace)');
+      router.replace(`/admin/tasks/${userId}`);
       return true; // Prevent default back behavior
     });
 
@@ -562,7 +562,7 @@ export default function AdminTaskDetail() {
         alignItems: 'center',
       }}>
         <Pressable
-          onPress={() => router.push(`/admin/tasks/${userId}`)}
+          onPress={() => router.replace(`/admin/tasks/${userId}`)}
           style={{
             marginRight: 16,
             padding: 8,
@@ -1139,6 +1139,7 @@ export default function AdminTaskDetail() {
         visible={playingVideo !== null}
         animationType="slide"
         presentationStyle="fullScreen"
+        onRequestClose={() => setPlayingVideo(null)}
       >
         <View style={{
           flex: 1,
@@ -1185,6 +1186,7 @@ export default function AdminTaskDetail() {
         visible={openingDocument}
         transparent
         animationType="fade"
+        onRequestClose={() => setOpeningDocument(false)}
       >
         <View style={{
           flex: 1,
@@ -1218,6 +1220,7 @@ export default function AdminTaskDetail() {
         visible={sharingDocument}
         transparent
         animationType="fade"
+        onRequestClose={() => setSharingDocument(false)}
       >
         <View style={{
           flex: 1,

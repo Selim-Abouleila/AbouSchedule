@@ -28,7 +28,7 @@ import { Picker } from "@react-native-picker/picker";
 import { useLocalSearchParams, router } from "expo-router";
 import { endpoints, API_BASE } from "../../../../src/api";
 import { getToken } from "../../../../src/auth";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { compressImages } from "../../../../src/imageCompression";
 import { compressVideos } from "../../../../src/videoCompression";
@@ -119,6 +119,7 @@ const InfoBadge = ({ onPress }: { onPress: () => void }) => (
 
 export default function EditTask() {
     const { id, userId } = useLocalSearchParams<{ id: string; userId: string }>();
+    const scrollRef = useRef<any>(null);
 
     /* ------- state (same shape as AddTask) ------------------ */
     const [title, setTitle] = useState("");
@@ -874,6 +875,86 @@ export default function EditTask() {
         };
     }, [id]);            // ← runs every time you navigate to /tasks/[other‑id]/edit
 
+    // Refetch on focus to discard any unsaved local edits when revisiting this screen
+    useFocusEffect(
+      useCallback(() => {
+        let cancelled = false;
+        // Always jump to top on focus
+        try { scrollRef.current?.scrollTo?.({ y: 0, animated: false }); } catch {}
+        (async () => {
+          try {
+            const jwt = await getToken();
+            const res = await fetch(endpoints.admin.userTask(parseInt(userId), parseInt(id)), {
+              headers: { Authorization: `Bearer ${jwt}` },
+            });
+            if (!res.ok) return;
+            const t = await res.json();
+            if (cancelled) return;
+
+            setTitle(t.title);
+            setDescription(t.description ?? '');
+            setPriority(t.priority);
+            setStatus(t.status);
+            setSize(t.size);
+            setDueAt(t.dueAt ? new Date(t.dueAt) : null);
+
+            // Reset time cap, labelDone, recurrence on focus as well
+            if (t.timeCapMinutes) {
+              setTimeCapH(Math.floor(t.timeCapMinutes / 60));
+              setTimeCapM(t.timeCapMinutes % 60);
+            } else {
+              setTimeCapH(0);
+              setTimeCapM(0);
+            }
+            setLabelDone(Boolean(t.labelDone ?? false));
+
+            setRecurring(t.recurrence !== 'NONE');
+            setRecurrence(t.recurrence);
+            setRecEvery(t.recurrenceEvery ? String(t.recurrenceEvery) : '1');
+            setRecurrenceMonth(t.recurrenceMonth ? String(t.recurrenceMonth) : "1");
+            setRecurrenceDom(t.recurrenceDom ? String(t.recurrenceDom) : "1");
+            setRecurrenceDow(t.recurrenceDow ? String(t.recurrenceDow) : "1");
+            setRecEnd(t.recurrenceEnd ? new Date(t.recurrenceEnd) : null);
+
+            // Also reset media lists on focus
+            setPhotos(
+              (Array.isArray(t.images) ? t.images : []).map(
+                (img: { id: number; url: string; mime: string }) => ({
+                  id: img.id,
+                  uri: img.url,
+                  mimeType: img.mime,
+                }) as TaskPhoto
+              )
+            );
+            setDocs(
+              (Array.isArray(t.documents) ? t.documents : []).map(
+                (d: { id: number; url: string; mime: string; name?: string }) => ({
+                  id: d.id,
+                  uri: d.url,
+                  mimeType: d.mime,
+                  name: d.name,
+                }) as TaskDoc
+              )
+            );
+            setVideos(
+              (Array.isArray(t.videos) ? t.videos : []).map(
+                (v: { id: number; url: string; mime: string; fileName?: string; duration?: number; thumbnail?: string }) => ({
+                  id: v.id,
+                  uri: v.url,
+                  mimeType: v.mime,
+                  fileName: v.fileName,
+                  duration: v.duration,
+                }) as TaskVideo
+              )
+            );
+          } catch {}
+        })();
+        return () => {
+          cancelled = true;
+        };
+      }, [id, userId])
+    );
+
 
 
 
@@ -1108,8 +1189,8 @@ const save = async () => {
 };
 
 const handleBack = useCallback(() => {
-    if (!hasUnsavedChanges) {           // ⬅️  let React Navigation do its thing
-      router.push('/admin');
+    if (!hasUnsavedChanges) {           // ⬅️  navigate away without stacking
+      router.replace('/admin');
       return;
     }
 
@@ -1130,7 +1211,7 @@ const handleBack = useCallback(() => {
                   text: "Delete",
                   style: "destructive",
                   onPress: () => {
-                    router.push('/admin');
+                    router.replace('/admin');
                   },
                 },
               ],
@@ -1142,20 +1223,21 @@ const handleBack = useCallback(() => {
     );
   }, [hasUnsavedChanges, save]);
 
-  // Android back button handler - behaves exactly like the pressable back button
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      console.log('🔙 Android back button pressed - navigating to admin');
-      if (hasUnsavedChanges) {
-        handleBack();
-        return true; // Prevent default back behavior
-      }
-      router.push('/admin');
-      return true; // Prevent default back behavior
-    });
-
-    return () => backHandler.remove();
-  }, [hasUnsavedChanges, handleBack]);
+  // Android back button handler – attach only while focused
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        console.log('🔙 Android back button pressed - navigating from admin edit');
+        if (hasUnsavedChanges) {
+          handleBack();
+          return true; // consume
+        }
+        router.replace('/admin');
+        return true; // consume
+      });
+      return () => backHandler.remove();
+    }, [hasUnsavedChanges, handleBack])
+  );
 
 
 
@@ -1177,6 +1259,7 @@ const handleBack = useCallback(() => {
             <ScrollView
                 contentContainerStyle={{ padding: 24, gap: 12, paddingBottom: Platform.OS === 'android' ? 120 : 100 }}
                 keyboardShouldPersistTaps="handled"
+                ref={scrollRef}
             >
                 <View style={{ padding: 24, gap: 12 }}>
                     {/* User info header with back button */}
