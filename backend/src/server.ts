@@ -21,6 +21,7 @@ import { SORT_PRESETS } from './lib/helpers';
 import { nextDate } from "./lib/recur";
 import { startRecurrenceRoller } from "./lib/roll-recurrence"
 import { startAdminNotificationChecker, sendPriorityBypassNotification } from "./lib/admin-notifications"
+import { startPriorityEscalation } from "./lib/priority-escalation"
 
 // Import Firebase admin to initialize it
 import './firebase-admin.js';
@@ -194,7 +195,7 @@ app.register(async (f) => {
       recurrenceEvery,   // "1" | "2" | …
       recurrenceDow,
       recurrenceDom,
-      recurrenceMonth, 
+      recurrenceMonth,
       recurrenceEnd,
       labelDone,
       lastOccurrence,
@@ -222,7 +223,7 @@ app.register(async (f) => {
       : new Date();
 
     /* ── 2. work out the first “next” occurrence ───────── */
-    const firstNextOccurrence  = nextDate(
+    const firstNextOccurrence = nextDate(
   /* last  */ null,                                 // never run yet
   /* start */ anchor,                               // template start
       recurrenceEvery ? Number(recurrenceEvery) : 1,
@@ -253,8 +254,8 @@ app.register(async (f) => {
         timeCapMinutes: timeCapMinutes ? Number(timeCapMinutes) : undefined,
         recurrence: recurrence ? recurrence as Recurrence : Recurrence.NONE,
         recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
-        recurrenceDow:  recurrenceDow  ? Number(recurrenceDow)  : null,
-        recurrenceDom:  recurrenceDom  ? Number(recurrenceDom)  : null,
+        recurrenceDow: recurrenceDow ? Number(recurrenceDow) : null,
+        recurrenceDom: recurrenceDom ? Number(recurrenceDom) : null,
         recurrenceMonth: recurrenceMonth ? Number(recurrenceMonth) : null,
         recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
         labelDone: done,
@@ -297,35 +298,35 @@ app.register(async (f) => {
 
 
   /* -----------------------  GET /tasks  ----------------------- */
-f.get('/', async (req: any, rep) => {
-  const userId = req.user.sub as number;
+  f.get('/', async (req: any, rep) => {
+    const userId = req.user.sub as number;
 
-  /* paging */
-  const take   = Math.min(Number(req.query.take) || 50, 100);
-  const cursor = req.query.cursor ? Number(req.query.cursor) : null;
-  const since  = req.query.since ? new Date(req.query.since) : null;
+    /* paging */
+    const take = Math.min(Number(req.query.take) || 50, 100);
+    const cursor = req.query.cursor ? Number(req.query.cursor) : null;
+    const since = req.query.since ? new Date(req.query.since) : null;
 
-  /* pick preset from query or default */
-  const preset  = String(req.query.sort || 'priority');
-  const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;  // ← array
+    /* pick preset from query or default */
+    const preset = String(req.query.sort || 'priority');
+    const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;  // ← array
 
-  const tasks = await prisma.task.findMany({
-    where: { 
-      userId,
-      ...(since && { createdAt: { gt: since } })
-    },
-    take,
-    skip: cursor ? 1 : 0,
-    ...(cursor && { cursor: { id: cursor } }),
-    orderBy,                               // ✅ now valid
-    include: { images: true, documents: true, videos: true },
+    const tasks = await prisma.task.findMany({
+      where: {
+        userId,
+        ...(since && { createdAt: { gt: since } })
+      },
+      take,
+      skip: cursor ? 1 : 0,
+      ...(cursor && { cursor: { id: cursor } }),
+      orderBy,                               // ✅ now valid
+      include: { images: true, documents: true, videos: true },
+    });
+
+    const nextCursor =
+      tasks.length === take ? tasks[tasks.length - 1].id : null;
+
+    return { tasks, nextCursor };
   });
-
-  const nextCursor =
-    tasks.length === take ? tasks[tasks.length - 1].id : null;
-
-  return { tasks, nextCursor };
-});
 
 
   // GET /media
@@ -355,7 +356,7 @@ f.get('/', async (req: any, rep) => {
     /* generate pre-signed URLs for documents */
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
     const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-    
+
     // Create a new S3 client instance for pre-signed URLs
     const presignerClient = new S3Client({
       region: process.env.AWS_REGION ?? 'eu-north-1',
@@ -364,22 +365,22 @@ f.get('/', async (req: any, rep) => {
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
       },
     });
-    
+
     const documentsWithSignedUrls = await Promise.all(
       docs.map(async (doc) => {
         try {
           // Extract the key from the S3 URL
           const url = new URL(doc.url);
           const key = url.pathname.substring(1); // Remove leading slash
-          
+
           // Generate pre-signed URL (valid for 1 hour)
           const command = new GetObjectCommand({
             Bucket: process.env.AWS_BUCKET!,
             Key: key,
           });
-          
+
           const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-          
+
           return {
             ...doc,
             url: signedUrl, // Replace with pre-signed URL
@@ -400,137 +401,137 @@ f.get('/', async (req: any, rep) => {
 
 
   /* GET /tasks/:id – returns one DB row, unchanged */
-f.get('/:id', async (req: any, rep) => {
-  const userId = req.user.sub as number;
-  const raw    = String(req.params.id);
+  f.get('/:id', async (req: any, rep) => {
+    const userId = req.user.sub as number;
+    const raw = String(req.params.id);
 
-  /* 1. extract the numeric part (supports "R123‑…" and "123") */
-  const match  = raw.match(/^R?(\d+)/);
-  if (!match) return rep.code(400).send({ error: 'Bad task id' });
+    /* 1. extract the numeric part (supports "R123‑…" and "123") */
+    const match = raw.match(/^R?(\d+)/);
+    if (!match) return rep.code(400).send({ error: 'Bad task id' });
 
-  const dbId = +match[1];
-  if (!Number.isFinite(dbId)) {
-    return rep.code(400).send({ error: 'Bad task id' });
-  }
+    const dbId = +match[1];
+    if (!Number.isFinite(dbId)) {
+      return rep.code(400).send({ error: 'Bad task id' });
+    }
 
-  /* 2. fetch exactly what's in the DB */
-  const task = await prisma.task.findFirst({
-    where: { id: dbId, userId },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      status: true,
-      priority: true,
-      size: true,
-      dueAt: true,
-      timeCapMinutes: true,
-      createdAt: true,
-      recurrence: true,
-      recurrenceEvery: true,
-      recurrenceDow: true,
-      recurrenceDom: true,
-      recurrenceMonth: true,
-      lastOccurrence: true,
-      nextOccurrence: true,
-      recurrenceEnd: true,
-      readByUser: true,
-      readAt: true,
-      wasAddedByAdmin: true,
-      labelDone: true,
-      requiresCompletionApproval: true,
-      images: true,
-      documents: true,
-      videos: true,
-    },
+    /* 2. fetch exactly what's in the DB */
+    const task = await prisma.task.findFirst({
+      where: { id: dbId, userId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        size: true,
+        dueAt: true,
+        timeCapMinutes: true,
+        createdAt: true,
+        recurrence: true,
+        recurrenceEvery: true,
+        recurrenceDow: true,
+        recurrenceDom: true,
+        recurrenceMonth: true,
+        lastOccurrence: true,
+        nextOccurrence: true,
+        recurrenceEnd: true,
+        readByUser: true,
+        readAt: true,
+        wasAddedByAdmin: true,
+        labelDone: true,
+        requiresCompletionApproval: true,
+        images: true,
+        documents: true,
+        videos: true,
+      },
+    });
+
+    if (!task) return rep.code(404).send({ error: 'Task not found' });
+
+    /* 2.5. Mark task as read by the user */
+    await prisma.task.update({
+      where: { id: dbId },
+      data: {
+        readByUser: true,
+        readAt: new Date(),
+      },
+    });
+
+    /* 3. Generate pre-signed URLs for documents */
+    const documentsWithSignedUrls = await Promise.all(
+      task.documents.map(async (doc) => {
+        try {
+          const url = new URL(doc.url);
+          const key = url.pathname.substring(1);
+
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+
+          // Create a new S3 client instance for pre-signed URLs
+          const presignerClient = new S3Client({
+            region: process.env.AWS_REGION ?? 'eu-north-1',
+            credentials: {
+              accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+            },
+          });
+
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+
+          return {
+            ...doc,
+            url: signedUrl,
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for document:', error);
+          return doc;
+        }
+      })
+    );
+
+    /* 3b. Generate pre-signed URLs for videos */
+    const videosWithSignedUrls = await Promise.all(
+      task.videos.map(async (vid) => {
+        try {
+          const url = new URL(vid.url);
+          const key = url.pathname.substring(1);
+
+          const command = new GetObjectCommand({
+            Bucket: process.env.AWS_BUCKET!,
+            Key: key,
+          });
+
+          // Create a new S3 client instance for pre-signed URLs
+          const presignerClient = new S3Client({
+            region: process.env.AWS_REGION ?? 'eu-north-1',
+            credentials: {
+              accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+            },
+          });
+
+          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+
+          return {
+            ...vid,
+            url: signedUrl,
+          };
+        } catch (error) {
+          console.error('Error generating signed URL for video:', error);
+          return vid;
+        }
+      })
+    );
+
+    /* 4. return task with pre-signed document and video URLs */
+    return {
+      ...task,
+      documents: documentsWithSignedUrls,
+      videos: videosWithSignedUrls,
+    };
   });
-
-  if (!task) return rep.code(404).send({ error: 'Task not found' });
-
-  /* 2.5. Mark task as read by the user */
-  await prisma.task.update({
-    where: { id: dbId },
-    data: {
-      readByUser: true,
-      readAt: new Date(),
-    },
-  });
-
-  /* 3. Generate pre-signed URLs for documents */
-  const documentsWithSignedUrls = await Promise.all(
-    task.documents.map(async (doc) => {
-      try {
-        const url = new URL(doc.url);
-        const key = url.pathname.substring(1);
-        
-        const command = new GetObjectCommand({
-          Bucket: process.env.AWS_BUCKET!,
-          Key: key,
-        });
-        
-        // Create a new S3 client instance for pre-signed URLs
-        const presignerClient = new S3Client({
-          region: process.env.AWS_REGION ?? 'eu-north-1',
-          credentials: {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-          },
-        });
-        
-        const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-        
-        return {
-          ...doc,
-          url: signedUrl,
-        };
-      } catch (error) {
-        console.error('Error generating signed URL for document:', error);
-        return doc;
-      }
-    })
-  );
-
-  /* 3b. Generate pre-signed URLs for videos */
-  const videosWithSignedUrls = await Promise.all(
-    task.videos.map(async (vid) => {
-      try {
-        const url = new URL(vid.url);
-        const key = url.pathname.substring(1);
-        
-        const command = new GetObjectCommand({
-          Bucket: process.env.AWS_BUCKET!,
-          Key: key,
-        });
-        
-        // Create a new S3 client instance for pre-signed URLs
-        const presignerClient = new S3Client({
-          region: process.env.AWS_REGION ?? 'eu-north-1',
-          credentials: {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-          },
-        });
-        
-        const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-        
-        return {
-          ...vid,
-          url: signedUrl,
-        };
-      } catch (error) {
-        console.error('Error generating signed URL for video:', error);
-        return vid;
-      }
-    })
-  );
-
-  /* 4. return task with pre-signed document and video URLs */
-  return {
-    ...task,
-    documents: documentsWithSignedUrls,
-    videos: videosWithSignedUrls,
-  };
-});
 
 
   /* DELETE /tasks/:id – remove a task the user owns */
@@ -594,7 +595,7 @@ f.get('/:id', async (req: any, rep) => {
 
     /* Check if user is trying to bypass priority order */
     const firstTask = await prisma.task.findFirst({
-      where: { 
+      where: {
         userId,
         isDone: false,
         status: { not: 'DONE' }
@@ -664,7 +665,7 @@ f.get('/:id', async (req: any, rep) => {
       for await (const part of req.parts()) {
         if (part.type === "file") {
           const url = await uploadToS3(part, `tasks/tmp/`);   // helper
-          
+
           /* heuristics: treat PDFs, DOCX, etc. as documents, videos as videos */
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
           const isVideo = /^video\//.test(part.mimetype ?? '');
@@ -677,16 +678,16 @@ f.get('/:id', async (req: any, rep) => {
               fileName: part.filename,
             });
           } else if (isDoc) {
-            newDocs.push({ 
-              taskId: id, 
-              url, 
+            newDocs.push({
+              taskId: id,
+              url,
               mime: part.mimetype,
               fileName: part.filename,
             });
           } else {
-            newImgs.push({ 
-              taskId: id, 
-              url, 
+            newImgs.push({
+              taskId: id,
+              url,
               mime: part.mimetype,
             });
           }
@@ -791,7 +792,7 @@ f.get('/:id', async (req: any, rep) => {
     /* ❹ Update row only if it belongs to the user */
     const upd = await prisma.task.updateMany({ where: { id, userId }, data });
     if (upd.count === 0) return rep.code(404).send({ error: "Task not found" });
-    
+
 
     /* ❺ Images ‍– add new, delete removed */
     /* ❺ Images – delete removed, then add new */
@@ -829,7 +830,7 @@ f.get('/:id', async (req: any, rep) => {
     if (newVideos.length) {
       await prisma.video.createMany({ data: newVideos });
     }
-    
+
 
     /* ❻ Return fresh record */
     const task = await prisma.task.findUnique({
@@ -999,7 +1000,7 @@ app.register(async (f) => {
 
     // Hash the new password
     const hash = await argon2.hash(newPassword);
-    
+
     // Update the user's password
     await prisma.user.update({
       where: { id: userId },
@@ -1022,11 +1023,11 @@ app.register(async (f) => {
     }
 
     /* paging */
-    const take   = Math.min(Number(req.query.take) || 50, 100);
+    const take = Math.min(Number(req.query.take) || 50, 100);
     const cursor = req.query.cursor ? Number(req.query.cursor) : null;
 
     /* pick preset from query or default */
-    const preset  = String(req.query.sort || 'priority');
+    const preset = String(req.query.sort || 'priority');
     const orderBy = SORT_PRESETS[preset] ?? SORT_PRESETS.priority;  // ← array
 
     const tasks = await prisma.task.findMany({
@@ -1035,8 +1036,8 @@ app.register(async (f) => {
       skip: cursor ? 1 : 0,
       ...(cursor && { cursor: { id: cursor } }),
       orderBy,                               // ✅ now valid
-      include: { 
-        images: true, 
+      include: {
+        images: true,
         documents: true,
         videos: true,
         user: {
@@ -1154,7 +1155,7 @@ app.register(async (f) => {
       recurrenceEvery,   // "1" | "2" | …
       recurrenceDow,
       recurrenceDom,
-      recurrenceMonth, 
+      recurrenceMonth,
       recurrenceEnd,
       labelDone,
       lastOccurrence,
@@ -1182,7 +1183,7 @@ app.register(async (f) => {
       : new Date();
 
     /* ── 2. work out the first "next" occurrence ───────── */
-    const firstNextOccurrence  = nextDate(
+    const firstNextOccurrence = nextDate(
   /* last  */ null,                                 // never run yet
   /* start */ anchor,                               // template start
       recurrenceEvery ? Number(recurrenceEvery) : 1,
@@ -1212,8 +1213,8 @@ app.register(async (f) => {
         timeCapMinutes: timeCapMinutes ? Number(timeCapMinutes) : undefined,
         recurrence: recurrence ? recurrence as Recurrence : Recurrence.NONE,
         recurrenceEvery: recurrenceEvery ? Number(recurrenceEvery) : undefined,
-        recurrenceDow:  recurrenceDow  ? Number(recurrenceDow)  : null,
-        recurrenceDom:  recurrenceDom  ? Number(recurrenceDom)  : null,
+        recurrenceDow: recurrenceDow ? Number(recurrenceDow) : null,
+        recurrenceDom: recurrenceDom ? Number(recurrenceDom) : null,
         recurrenceMonth: recurrenceMonth ? Number(recurrenceMonth) : null,
         recurrenceEnd: recurrenceEnd ? new Date(recurrenceEnd) : undefined,
         labelDone: done,
@@ -1262,7 +1263,7 @@ app.register(async (f) => {
       try {
         console.log('🔔 Checking for immediate task notification...');
         console.log('📋 Task details:', { id: full.id, title: full.title, userId: full.userId, status: full.status, dueAt: full.dueAt });
-        
+
         // Get all push tokens for the target user
         const pushTokens = await prisma.pushToken.findMany({
           where: { userId: userId }
@@ -1316,12 +1317,12 @@ app.register(async (f) => {
       }
     } else {
       console.log('⏭️ Skipping notification - not an immediate task');
-      console.log('📋 Task details:', { 
-        id: full?.id, 
-        title: full?.title, 
-        userId: full?.userId, 
-        status: full?.status, 
-        dueAt: full?.dueAt 
+      console.log('📋 Task details:', {
+        id: full?.id,
+        title: full?.title,
+        userId: full?.userId,
+        status: full?.status,
+        dueAt: full?.dueAt
       });
     }
 
@@ -1337,7 +1338,7 @@ app.register(async (f) => {
 
     const userId = parseInt(req.params.userId);
     const taskId = parseInt(req.params.taskId);
-    
+
     if (isNaN(userId) || isNaN(taskId)) {
       return rep.code(400).send({ error: 'Invalid user ID or task ID' });
     }
@@ -1352,7 +1353,7 @@ app.register(async (f) => {
       for await (const part of req.parts()) {
         if (part.type === "file") {
           const url = await uploadToS3(part, `tasks/tmp/`);   // helper
-          
+
           /* heuristics: treat PDFs, DOCX, etc. as documents, videos as videos */
           const isDoc = /^(application|text)\//.test(part.mimetype ?? '');
           const isVideo = /^video\//.test(part.mimetype ?? '');
@@ -1365,16 +1366,16 @@ app.register(async (f) => {
               fileName: part.filename,
             });
           } else if (isDoc) {
-            newDocs.push({ 
-              taskId, 
-              url, 
+            newDocs.push({
+              taskId,
+              url,
               mime: part.mimetype,
               fileName: part.filename,
             });
           } else {
-            newImgs.push({ 
-              taskId, 
-              url, 
+            newImgs.push({
+              taskId,
+              url,
               mime: part.mimetype,
             });
           }
@@ -1511,7 +1512,7 @@ app.register(async (f) => {
     /* ❹ Update row only if it belongs to the user */
     const upd = await prisma.task.updateMany({ where: { id: taskId, userId }, data });
     if (upd.count === 0) return rep.code(404).send({ error: "Task not found" });
-    
+
     /* ❺ Images – delete removed, then add new */
     if (keep !== undefined) {
       const keepIds = keep.split(',').map(Number).filter(Boolean);
@@ -1547,7 +1548,7 @@ app.register(async (f) => {
     if (newVideos.length) {
       await prisma.video.createMany({ data: newVideos });
     }
-    
+
     /* ❻ Return fresh record */
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -1565,7 +1566,7 @@ app.register(async (f) => {
 
     const userId = parseInt(req.params.userId);
     const taskId = parseInt(req.params.taskId);
-    
+
     if (isNaN(userId) || isNaN(taskId)) {
       return rep.code(400).send({ error: 'Invalid user ID or task ID' });
     }
@@ -1623,7 +1624,7 @@ app.register(async (f) => {
     /* generate pre-signed URLs for documents */
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
     const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-    
+
     // Create a new S3 client instance for pre-signed URLs
     const presignerClient = new S3Client({
       region: process.env.AWS_REGION ?? 'eu-north-1',
@@ -1632,22 +1633,22 @@ app.register(async (f) => {
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
       },
     });
-    
+
     const documentsWithSignedUrls = await Promise.all(
       docs.map(async (doc) => {
         try {
           // Extract the key from the S3 URL
           const url = new URL(doc.url);
           const key = url.pathname.substring(1); // Remove leading slash
-          
+
           // Generate pre-signed URL (valid for 1 hour)
           const command = new GetObjectCommand({
             Bucket: process.env.AWS_BUCKET!,
             Key: key,
           });
-          
+
           const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-          
+
           return {
             ...doc,
             url: signedUrl, // Replace with pre-signed URL
@@ -1666,14 +1667,14 @@ app.register(async (f) => {
         try {
           const url = new URL(vid.url);
           const key = url.pathname.substring(1);
-          
+
           const command = new GetObjectCommand({
             Bucket: process.env.AWS_BUCKET!,
             Key: key,
           });
-          
+
           const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-          
+
           return {
             ...vid,
             url: signedUrl,
@@ -1685,8 +1686,8 @@ app.register(async (f) => {
       })
     );
 
-    return { 
-      images: thumbImages, 
+    return {
+      images: thumbImages,
       documents: documentsWithSignedUrls,
       videos: videosWithSignedUrls,
       user: {
@@ -1707,15 +1708,15 @@ app.register(async (f) => {
 
     const userId = parseInt(req.params.userId);
     const taskId = parseInt(req.params.taskId);
-    
+
     if (isNaN(userId) || isNaN(taskId)) {
       return rep.code(400).send({ error: 'Invalid user ID or task ID' });
     }
 
     const task = await prisma.task.findFirst({
       where: { id: taskId, userId },
-      include: { 
-        images: true, 
+      include: {
+        images: true,
         documents: true,
         videos: true,
         user: {
@@ -1734,7 +1735,7 @@ app.register(async (f) => {
     /* Generate pre-signed URLs for documents */
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
     const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-    
+
     // Create a new S3 client instance for pre-signed URLs
     const presignerClient = new S3Client({
       region: process.env.AWS_REGION ?? 'eu-north-1',
@@ -1743,20 +1744,20 @@ app.register(async (f) => {
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
       },
     });
-    
+
     const documentsWithSignedUrls = await Promise.all(
       task.documents.map(async (doc) => {
         try {
           const url = new URL(doc.url);
           const key = url.pathname.substring(1);
-          
+
           const command = new GetObjectCommand({
             Bucket: process.env.AWS_BUCKET!,
             Key: key,
           });
-          
+
           const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-          
+
           return {
             ...doc,
             url: signedUrl,
@@ -1774,14 +1775,14 @@ app.register(async (f) => {
         try {
           const url = new URL(vid.url);
           const key = url.pathname.substring(1);
-          
+
           const command = new GetObjectCommand({
             Bucket: process.env.AWS_BUCKET!,
             Key: key,
           });
-          
+
           const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-          
+
           return {
             ...vid,
             url: signedUrl,
@@ -1814,31 +1815,31 @@ app.register(async (f) => {
 
       /* fetch all media from all users */
       const [images, docs] = await Promise.all([
-        prisma.image.findMany({ 
-          include: { 
-            task: { 
-              include: { 
-                user: { 
-                  select: { id: true, email: true, username: true, role: true } 
-                } 
-              } 
-            } 
-          } 
+        prisma.image.findMany({
+          include: {
+            task: {
+              include: {
+                user: {
+                  select: { id: true, email: true, username: true, role: true }
+                }
+              }
+            }
+          }
         }),
-        prisma.document.findMany({ 
-          include: { 
-            task: { 
-              include: { 
-                user: { 
-                  select: { id: true, email: true, username: true, role: true } 
-                } 
-              } 
-            } 
-          } 
+        prisma.document.findMany({
+          include: {
+            task: {
+              include: {
+                user: {
+                  select: { id: true, email: true, username: true, role: true }
+                }
+              }
+            }
+          }
         }),
       ]);
 
-          console.log(`Found ${images.length} images and ${docs.length} documents`);
+      console.log(`Found ${images.length} images and ${docs.length} documents`);
 
       /* add thumbUrl for each image row */
       const thumbImages = images.map(img => ({
@@ -1848,54 +1849,54 @@ app.register(async (f) => {
 
       console.log('Processing images and documents...');
 
-    /* generate pre-signed URLs for documents */
-    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-    const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
-    
-    // Create a new S3 client instance for pre-signed URLs
-    const presignerClient = new S3Client({
-      region: process.env.AWS_REGION ?? 'eu-north-1',
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-      },
-    });
-    
-    const documentsWithSignedUrls = await Promise.all(
-      docs.map(async (doc) => {
-        try {
-          // Extract the key from the S3 URL
-          const url = new URL(doc.url);
-          const key = url.pathname.substring(1); // Remove leading slash
-          
-          // Generate pre-signed URL (valid for 1 hour)
-          const command = new GetObjectCommand({
-            Bucket: process.env.AWS_BUCKET!,
-            Key: key,
-          });
-          
-          const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
-          
-          return {
-            ...doc,
-            url: signedUrl, // Replace with pre-signed URL
-          };
-        } catch (error) {
-          console.error('Error generating signed URL for document:', error);
-          // Return original URL if signing fails
-          return doc;
-        }
-      })
-    );
+      /* generate pre-signed URLs for documents */
+      const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+      const { GetObjectCommand, S3Client } = await import('@aws-sdk/client-s3');
 
-    return { 
-      images: thumbImages, 
-      documents: documentsWithSignedUrls,
-      totalUsers: new Set([
-        ...images.map(img => img.task?.user?.id).filter(Boolean), 
-        ...docs.map(doc => doc.task?.user?.id).filter(Boolean)
-      ]).size
-    };
+      // Create a new S3 client instance for pre-signed URLs
+      const presignerClient = new S3Client({
+        region: process.env.AWS_REGION ?? 'eu-north-1',
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        },
+      });
+
+      const documentsWithSignedUrls = await Promise.all(
+        docs.map(async (doc) => {
+          try {
+            // Extract the key from the S3 URL
+            const url = new URL(doc.url);
+            const key = url.pathname.substring(1); // Remove leading slash
+
+            // Generate pre-signed URL (valid for 1 hour)
+            const command = new GetObjectCommand({
+              Bucket: process.env.AWS_BUCKET!,
+              Key: key,
+            });
+
+            const signedUrl = await getSignedUrl(presignerClient as any, command, { expiresIn: 3600 });
+
+            return {
+              ...doc,
+              url: signedUrl, // Replace with pre-signed URL
+            };
+          } catch (error) {
+            console.error('Error generating signed URL for document:', error);
+            // Return original URL if signing fails
+            return doc;
+          }
+        })
+      );
+
+      return {
+        images: thumbImages,
+        documents: documentsWithSignedUrls,
+        totalUsers: new Set([
+          ...images.map(img => img.task?.user?.id).filter(Boolean),
+          ...docs.map(doc => doc.task?.user?.id).filter(Boolean)
+        ]).size
+      };
     } catch (error) {
       console.error('Error in /media/all endpoint:', error);
       return rep.code(500).send({ error: 'Internal server error' });
@@ -1937,8 +1938,8 @@ app.register(async (f) => {
 
       console.log(`🔕 Admin disabled notifications for task ${taskId} (${task.title})`);
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: 'Notifications disabled for this task',
         taskId: taskId,
         taskTitle: task.title
@@ -1997,7 +1998,7 @@ app.put('/settings', { preHandler: app.auth }, async (req, rep) => {
       create: { userId, defaultLabelDone },
     });
 
-    return { 
+    return {
       defaultLabelDone: settings.defaultLabelDone,
     };
   } catch (error) {
@@ -2036,7 +2037,7 @@ app.post('/admin/tasks/:id/toggle-notifications', { preHandler: app.auth }, asyn
 
     /* Toggle the notification setting */
     const newNotificationState = !task.runNotification;
-    
+
     await prisma.task.update({
       where: { id: taskId },
       data: {
@@ -2044,8 +2045,8 @@ app.post('/admin/tasks/:id/toggle-notifications', { preHandler: app.auth }, asyn
       },
     });
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: `Notifications ${newNotificationState ? 'enabled' : 'disabled'} for this task`,
       runNotification: newNotificationState
     };
@@ -2164,7 +2165,7 @@ app.put('/admin/settings/:userId', { preHandler: app.auth }, async (req: any, re
       create: { userId: targetUserId, defaultLabelDone },
     });
 
-    return { 
+    return {
       defaultLabelDone: settings.defaultLabelDone,
     };
   } catch (error) {
@@ -2218,7 +2219,7 @@ app.put('/admin/settings/global', { preHandler: app.auth }, async (req, rep) => 
       create: { userId: undefined, defaultLabelDone },
     });
 
-    return { 
+    return {
       defaultLabelDone: settings.defaultLabelDone,
     };
   } catch (error) {
@@ -2276,6 +2277,7 @@ app.delete('/push-tokens/unregister', { preHandler: app.auth }, async (req, rep)
 
 startRecurrenceRoller();
 startAdminNotificationChecker();
+startPriorityEscalation();
 
 /* ───── Start server ───── */
 const PORT = Number(process.env.PORT) || 3000;
