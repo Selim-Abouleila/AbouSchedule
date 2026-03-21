@@ -29,7 +29,18 @@ const prisma = new PrismaClient();
 //  Internally it drives four derived parameters (see derivations below).
 //  You should only need to change this one value.
 //
-const ESCALATION_SENSITIVITY = 5;
+const ESCALATION_SENSITIVITY = 6;
+// ─────────────────────────────────────────────────────────────────────────
+
+// ── Hard age cap (independent of sensitivity) ─────────────────────────────
+//
+//  Any eligible task older than this many days is promoted unconditionally,
+//  regardless of the pressure ratio. This catches the blind spot where all
+//  tasks are equally old and the ratio stays near 1.0 indefinitely.
+//
+//  Default: 60 days. Set higher to be more lenient, lower to be stricter.
+//
+const HARD_AGE_CAP_DAYS = 60;
 // ─────────────────────────────────────────────────────────────────────────
 
 // ── Derived parameters (computed once at startup) ─────────────────────────
@@ -182,6 +193,32 @@ export function startPriorityEscalation() {
                         `low=${lowPressure.toFixed(2)}  high=${highPressure.toFixed(2)}  ` +
                         `ratio=${ratio.toFixed(2)}  threshold=${ESCALATION_THRESHOLD}`
                     );
+
+                    // ── 4a. Hard age cap override ─────────────────────────────────────
+                    // Promote the oldest task that has exceeded HARD_AGE_CAP_DAYS,
+                    // regardless of the pressure ratio. One promotion per user per night.
+                    const msPerDay = 1000 * 60 * 60 * 24;
+                    const capCandidate = scored
+                        .filter(t => (now.getTime() - t.createdAt.getTime()) / msPerDay >= HARD_AGE_CAP_DAYS)
+                        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null;
+
+                    if (capCandidate) {
+                        const newPriority = NEXT_PRIORITY[capCandidate.priority];
+                        if (newPriority) {
+                            await prisma.task.update({
+                                where: { id: capCandidate.id },
+                                data: { priority: newPriority },
+                            });
+                            totalUpgrades++;
+                            console.log(
+                                `[priority-escalation] user=${userId}  ` +
+                                `⏰ HARD CAP hit — upgraded task#${capCandidate.id} "${capCandidate.title}"  ` +
+                                `${capCandidate.priority} → ${newPriority}  ` +
+                                `(age=${((now.getTime() - capCandidate.createdAt.getTime()) / msPerDay).toFixed(0)}d)`
+                            );
+                            continue; // move on to next user, one upgrade per night
+                        }
+                    }
 
                     if (ratio < ESCALATION_THRESHOLD) {
                         console.log(`[priority-escalation] user=${userId}  → below threshold, no upgrade`);

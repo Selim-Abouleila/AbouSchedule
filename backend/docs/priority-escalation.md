@@ -32,15 +32,18 @@ A task must meet **all** of the following to be considered:
 
 ---
 
-## The One Knob — `ESCALATION_SENSITIVITY`
+## The Two Knobs
 
-Located at the **top of the file**, this is the only value you should ever need to change:
+Both constants live at the **top of the file** — the only values you should ever need to change:
 
 ```typescript
 const ESCALATION_SENSITIVITY = 5;   // 1 (conservative) → 10 (aggressive)
+const HARD_AGE_CAP_DAYS      = 60;  // unconditional escalation after this many days
 ```
 
-All other parameters are **derived** from this single value at startup:
+### `ESCALATION_SENSITIVITY` — ratio aggressiveness
+
+All other ratio parameters are **derived** from this single value at startup:
 
 | Derived constant | Formula | S=1 | S=5 | S=10 |
 |---|---|---|---|---|
@@ -48,6 +51,16 @@ All other parameters are **derived** from this single value at startup:
 | `PRESSURE_FLOOR` | `2.0 − (S × 0.15)` | 1.85 | 1.25 | 0.50 |
 | `AGE_WEIGHT_PER_DAY` | `S × 0.01` | 0.01 | 0.05 | 0.10 |
 | `MIN_AGE_DAYS` | `14 − S` | 13 | 9 | 4 |
+
+### `HARD_AGE_CAP_DAYS` — absolute age ceiling
+
+Any eligible task older than this many days is promoted **unconditionally**, bypassing the ratio
+check entirely. This catches the blind spot where all tasks are equally old and the ratio stays
+near 1.0 indefinitely.
+
+- Default: **60 days**
+- Set higher to be more lenient, lower to be stricter
+- Picks the **oldest** cap-eligible task first (by `createdAt`)
 
 ---
 
@@ -99,16 +112,30 @@ ratio = lowPressure / (highPressure + PRESSURE_FLOOR)
 
 ### Step 3 — Decide whether to escalate
 
+Two independent triggers are checked in order. **Only one promotion per user per night.**
+
+#### Trigger A — Hard age cap (checked first)
+
 ```
-if ratio >= ESCALATION_THRESHOLD → escalate
-else → do nothing
+if any eligible task age >= HARD_AGE_CAP_DAYS → promote the oldest one unconditionally
 ```
+
+This fires regardless of the ratio. It exists to catch the case where all tasks are equally old
+and the ratio stays near 1.0 even though the backlog is severely neglected.
+
+#### Trigger B — Pressure ratio
+
+```
+if ratio >= ESCALATION_THRESHOLD → escalate via ratio logic
+```
+
+Only reached if no task hit the hard age cap.
 
 ---
 
-### Step 4 — Pick what to escalate
+### Step 4 — Pick what to escalate (ratio path only)
 
-If escalation fires, the cron finds the task with the **highest score** in the **lowest
+If the ratio triggers, the cron finds the task with the **highest score** in the **lowest
 available tier** (prefers `NONE` over `THREE` over `TWO`):
 
 ```
@@ -154,13 +181,19 @@ Task **A** is promoted: `NONE → THREE` (highest score in the lowest tier).
 Each run emits structured console logs:
 
 ```
-[priority-escalation] user=42  low=6.73  high=3.23  ratio=1.50  threshold=2.5
-[priority-escalation] user=42  → below threshold, no upgrade
+# Hard age cap path:
+[priority-escalation] user=11  low=12.08  high=11.85  ratio=0.92  threshold=2.5
+[priority-escalation] user=11  ⏰ HARD CAP hit — upgraded task#195 "Assemble Gamma speaker"  TWO → ONE  (age=147d)
 
+# Ratio path:
 [priority-escalation] user=7   low=9.10  high=0.00  ratio=7.28  threshold=2.5
 [priority-escalation] user=7   upgraded task#88 "Fix client report"  NONE → THREE  (score=4.00)
 
-[priority-escalation] run complete at 2026-03-21T22:55:00.000Z  upgrades=1  users_checked=2  sensitivity=5
+# No upgrade:
+[priority-escalation] user=42  low=6.73  high=3.23  ratio=1.50  threshold=2.5
+[priority-escalation] user=42  → below threshold, no upgrade
+
+[priority-escalation] run complete at 2026-03-21T22:55:00.000Z  upgrades=1  users_checked=3  sensitivity=5
 ```
 
 ---
@@ -178,14 +211,20 @@ Each run emits structured console logs:
 ## How to Tune
 
 1. Open `src/lib/priority-escalation.ts`
-2. Find the constant at the top of the file:
-   ```typescript
-   const ESCALATION_SENSITIVITY = 5;
-   ```
-3. Change the number (1–10) and restart the server. No other changes needed.
+2. Both constants are at the very top of the file — change the values and restart the server.
+
+### `ESCALATION_SENSITIVITY` (1–10)
 
 | Value | Behaviour |
 |---|---|
-| 1–3 | Tasks almost never escalate — only severely neglected backlogs |
+| 1–3 | Tasks almost never escalate via ratio — only severely neglected backlogs |
 | 4–6 | Balanced — default range |
 | 7–10 | Escalation fires frequently; moderate backlogs will be promoted |
+
+### `HARD_AGE_CAP_DAYS`
+
+| Value | Behaviour |
+|---|---|
+| 30 | Strict — no NONE/THREE/TWO task survives a month ungrouped |
+| 60 | Default — balanced |
+| 90+ | Lenient — only very long-neglected tasks get the override |
