@@ -122,110 +122,116 @@ export function startPriorityEscalation() {
         '55 23 * * *',
         async () => {
             const now = new Date();
+            try {
+                // ── 1. Fetch all eligible tasks across all users ──────────────────
+                const minAgeDate = new Date(now.getTime() - MIN_AGE_DAYS * 24 * 60 * 60 * 1000);
 
-            // ── 1. Fetch all eligible tasks across all users ──────────────────
-            const minAgeDate = new Date(now.getTime() - MIN_AGE_DAYS * 24 * 60 * 60 * 1000);
-
-            const candidates = await prisma.task.findMany({
-                where: {
-                    status: Status.ACTIVE,
-                    recurrence: Recurrence.NONE,
-                    priority: { in: ESCALATABLE },
-                    createdAt: { lte: minAgeDate },
-                },
-                select: {
-                    id: true,
-                    userId: true,
-                    priority: true,
-                    size: true,
-                    createdAt: true,
-                    title: true,
-                },
-            });
-
-            if (candidates.length === 0) {
-                console.log('[priority-escalation] no eligible tasks found — done.');
-                return;
-            }
-
-            // ── 2. Group candidates by userId ─────────────────────────────────
-            const byUser = new Map<number, typeof candidates>();
-            for (const task of candidates) {
-                if (task.userId == null) continue;
-                if (!byUser.has(task.userId)) byUser.set(task.userId, []);
-                byUser.get(task.userId)!.push(task);
-            }
-
-            let totalUpgrades = 0;
-
-            // ── 3. Evaluate each user independently ───────────────────────────
-            for (const [userId, tasks] of byUser) {
-                // Compute score for every task
-                const scored = tasks.map(t => ({
-                    ...t,
-                    score: taskScore(t.size, t.createdAt, now),
-                }));
-
-                // Split into low / high buckets
-                let lowPressure = 0;
-                let highPressure = 0;
-
-                for (const t of scored) {
-                    if (LOW_TIERS.has(t.priority)) lowPressure += t.score;
-                    else if (HIGH_TIERS.has(t.priority)) highPressure += t.score;
-                }
-
-                const ratio = lowPressure / (highPressure + PRESSURE_FLOOR);
-
-                console.log(
-                    `[priority-escalation] user=${userId}  ` +
-                    `low=${lowPressure.toFixed(2)}  high=${highPressure.toFixed(2)}  ` +
-                    `ratio=${ratio.toFixed(2)}  threshold=${ESCALATION_THRESHOLD}`
-                );
-
-                if (ratio < ESCALATION_THRESHOLD) {
-                    console.log(`[priority-escalation] user=${userId}  → below threshold, no upgrade`);
-                    continue;
-                }
-
-                // ── 4. Pick the highest-scored task in the LOWEST available tier ─
-                // (We prefer to promote from NONE before THREE, THREE before TWO)
-                let candidate: (typeof scored)[0] | null = null;
-
-                for (const tier of [Priority.NONE, Priority.THREE, Priority.TWO]) {
-                    const tierTasks = scored.filter(t => t.priority === tier);
-                    if (tierTasks.length === 0) continue;
-
-                    // Highest pressure score wins
-                    tierTasks.sort((a, b) => b.score - a.score);
-                    candidate = tierTasks[0];
-                    break;
-                }
-
-                if (!candidate) continue;
-
-                const newPriority = NEXT_PRIORITY[candidate.priority];
-                if (!newPriority) continue;
-
-                // ── 5. Apply the upgrade ─────────────────────────────────────────
-                await prisma.task.update({
-                    where: { id: candidate.id },
-                    data: { priority: newPriority },
+                const candidates = await prisma.task.findMany({
+                    where: {
+                        status: Status.ACTIVE,
+                        recurrence: Recurrence.NONE,
+                        priority: { in: ESCALATABLE },
+                        createdAt: { lte: minAgeDate },
+                    },
+                    select: {
+                        id: true,
+                        userId: true,
+                        priority: true,
+                        size: true,
+                        createdAt: true,
+                        title: true,
+                    },
                 });
 
-                totalUpgrades++;
+                if (candidates.length === 0) {
+                    console.log('[priority-escalation] no eligible tasks found — done.');
+                    return;
+                }
+
+                // ── 2. Group candidates by userId ─────────────────────────────────
+                const byUser = new Map<number, typeof candidates>();
+                for (const task of candidates) {
+                    if (task.userId == null) continue;
+                    if (!byUser.has(task.userId)) byUser.set(task.userId, []);
+                    byUser.get(task.userId)!.push(task);
+                }
+
+                let totalUpgrades = 0;
+
+                // ── 3. Evaluate each user independently ───────────────────────────
+                for (const [userId, tasks] of byUser) {
+                    // Compute score for every task
+                    const scored = tasks.map(t => ({
+                        ...t,
+                        score: taskScore(t.size, t.createdAt, now),
+                    }));
+
+                    // Split into low / high buckets
+                    let lowPressure = 0;
+                    let highPressure = 0;
+
+                    for (const t of scored) {
+                        if (LOW_TIERS.has(t.priority)) lowPressure += t.score;
+                        else if (HIGH_TIERS.has(t.priority)) highPressure += t.score;
+                    }
+
+                    const ratio = lowPressure / (highPressure + PRESSURE_FLOOR);
+
+                    console.log(
+                        `[priority-escalation] user=${userId}  ` +
+                        `low=${lowPressure.toFixed(2)}  high=${highPressure.toFixed(2)}  ` +
+                        `ratio=${ratio.toFixed(2)}  threshold=${ESCALATION_THRESHOLD}`
+                    );
+
+                    if (ratio < ESCALATION_THRESHOLD) {
+                        console.log(`[priority-escalation] user=${userId}  → below threshold, no upgrade`);
+                        continue;
+                    }
+
+                    // ── 4. Pick the highest-scored task in the LOWEST available tier ─
+                    // (We prefer to promote from NONE before THREE, THREE before TWO)
+                    let candidate: (typeof scored)[0] | null = null;
+
+                    for (const tier of [Priority.NONE, Priority.THREE, Priority.TWO]) {
+                        const tierTasks = scored.filter(t => t.priority === tier);
+                        if (tierTasks.length === 0) continue;
+
+                        // Highest pressure score wins
+                        tierTasks.sort((a, b) => b.score - a.score);
+                        candidate = tierTasks[0];
+                        break;
+                    }
+
+                    if (!candidate) continue;
+
+                    const newPriority = NEXT_PRIORITY[candidate.priority];
+                    if (!newPriority) continue;
+
+                    // ── 5. Apply the upgrade ─────────────────────────────────────────
+                    await prisma.task.update({
+                        where: { id: candidate.id },
+                        data: { priority: newPriority },
+                    });
+
+                    totalUpgrades++;
+                    console.log(
+                        `[priority-escalation] user=${userId}  ` +
+                        `upgraded task#${candidate.id} "${candidate.title}"  ` +
+                        `${candidate.priority} → ${newPriority}  (score=${candidate.score.toFixed(2)})`
+                    );
+                }
+
                 console.log(
-                    `[priority-escalation] user=${userId}  ` +
-                    `upgraded task#${candidate.id} "${candidate.title}"  ` +
-                    `${candidate.priority} → ${newPriority}  (score=${candidate.score.toFixed(2)})`
+                    `[priority-escalation] run complete at ${now.toISOString()}  ` +
+                    `upgrades=${totalUpgrades}  users_checked=${byUser.size}  ` +
+                    `sensitivity=${ESCALATION_SENSITIVITY}`
+                );
+            } catch (err) {
+                console.error(
+                    `[priority-escalation] ❌ cron failed at ${now.toISOString()}:`,
+                    err
                 );
             }
-
-            console.log(
-                `[priority-escalation] run complete at ${now.toISOString()}  ` +
-                `upgrades=${totalUpgrades}  users_checked=${byUser.size}  ` +
-                `sensitivity=${ESCALATION_SENSITIVITY}`
-            );
         },
         { timezone: 'Africa/Cairo' },
     );
