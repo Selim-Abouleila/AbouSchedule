@@ -1,5 +1,5 @@
 // cron/roll‑recurrence.ts
-import cron   from 'node-cron';
+import cron from 'node-cron';
 import { nextDate } from "./recur";
 import { Recurrence } from '@prisma/client';
 import { prisma } from './prisma';
@@ -30,8 +30,8 @@ export function startRecurrenceRoller() {
       });
 
       for (const t of dueTasks) {
-        let last  = t.nextOccurrence!;
-        let next  = nextDate(
+        let last = t.nextOccurrence!;
+        let next = nextDate(
           last,
           t.dueAt ?? last,
           t.recurrenceEvery ?? 1,
@@ -49,7 +49,7 @@ export function startRecurrenceRoller() {
             // Stop rolling - we've reached the end date
             break;
           }
-          
+
           last = next;
           next = nextDate(
             last,
@@ -70,18 +70,18 @@ export function startRecurrenceRoller() {
 
         /* 3. Check if task has reached its end date */
         const hasReachedEndDate = t.recurrenceEnd && next > t.recurrenceEnd;
-        
+
         /* 4. update row in one DB write */
         await prisma.task.update({
           where: { id: t.id },
           data: {
             lastOccurrence: last,
             nextOccurrence: hasReachedEndDate ? null : next,
-            status: hasReachedEndDate 
+            status: hasReachedEndDate
               ? 'DONE'  // Mark as done when end date is reached
               : (t.status === 'DONE'
-                  ? t.previousStatus ?? 'ACTIVE'
-                  : t.status),
+                ? t.previousStatus ?? 'ACTIVE'
+                : t.status),
             isDone: hasReachedEndDate ? true : false,
           },
         });
