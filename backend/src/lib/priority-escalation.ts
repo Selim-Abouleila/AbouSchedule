@@ -14,9 +14,10 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 import cron from 'node-cron';
-import { PrismaClient, Priority, Recurrence, Status } from '@prisma/client';
+import { Priority, Recurrence, Status } from '@prisma/client';
+import { prisma } from './prisma';
 
-const prisma = new PrismaClient();
+// prisma is now a shared singleton imported from ./prisma
 
 // ── ONE KNOB TO TUNE ──────────────────────────────────────────────────────
 //

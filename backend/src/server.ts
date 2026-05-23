@@ -2,7 +2,7 @@
 import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './lib/prisma';
 import argon2 from 'argon2';
 import * as dotenv from 'dotenv';
 import { z } from 'zod';
@@ -12,7 +12,7 @@ import { Size } from '@prisma/client';
 import { Recurrence } from '@prisma/client';
 
 // server.ts (top of the file, together with the other imports)
-import { uploadToS3 } from "./lib/uploadToS3.js";   // path relative to server.ts
+import { uploadToS3 } from "./lib/uploadToS3";   // path relative to server.ts
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
@@ -24,8 +24,8 @@ import { startAdminNotificationChecker, sendPriorityBypassNotification } from ".
 import { startPriorityEscalation } from "./lib/priority-escalation"
 
 // Import Firebase admin to initialize it
-import './firebase-admin.js';
-import admin from './firebase-admin.js';
+import './firebase-admin';
+import admin from './firebase-admin';
 // WebSocket removed
 
 
@@ -33,7 +33,7 @@ import admin from './firebase-admin.js';
 
 dotenv.config();
 
-const prisma = new PrismaClient();
+// prisma is now a shared singleton imported from ./lib/prisma
 const app = Fastify({ logger: true });
 
 // WebSocket registry removed

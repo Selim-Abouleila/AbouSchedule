@@ -1,10 +1,10 @@
 // admin-notifications.ts
 import cron from 'node-cron';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma';
 import { differenceInHours } from 'date-fns';
 import admin from '../firebase-admin.js';
 
-const prisma = new PrismaClient();
+// prisma is now a shared singleton imported from ./prisma
 
 // Helper function to detect token type
 function isExpoToken(token: string): boolean {
@@ -98,19 +98,19 @@ export function startAdminNotificationChecker() {
 
         for (const task of unreadImmediateTasks) {
           const minutesElapsed = Math.floor((now.getTime() - task.createdAt.getTime()) / (1000 * 60));
-          
+
           // Only send notification if at least 10 minutes have passed AND run_notification is TRUE
           if (minutesElapsed >= 10 && task.runNotification === true) {
             console.log(`⏰ Task ${task.id} has been unread for ${minutesElapsed} minutes and notifications are enabled`);
-            
+
             let adminUsers;
             let notificationTarget;
-            
+
             // Check if task has a specific admin who issued it
             if (task.issuedBy) {
               console.log(`🎯 Task ${task.id} was issued by admin ${task.issuedBy} - sending notification only to this admin`);
               notificationTarget = `specific admin (ID: ${task.issuedBy})`;
-              
+
               // Get only the admin who issued the task
               adminUsers = await prisma.user.findMany({
                 where: {
@@ -124,7 +124,7 @@ export function startAdminNotificationChecker() {
             } else {
               console.log(`📢 Task ${task.id} has no specific issuer - sending notification to all admins`);
               notificationTarget = 'all admins';
-              
+
               // Get all admin users' push tokens (fallback behavior)
               adminUsers = await prisma.user.findMany({
                 where: {
@@ -141,7 +141,7 @@ export function startAdminNotificationChecker() {
 
             if (adminPushTokens.length > 0) {
               const taskerName = task.user?.username || task.user?.email || 'Unknown Tasker';
-              
+
               // Separate tokens by type
               const expoTokens = adminPushTokens.filter(pt => isExpoToken(pt.token)).map(pt => pt.token);
               const firebaseTokens = adminPushTokens.filter(pt => isFirebaseToken(pt.token)).map(pt => pt.token);
@@ -232,7 +232,7 @@ async function sendExpoNotifications(tokens: string[], task: any, taskerName: st
     });
 
     const result = await response.json();
-    
+
     if (response.ok) {
       console.log(`✅ Expo notifications sent successfully for task ${task.id}`);
     } else {
@@ -298,7 +298,7 @@ async function sendFirebaseNotifications(tokens: string[], task: any, taskerName
         failureCount++;
       }
     }
-    
+
     console.log(`✅ Firebase notifications sent successfully for task ${task.id}`);
     console.log(`📊 Success count: ${successCount}, Failure count: ${failureCount}`);
   } catch (error) {

@@ -2,13 +2,13 @@
 import cron   from 'node-cron';
 import { nextDate } from "./recur";
 import { Recurrence } from '@prisma/client';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma';
 import {
   addDays, addWeeks, addMonths, addYears,
   startOfDay, startOfWeek, startOfMonth, startOfYear,
   setDay, setDate, set, subDays
 } from 'date-fns';
-const prisma = new PrismaClient();
+// prisma is now a shared singleton imported from ./prisma
 
 export function startRecurrenceRoller() {
   /* “0 0 * * *” = midnight every day; TZ makes it Cairo midnight */
