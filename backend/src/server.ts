@@ -69,7 +69,6 @@ const RegisterBody = z.object({
   username: z.string().min(3).max(30),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['ADMIN', 'EMPLOYEE']).default('EMPLOYEE'),
 });
 
 app.post('/auth/register', async (req, rep) => {
@@ -77,7 +76,7 @@ app.post('/auth/register', async (req, rep) => {
   if (!parsed.success) {
     return rep.code(400).send({ error: parsed.error.flatten() });
   }
-  const { username, email, password, role } = parsed.data;
+  const { username, email, password } = parsed.data;
 
   // Check if email is already in use
   if (await prisma.user.findUnique({ where: { email } })) {
@@ -90,7 +89,7 @@ app.post('/auth/register', async (req, rep) => {
   }
 
   const hash = await argon2.hash(password);
-  await prisma.user.create({ data: { username, email, password: hash, role } });
+  await prisma.user.create({ data: { username, email, password: hash, role: 'EMPLOYEE' } });
   return rep.code(201).send({ ok: true });
 });
 
